@@ -23,26 +23,26 @@ namespace bgfx
 }
 
 #define _BX_TRACE(_format, ...) \
-				do { \
+				BX_MACRO_BLOCK_BEGIN \
 					bgfx::dbgPrintf(BX_FILE_LINE_LITERAL "BGFX " _format "\n", ##__VA_ARGS__); \
-				} while(0)
+				BX_MACRO_BLOCK_END
 
 #define _BX_WARN(_condition, _format, ...) \
-				do { \
-					if (!(_condition) ) \
+				BX_MACRO_BLOCK_BEGIN \
+					if (!BX_IGNORE_C4127(_condition) ) \
 					{ \
 						BX_TRACE("WARN " _format, ##__VA_ARGS__); \
 					} \
-				} while(0)
+				BX_MACRO_BLOCK_END
 
 #define _BX_CHECK(_condition, _format, ...) \
-				do { \
-					if (!(_condition) ) \
+				BX_MACRO_BLOCK_BEGIN \
+					if (!BX_IGNORE_C4127(_condition) ) \
 					{ \
 						BX_TRACE("CHECK " _format, ##__VA_ARGS__); \
 						bgfx::fatal(bgfx::Fatal::DebugCheck, _format, ##__VA_ARGS__); \
 					} \
-				} while(0)
+				BX_MACRO_BLOCK_END
 
 #if BGFX_CONFIG_DEBUG
 #	define BX_TRACE _BX_TRACE
@@ -52,12 +52,12 @@ namespace bgfx
 #endif // BGFX_CONFIG_DEBUG
 
 #define BGFX_FATAL(_condition, _err, _format, ...) \
-			do { \
-				if (!(_condition) ) \
+			BX_MACRO_BLOCK_BEGIN \
+				if (!BX_IGNORE_C4127(_condition) ) \
 				{ \
 					fatal(_err, _format, ##__VA_ARGS__); \
 				} \
-			} while(0)
+			BX_MACRO_BLOCK_END
 
 #include <bx/bx.h>
 #include <bx/debug.h>
@@ -485,11 +485,9 @@ namespace bgfx
 			InvProj,
 			ViewProj,
 			InvViewProj,
-			ViewProjX,
 			Model,
 			ModelView,
 			ModelViewProj,
-			ModelViewProjX,
 			AlphaRef,
 			Count
 		};
@@ -1331,7 +1329,6 @@ namespace bgfx
 		Rect m_scissor[BGFX_CONFIG_MAX_VIEWS];
 		Matrix4 m_view[BGFX_CONFIG_MAX_VIEWS];
 		Matrix4 m_proj[BGFX_CONFIG_MAX_VIEWS];
-		uint8_t m_other[BGFX_CONFIG_MAX_VIEWS];
 
 		uint64_t m_sortKeys[BGFX_CONFIG_MAX_DRAW_CALLS];
 		uint16_t m_sortValues[BGFX_CONFIG_MAX_DRAW_CALLS];
@@ -2546,17 +2543,8 @@ namespace bgfx
 			}
 		}
 
-		BGFX_API_FUNC(void setViewTransform(uint8_t _id, const void* _view, const void* _proj, uint8_t _other) )
+		BGFX_API_FUNC(void setViewTransform(uint8_t _id, const void* _view, const void* _proj) )
 		{
-			if (BGFX_CONFIG_MAX_VIEWS > _other)
-			{
-				m_other[_id] = _other;
-			}
-			else
-			{
-				m_other[_id] = _id;
-			}
-
 			if (NULL != _view)
 			{
 				memcpy(m_view[_id].un.val, _view, sizeof(Matrix4) );
@@ -2576,14 +2564,14 @@ namespace bgfx
 			}
 		}
 
-		BGFX_API_FUNC(void setViewTransformMask(uint32_t _viewMask, const void* _view, const void* _proj, uint8_t _other) )
+		BGFX_API_FUNC(void setViewTransformMask(uint32_t _viewMask, const void* _view, const void* _proj) )
 		{
 			for (uint32_t view = 0, viewMask = _viewMask, ntz = bx::uint32_cnttz(_viewMask); 0 != viewMask; viewMask >>= 1, view += 1, ntz = bx::uint32_cnttz(viewMask) )
 			{
 				viewMask >>= ntz;
 				view += ntz;
 
-				setViewTransform( (uint8_t)view, _view, _proj, _other);
+				setViewTransform( (uint8_t)view, _view, _proj);
 			}
 		}
 
@@ -2841,7 +2829,6 @@ namespace bgfx
 		Rect m_scissor[BGFX_CONFIG_MAX_VIEWS];
 		Matrix4 m_view[BGFX_CONFIG_MAX_VIEWS];
 		Matrix4 m_proj[BGFX_CONFIG_MAX_VIEWS];
-		uint8_t m_other[BGFX_CONFIG_MAX_VIEWS];
 		uint16_t m_seq[BGFX_CONFIG_MAX_VIEWS];
 		uint16_t m_seqMask[BGFX_CONFIG_MAX_VIEWS];
 
