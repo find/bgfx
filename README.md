@@ -4,8 +4,7 @@
 What is it?
 -----------
 
-Cross-platform rendering library ([C++ API documentation](https://github.com/bkaradzic/bgfx/blob/master/include/bgfx.h), 
-[C99 API documentation](https://github.com/bkaradzic/bgfx/blob/master/include/bgfx.c99.h)).
+Cross-platform rendering library.
 
 Supported rendering backends:
 
@@ -25,6 +24,13 @@ Platforms:
  * Native Client
  * OSX
  * Windows
+
+Languages:
+
+ * [C99 API documentation](https://github.com/bkaradzic/bgfx/blob/master/include/bgfx.c99.h)
+ * [C++ API documentation](https://github.com/bkaradzic/bgfx/blob/master/include/bgfx.h)
+ * [D API bindings](https://github.com/p0nce/DerelictBgfx)
+ * [Go API bindings](https://github.com/james4k/go-bgfx)
 
 Who is using it?
 ----------------
@@ -571,6 +577,8 @@ Jeremie Roy ([@jeremieroy](https://github.com/jeremieroy)) - Font system and
 Milos Tosic ([@milostosic](https://github.com/milostosic)) - 12-lod example.  
 Dario Manesku ([@dariomanesku](https://github.com/dariomanesku)) - 13-stencil, 
   14-shadowvolumes, 15-shadowmaps-simple, 16-shadowmaps, 18-ibl  
+James Gray ([@james4k](https://github.com/james4k)) - Go language API bindings.  
+p0nce ([@p0nce](https://github.com/p0nce)) - D language API bindings.  
 
 [License (BSD 2-clause)](https://github.com/bkaradzic/bgfx/blob/master/LICENSE)
 -------------------------------------------------------------------------------
