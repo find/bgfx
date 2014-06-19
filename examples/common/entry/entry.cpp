@@ -13,7 +13,7 @@
 #include "cmd.h"
 #include "input.h"
 
-extern int _main_(int _argc, char** _argv);
+extern "C" int _main_(int _argc, char** _argv);
 
 namespace entry
 {
@@ -244,3 +244,8 @@ namespace entry
 	}
 
 } // namespace entry
+
+extern "C" bool entry_process_events(uint32_t* _width, uint32_t* _height, uint32_t* _debug, uint32_t* _reset)
+{
+	return entry::processEvents(*_width, *_height, *_debug, *_reset, NULL);
+}
