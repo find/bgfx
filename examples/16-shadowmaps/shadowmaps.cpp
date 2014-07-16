@@ -206,14 +206,6 @@ void imguiEnum(LightType::Enum& _enum)
 			);
 }
 
-void imguiBool(const char* _str, bool& _flag, bool _enabled = true)
-{
-	if (imguiCheck(_str, _flag, _enabled) )
-	{
-		_flag = !_flag;
-	}
-}
-
 struct PosNormalTexcoordVertex
 {
 	float    m_x;
@@ -2098,7 +2090,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 #define IMGUI_FLOAT_SLIDER(_name, _val) \
 			imguiSlider(_name \
-					, &_val \
+					, _val \
 					, *(((float*)&_val)+1) \
 					, *(((float*)&_val)+2) \
 					, *(((float*)&_val)+3) \
@@ -2196,26 +2188,26 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		if (LightType::SpotLight == settings.m_lightType)
 		{
 			imguiLabel("Spot light");
-			imguiSlider("Shadow map area:", &settings.m_coverageSpotL, 45.0f, 120.0f, 1.0f);
+			imguiSlider("Shadow map area:", settings.m_coverageSpotL, 45.0f, 120.0f, 1.0f);
 
 			imguiSeparator();
-			imguiSlider("Spot outer cone:", &settings.m_spotOuterAngle, 0.0f, 91.0f, 0.1f);
-			imguiSlider("Spot inner cone:", &settings.m_spotInnerAngle, 0.0f, 90.0f, 0.1f);
+			imguiSlider("Spot outer cone:", settings.m_spotOuterAngle, 0.0f, 91.0f, 0.1f);
+			imguiSlider("Spot inner cone:", settings.m_spotInnerAngle, 0.0f, 90.0f, 0.1f);
 		}
 		else if (LightType::PointLight == settings.m_lightType)
 		{
 			imguiLabel("Point light");
 			imguiBool("Stencil pack", settings.m_stencilPack);
 
-			imguiSlider("Fov X adjust:", &settings.m_fovXAdjust, -20.0f, 20.0f, 0.0001f);
-			imguiSlider("Fov Y adjust:", &settings.m_fovYAdjust, -20.0f, 20.0f, 0.0001f);
+			imguiSlider("Fov X adjust:", settings.m_fovXAdjust, -20.0f, 20.0f, 0.0001f);
+			imguiSlider("Fov Y adjust:", settings.m_fovYAdjust, -20.0f, 20.0f, 0.0001f);
 		}
 		else if (LightType::DirectionalLight == settings.m_lightType)
 		{
 			imguiLabel("Directional light");
 			imguiBool("Stabilize cascades", settings.m_stabilize);
-			imguiSlider("Cascade splits:", &settings.m_numSplitsf, 1.0f, 4.0f, 1.0f);
-			imguiSlider("Cascade distribution:", &settings.m_splitDistribution, 0.0f, 1.0f, 0.001f);
+			imguiSlider("Cascade splits:", settings.m_numSplitsf, 1.0f, 4.0f, 1.0f);
+			imguiSlider("Cascade distribution:", settings.m_splitDistribution, 0.0f, 1.0f, 0.001f);
 			settings.m_numSplits = uint8_t(settings.m_numSplitsf);
 		}
 

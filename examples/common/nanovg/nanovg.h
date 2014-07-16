@@ -133,6 +133,9 @@ struct NVGcolor nvgRGBf(float r, float g, float b);
 // Returns a color value from red, green, blue and alpha values.
 struct NVGcolor nvgRGBA(unsigned char r, unsigned char g, unsigned char b, unsigned char a);
 
+//
+struct NVGcolor nvgRGBAu(unsigned int abgr);
+
 // Returns a color value from red, green, blue and alpha values.
 struct NVGcolor nvgRGBAf(float r, float g, float b, float a);
 
@@ -529,7 +532,7 @@ void nvgDeleteInternal(struct NVGcontext* ctx);
 void nvgDebugDumpPathCache(struct NVGcontext* ctx);
 
 //
-struct NVGcontext* nvgCreate(int atlasw, int atlash, int edgeaa);
+struct NVGcontext* nvgCreate(int atlasw, int atlash, int edgeaa, unsigned char viewid);
 
 //
 void nvgDelete(struct NVGcontext* ctx);
