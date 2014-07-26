@@ -107,9 +107,41 @@ typedef uint64_t GLuint64;
 #	define GL_R16F 0x822D
 #endif // GL_R16F
 
+#ifndef GL_R32UI
+#	define GL_R32UI 0x8236
+#endif // GL_R32UI
+
 #ifndef GL_R32F
 #	define GL_R32F 0x822E
 #endif // GL_R32F
+
+#ifndef GL_RG16
+#	define GL_RG16 0x822C
+#endif // GL_RG16
+
+#ifndef GL_RG16F
+#	define GL_RG16F 0x822F
+#endif // GL_RG16F
+
+#ifndef GL_R32UI
+#	define GL_R32UI 0x8236
+#endif // GL_R32UI
+
+#ifndef GL_RG32UI
+#	define GL_RG32UI 0x823C
+#endif // GL_RG32UI
+
+#ifndef GL_RG32F
+#	define GL_RG32F 0x8230
+#endif // GL_RG32F
+
+#ifndef GL_RGBA32UI
+#	define GL_RGBA32UI 0x8D70
+#endif // GL_RGBA32UI
+
+#ifndef GL_RGBA32F
+#	define GL_RGBA32F 0x8814
+#endif // GL_RGBA32F
 
 #ifndef GL_RED
 #	define GL_RED 0x1903
@@ -118,6 +150,10 @@ typedef uint64_t GLuint64;
 #ifndef GL_RED_INTEGER
 #	define GL_RED_INTEGER 0x8D94
 #endif // GL_RED_INTEGER
+
+#ifndef GL_RG
+#	define GL_RG 0x8227
+#endif // GL_RG
 
 #ifndef GL_GREEN
 #	define GL_GREEN 0x1904
@@ -339,6 +375,94 @@ typedef uint64_t GLuint64;
 #ifndef GL_COMPUTE_SHADER
 #	define GL_COMPUTE_SHADER 0x91B9
 #endif // GL_COMPUTE_SHADER
+
+#ifndef GL_READ_ONLY
+#	define GL_READ_ONLY 0x88B8
+#endif // GL_READ_ONLY
+
+#ifndef GL_WRITE_ONLY
+#	define GL_WRITE_ONLY 0x88B9
+#endif // GL_WRITE_ONLY
+
+#ifndef GL_READ_WRITE
+#	define GL_READ_WRITE 0x88BA
+#endif // GL_READ_WRITE
+
+#ifndef GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT
+#	define GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT 0x00000001
+#endif // GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT
+
+#ifndef GL_ELEMENT_ARRAY_BARRIER_BIT
+#	define GL_ELEMENT_ARRAY_BARRIER_BIT 0x00000002
+#endif // GL_ELEMENT_ARRAY_BARRIER_BIT
+
+#ifndef GL_SHADER_IMAGE_ACCESS_BARRIER_BIT
+#	define GL_SHADER_IMAGE_ACCESS_BARRIER_BIT 0x00000020
+#endif // GL_SHADER_IMAGE_ACCESS_BARRIER_BIT
+
+#ifndef GL_SHADER_STORAGE_BARRIER_BIT
+#	define GL_SHADER_STORAGE_BARRIER_BIT 0x00002000
+#endif // GL_SHADER_STORAGE_BARRIER_BIT
+
+#ifndef GL_SHADER_STORAGE_BUFFER
+#	define GL_SHADER_STORAGE_BUFFER 0x90D2
+#endif // GL_SHADER_STORAGE_BUFFER
+
+#ifndef GL_IMAGE_1D
+#	define GL_IMAGE_1D 0x904C
+#endif // GL_IMAGE_1D
+
+#ifndef GL_IMAGE_2D
+#	define GL_IMAGE_2D 0x904D
+#endif // GL_IMAGE_2D
+
+#ifndef GL_IMAGE_3D
+#	define GL_IMAGE_3D 0x904E
+#endif // GL_IMAGE_3D
+
+#ifndef GL_IMAGE_CUBE
+#	define GL_IMAGE_CUBE 0x9050
+#endif // GL_IMAGE_CUBE
+
+#ifndef GL_PROGRAM_INPUT
+#	define GL_PROGRAM_INPUT 0x92E3
+#endif // GL_PROGRAM_INPUT
+
+#ifndef GL_ACTIVE_RESOURCES
+#	define GL_ACTIVE_RESOURCES 0x92F5
+#endif // GL_ACTIVE_RESOURCES
+
+#ifndef GL_UNIFORM
+#	define GL_UNIFORM 0x92E1
+#endif // GL_UNIFORM
+
+#ifndef GL_BUFFER_VARIABLE
+#	define GL_BUFFER_VARIABLE 0x92E5
+#endif // GL_BUFFER_VARIABLE
+
+#ifndef GL_UNSIGNED_INT_VEC2
+#	define GL_UNSIGNED_INT_VEC2 0x8DC6
+#endif // GL_UNSIGNED_INT_VEC2
+
+#ifndef GL_UNSIGNED_INT_VEC3
+#	define GL_UNSIGNED_INT_VEC3 0x8DC7
+#endif // GL_UNSIGNED_INT_VEC3
+
+#ifndef GL_UNSIGNED_INT_VEC4
+#	define GL_UNSIGNED_INT_VEC4 0x8DC8
+#endif // GL_UNSIGNED_INT_VEC4
+
+#ifndef GL_TYPE
+#	define GL_TYPE 0x92FA
+#endif // GL_TYPE
+
+#ifndef GL_ARRAY_SIZE
+#	define GL_ARRAY_SIZE 0x92FB
+#endif // GL_ARRAY_SIZE
+
+#ifndef GL_LOCATION
+#	define GL_LOCATION 0x930E
+#endif // GL_LOCATION
 
 #if BX_PLATFORM_NACL
 #	include "glcontext_ppapi.h"

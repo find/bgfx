@@ -49,6 +49,18 @@ namespace bgfx
 		};
 	};
 
+	struct Access
+	{
+		enum Enum
+		{
+			Read,
+			Write,
+			ReadWrite,
+
+			Count
+		};
+	};
+
 	struct Attrib
 	{
 		enum Enum // corresponds to vertex shader attribute:
@@ -112,9 +124,17 @@ namespace bgfx
 			R8,
 			R16,
 			R16F,
+			R32,
+			R32F,
+			RG16,
+			RG16F,
+			RG32,
+			RG32F,
 			BGRA8,
 			RGBA16,
 			RGBA16F,
+			RGBA32,
+			RGBA32F,
 			R5G6B5,
 			RGBA4,
 			RGB5A1,
@@ -1082,7 +1102,16 @@ namespace bgfx
 	///
 	uint32_t submitMask(uint32_t _viewMask, int32_t _depth = 0);
 
-	/// Discard all previously set state for draw call.
+	///
+	void setImage(uint8_t _stage, UniformHandle _sampler, TextureHandle _handle, uint8_t _mip, TextureFormat::Enum _format, Access::Enum _access);
+
+	///
+	void setImage(uint8_t _stage, UniformHandle _sampler, FrameBufferHandle _handle, uint8_t _attachment, TextureFormat::Enum _format, Access::Enum _access);
+
+	/// Dispatch compute.
+	void dispatch(uint8_t _id, ProgramHandle _handle, uint16_t _numX = 1, uint16_t _numY = 1, uint16_t _numZ = 1);
+
+	/// Discard all previously set state for draw or compute call.
 	void discard();
 
 	/// Request screen shot.
