@@ -94,6 +94,7 @@ typedef enum bgfx_texture_format
     BGFX_TEXTURE_FORMAT_R16F,
     BGFX_TEXTURE_FORMAT_R32,
     BGFX_TEXTURE_FORMAT_R32F,
+    BGFX_TEXTURE_FORMAT_RG8,
     BGFX_TEXTURE_FORMAT_RG16,
     BGFX_TEXTURE_FORMAT_RG16F,
     BGFX_TEXTURE_FORMAT_RG32,
@@ -1302,7 +1303,6 @@ BGFX_C_API uint32_t bgfx_submit(uint8_t _id, int32_t _depth);
  */
 BGFX_C_API uint32_t bgfx_submit_mask(uint32_t _viewMask, int32_t _depth);
 
-
 /**
  *
  */
@@ -1317,7 +1317,6 @@ BGFX_C_API void bgfx_set_image_from_frame_buffer(uint8_t _stage, bgfx_uniform_ha
  * Dispatch compute.
  */
 BGFX_C_API void bgfx_dispatch(uint8_t _id, bgfx_program_handle_t _handle, uint16_t _numX, uint16_t _numY, uint16_t _numZ);
-
 
 /**
  *  Discard all previously set state for draw call.
