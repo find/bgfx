@@ -76,6 +76,8 @@ typedef enum bgfx_texture_format
     BGFX_TEXTURE_FORMAT_BC3,
     BGFX_TEXTURE_FORMAT_BC4,
     BGFX_TEXTURE_FORMAT_BC5,
+    BGFX_TEXTURE_FORMAT_BC6H,
+    BGFX_TEXTURE_FORMAT_BC7,
     BGFX_TEXTURE_FORMAT_ETC1,
     BGFX_TEXTURE_FORMAT_ETC2,
     BGFX_TEXTURE_FORMAT_ETC2A,
@@ -257,6 +259,14 @@ typedef struct bgfx_caps
     uint16_t maxTextureSize;    /* < Maximum texture size.             */
     uint16_t maxDrawCalls;      /* < Maximum draw calls.               */
     uint8_t  maxFBAttachments;  /* < Maximum frame buffer attachments. */
+
+    /**
+     *  Supported texture formats.
+     *    0 - not supported
+     *    1 - supported
+     *    2 - emulated
+     */
+    uint8_t formats[BGFX_TEXTURE_FORMAT_COUNT];
 
 } bgfx_caps_t;
 

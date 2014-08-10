@@ -38,7 +38,7 @@ namespace bgfx
 		"Point",
 	};
 
-	static const char* s_attribName[Attrib::Count] =
+	static const char* s_attribName[] =
 	{
 		"a_position",
 		"a_normal",
@@ -56,6 +56,7 @@ namespace bgfx
 		"a_texcoord6",
 		"a_texcoord7",
 	};
+	BX_STATIC_ASSERT(Attrib::Count == BX_COUNTOF(s_attribName) );
 
 	static const char* s_instanceDataName[BGFX_CONFIG_MAX_INSTANCE_DATA_COUNT] =
 	{
@@ -183,6 +184,8 @@ namespace bgfx
 		{ GL_COMPRESSED_RGBA_S3TC_DXT5_EXT,            GL_COMPRESSED_RGBA_S3TC_DXT5_EXT,            GL_ZERO,                        false }, // BC3
 		{ GL_COMPRESSED_LUMINANCE_LATC1_EXT,           GL_COMPRESSED_LUMINANCE_LATC1_EXT,           GL_ZERO,                        false }, // BC4
 		{ GL_COMPRESSED_LUMINANCE_ALPHA_LATC2_EXT,     GL_COMPRESSED_LUMINANCE_ALPHA_LATC2_EXT,     GL_ZERO,                        false }, // BC5
+		{ GL_COMPRESSED_RGB_BPTC_SIGNED_FLOAT_ARB,     GL_COMPRESSED_RGB_BPTC_SIGNED_FLOAT_ARB,     GL_ZERO,                        false }, // BC6H
+		{ GL_COMPRESSED_RGBA_BPTC_UNORM_ARB,           GL_COMPRESSED_RGBA_BPTC_UNORM_ARB,           GL_ZERO,                        false }, // BC7
 		{ GL_ETC1_RGB8_OES,                            GL_ETC1_RGB8_OES,                            GL_ZERO,                        false }, // ETC1
 		{ GL_COMPRESSED_RGB8_ETC2,                     GL_COMPRESSED_RGB8_ETC2,                     GL_ZERO,                        false }, // ETC2
 		{ GL_COMPRESSED_RGBA8_ETC2_EAC,                GL_COMPRESSED_RGBA8_ETC2_EAC,                GL_ZERO,                        false }, // ETC2A
@@ -232,6 +235,8 @@ namespace bgfx
 		GL_ZERO,     // BC3
 		GL_ZERO,     // BC4
 		GL_ZERO,     // BC5
+		GL_ZERO,     // BC6H
+		GL_ZERO,     // BC7
 		GL_ZERO,     // ETC1
 		GL_ZERO,     // ETC2
 		GL_ZERO,     // ETC2A
@@ -310,9 +315,13 @@ namespace bgfx
 			ARB_shader_image_load_store,
 			ARB_shader_storage_buffer_object,
 			ARB_shader_texture_lod,
+			ARB_texture_compression_bptc,
 			ARB_texture_compression_rgtc,
 			ARB_texture_float,
 			ARB_texture_multisample,
+			ARB_texture_rg,
+			ARB_texture_rgb10_a2ui,
+			ARB_texture_stencil8,
 			ARB_texture_storage,
 			ARB_texture_swizzle,
 			ARB_timer_query,
@@ -331,6 +340,7 @@ namespace bgfx
 			EXT_blend_color,
 			EXT_blend_minmax,
 			EXT_blend_subtract,
+			EXT_compressed_ETC1_RGB8_sub_texture,
 			EXT_debug_label,
 			EXT_debug_marker,
 			EXT_frag_depth,
@@ -451,9 +461,13 @@ namespace bgfx
 		{ "ARB_shader_image_load_store",           BGFX_CONFIG_RENDERER_OPENGL >= 42, true  },
 		{ "ARB_shader_storage_buffer_object",      BGFX_CONFIG_RENDERER_OPENGL >= 43, true  },
 		{ "ARB_shader_texture_lod",                BGFX_CONFIG_RENDERER_OPENGL >= 30, true  },
+		{ "ARB_texture_compression_bptc",          BGFX_CONFIG_RENDERER_OPENGL >= 44, true  },
 		{ "ARB_texture_compression_rgtc",          BGFX_CONFIG_RENDERER_OPENGL >= 30, true  },
 		{ "ARB_texture_float",                     BGFX_CONFIG_RENDERER_OPENGL >= 30, true  },
 		{ "ARB_texture_multisample",               BGFX_CONFIG_RENDERER_OPENGL >= 32, true  },
+		{ "ARB_texture_rg",                        BGFX_CONFIG_RENDERER_OPENGL >= 30, true  },
+		{ "ARB_texture_rgb10_a2ui",                BGFX_CONFIG_RENDERER_OPENGL >= 33, true  },
+		{ "ARB_texture_stencil8",                  false,                             true  },
 		{ "ARB_texture_storage",                   BGFX_CONFIG_RENDERER_OPENGL >= 42, true  },
 		{ "ARB_texture_swizzle",                   BGFX_CONFIG_RENDERER_OPENGL >= 33, true  },
 		{ "ARB_timer_query",                       BGFX_CONFIG_RENDERER_OPENGL >= 33, true  },
@@ -472,6 +486,7 @@ namespace bgfx
 		{ "EXT_blend_color",                       BGFX_CONFIG_RENDERER_OPENGL >= 31, true  },
 		{ "EXT_blend_minmax",                      BGFX_CONFIG_RENDERER_OPENGL >= 14, true  },
 		{ "EXT_blend_subtract",                    BGFX_CONFIG_RENDERER_OPENGL >= 14, true  },
+		{ "EXT_compressed_ETC1_RGB8_sub_texture",  false,                             true  }, // GLES2 extension.
 		{ "EXT_debug_label",                       false,                             true  },
 		{ "EXT_debug_marker",                      false,                             true  },
 		{ "EXT_frag_depth",                        false,                             true  }, // GLES2 extension.
@@ -1099,34 +1114,10 @@ namespace bgfx
 				}
 			}
 
-			uint64_t supportedTextureFormats = 0
-				| (s_textureFormat[TextureFormat::BC1   ].m_supported ? BGFX_CAPS_TEXTURE_FORMAT_BC1    : 0)
-				| (s_textureFormat[TextureFormat::BC2   ].m_supported ? BGFX_CAPS_TEXTURE_FORMAT_BC2    : 0)
-				| (s_textureFormat[TextureFormat::BC3   ].m_supported ? BGFX_CAPS_TEXTURE_FORMAT_BC3    : 0)
-				| (s_textureFormat[TextureFormat::BC4   ].m_supported ? BGFX_CAPS_TEXTURE_FORMAT_BC4    : 0)
-				| (s_textureFormat[TextureFormat::BC5   ].m_supported ? BGFX_CAPS_TEXTURE_FORMAT_BC5    : 0)
-				| (s_textureFormat[TextureFormat::ETC1  ].m_supported ? BGFX_CAPS_TEXTURE_FORMAT_ETC1   : 0)
-				| (s_textureFormat[TextureFormat::ETC2  ].m_supported ? BGFX_CAPS_TEXTURE_FORMAT_ETC2   : 0)
-				| (s_textureFormat[TextureFormat::ETC2A ].m_supported ? BGFX_CAPS_TEXTURE_FORMAT_ETC2A  : 0)
-				| (s_textureFormat[TextureFormat::ETC2A1].m_supported ? BGFX_CAPS_TEXTURE_FORMAT_ETC2A1 : 0)
-				| (s_textureFormat[TextureFormat::PTC12 ].m_supported ? BGFX_CAPS_TEXTURE_FORMAT_PTC12  : 0)
-				| (s_textureFormat[TextureFormat::PTC14 ].m_supported ? BGFX_CAPS_TEXTURE_FORMAT_PTC14  : 0)
-				| (s_textureFormat[TextureFormat::PTC14A].m_supported ? BGFX_CAPS_TEXTURE_FORMAT_PTC14A : 0)
-				| (s_textureFormat[TextureFormat::PTC12A].m_supported ? BGFX_CAPS_TEXTURE_FORMAT_PTC12A : 0)
-				| (s_textureFormat[TextureFormat::PTC22 ].m_supported ? BGFX_CAPS_TEXTURE_FORMAT_PTC22  : 0)
-				| (s_textureFormat[TextureFormat::PTC24 ].m_supported ? BGFX_CAPS_TEXTURE_FORMAT_PTC24  : 0)
-				| 0
-				| (s_textureFormat[TextureFormat::D16   ].m_supported ? BGFX_CAPS_TEXTURE_FORMAT_D16    : 0)
-				| (s_textureFormat[TextureFormat::D24   ].m_supported ? BGFX_CAPS_TEXTURE_FORMAT_D24    : 0)
-				| (s_textureFormat[TextureFormat::D24S8 ].m_supported ? BGFX_CAPS_TEXTURE_FORMAT_D24S8  : 0)
-				| (s_textureFormat[TextureFormat::D32   ].m_supported ? BGFX_CAPS_TEXTURE_FORMAT_D32    : 0)
-				| (s_textureFormat[TextureFormat::D16F  ].m_supported ? BGFX_CAPS_TEXTURE_FORMAT_D16F   : 0)
-				| (s_textureFormat[TextureFormat::D24F  ].m_supported ? BGFX_CAPS_TEXTURE_FORMAT_D24F   : 0)
-				| (s_textureFormat[TextureFormat::D32F  ].m_supported ? BGFX_CAPS_TEXTURE_FORMAT_D32F   : 0)
-				| (s_textureFormat[TextureFormat::D0S8  ].m_supported ? BGFX_CAPS_TEXTURE_FORMAT_D0S8   : 0)
-				;
-
-			g_caps.supported |= supportedTextureFormats;
+			for (uint32_t ii = 0; ii < TextureFormat::Count; ++ii)
+			{
+				g_caps.formats[ii] = s_textureFormat[ii].m_supported ? 1 : 0;
+			}
 
 			g_caps.supported |= !!(BGFX_CONFIG_RENDERER_OPENGL || BGFX_CONFIG_RENDERER_OPENGLES >= 30) || s_extension[Extension::OES_texture_3D].m_supported
 				? BGFX_CAPS_TEXTURE_3D
@@ -1144,11 +1135,15 @@ namespace bgfx
 				? BGFX_CAPS_FRAGMENT_DEPTH
 				: 0
 				;
-
 			g_caps.supported |= s_extension[Extension::ARB_draw_buffers_blend].m_supported
 				? BGFX_CAPS_BLEND_INDEPENDENT
 				: 0
 				;
+			g_caps.supported |= s_extension[Extension::INTEL_fragment_shader_ordering].m_supported
+				? BGFX_CAPS_FRAGMENT_ORDERING
+				: 0
+				;
+
 			g_caps.maxTextureSize = glGet(GL_MAX_TEXTURE_SIZE);
 
 			if (BX_ENABLED(BGFX_CONFIG_RENDERER_OPENGL)
@@ -3354,6 +3349,8 @@ namespace bgfx
 
 					bool usesTextureLod = !!bx::findIdentifierMatch(code, s_EXT_shader_texture_lod);
 
+					bool usesFragmentOrdering = !!bx::findIdentifierMatch(code, "beginFragmentShaderOrdering");
+
 					if (usesDerivatives)
 					{
 						writeString(&writer, "#extension GL_OES_standard_derivatives : enable\n");
@@ -3426,6 +3423,18 @@ namespace bgfx
 								  "#define texture2DProjLod(_sampler, _coord, _level) texture2DProj(_sampler, _coord)\n"
 								  "#define textureCubeLod(_sampler, _coord, _level) textureCube(_sampler, _coord)\n"
 								);
+						}
+					}
+
+					if (usesFragmentOrdering)
+					{
+						if (s_extension[Extension::INTEL_fragment_shader_ordering].m_supported)
+						{
+							writeString(&writer, "#extension GL_INTEL_fragment_shader_ordering : enable\n");
+						}
+						else
+						{
+							writeString(&writer, "#define beginFragmentShaderOrdering()\n");
 						}
 					}
 
@@ -3539,6 +3548,18 @@ namespace bgfx
 							BGFX_FATAL(0 != fragData, Fatal::InvalidShader, "Unable to find and patch gl_FragData!");
 						}
 
+						if (!!bx::findIdentifierMatch(code, "beginFragmentShaderOrdering") )
+						{
+							if (s_extension[Extension::INTEL_fragment_shader_ordering].m_supported)
+							{
+								writeString(&writer, "#extension GL_INTEL_fragment_shader_ordering : enable\n");
+							}
+							else
+							{
+								writeString(&writer, "#define beginFragmentShaderOrdering()\n");
+							}
+						}
+
 						if (0 != fragData)
 						{
 							writeStringf(&writer, "out vec4 bgfx_FragData[%d];\n", fragData);
@@ -3591,7 +3612,8 @@ namespace bgfx
 				BGFX_FATAL(false, bgfx::Fatal::InvalidShader, "Failed to compile shader.");
 			}
 			else if (BX_ENABLED(BGFX_CONFIG_DEBUG)
-				 &&  s_extension[Extension::ANGLE_translated_shader_source].m_supported)
+				 &&  s_extension[Extension::ANGLE_translated_shader_source].m_supported
+				 &&  NULL != glGetTranslatedShaderSourceANGLE)
 			{
 				GLsizei len;
 				GL_CHECK(glGetShaderiv(m_id, GL_TRANSLATED_SHADER_SOURCE_LENGTH_ANGLE, &len) );
@@ -4415,10 +4437,8 @@ namespace bgfx
 						}
 					}
 
-//						if (BGFX_STATE_TEX_MASK & changedFlags)
 					{
-						uint64_t flag = BGFX_STATE_TEX0;
-						for (uint32_t stage = 0; stage < BGFX_STATE_TEX_COUNT; ++stage)
+						for (uint32_t stage = 0; stage < BGFX_CONFIG_MAX_TEXTURE_SAMPLERS; ++stage)
 						{
 							const Sampler& sampler = draw.m_sampler[stage];
 							Sampler& current = currentState.m_sampler[stage];
@@ -4434,7 +4454,6 @@ namespace bgfx
 							}
 
 							current = sampler;
-							flag <<= 1;
 						}
 					}
 

@@ -190,6 +190,8 @@ namespace bgfx
 		{ D3DFMT_DXT5          }, // BC3
 		{ D3DFMT_UNKNOWN       }, // BC4
 		{ D3DFMT_UNKNOWN       }, // BC5
+		{ D3DFMT_UNKNOWN       }, // BC6H
+		{ D3DFMT_UNKNOWN       }, // BC7
 		{ D3DFMT_UNKNOWN       }, // ETC1
 		{ D3DFMT_UNKNOWN       }, // ETC2
 		{ D3DFMT_UNKNOWN       }, // ETC2A
@@ -426,9 +428,6 @@ namespace bgfx
 			BX_TRACE("Num simultaneous render targets: %d", m_caps.NumSimultaneousRTs);
 
 			g_caps.supported |= ( 0
-								| BGFX_CAPS_TEXTURE_FORMAT_BC1
-								| BGFX_CAPS_TEXTURE_FORMAT_BC2
-								| BGFX_CAPS_TEXTURE_FORMAT_BC3
 								| BGFX_CAPS_TEXTURE_3D
 								| BGFX_CAPS_TEXTURE_COMPARE_LEQUAL
 								| BGFX_CAPS_VERTEX_ATTRIB_HALF
@@ -471,13 +470,18 @@ namespace bgfx
 			s_textureFormat[TextureFormat::BC4].m_fmt = s_extendedFormats[ExtendedFormat::Ati1].m_supported ? D3DFMT_ATI1 : D3DFMT_UNKNOWN;
 			s_textureFormat[TextureFormat::BC5].m_fmt = s_extendedFormats[ExtendedFormat::Ati2].m_supported ? D3DFMT_ATI2 : D3DFMT_UNKNOWN;
 
-			g_caps.supported |= 0
-							 | (D3DFMT_UNKNOWN != s_textureFormat[TextureFormat::BC4].m_fmt ? BGFX_CAPS_TEXTURE_FORMAT_BC4 : 0)
-							 | (D3DFMT_UNKNOWN != s_textureFormat[TextureFormat::BC5].m_fmt ? BGFX_CAPS_TEXTURE_FORMAT_BC5 : 0)
-							 | (s_extendedFormats[ExtendedFormat::Df16].m_supported ? BGFX_CAPS_TEXTURE_FORMAT_D16F : 0)
-							 | (s_extendedFormats[ExtendedFormat::Df24].m_supported ? BGFX_CAPS_TEXTURE_FORMAT_D24F : 0)
-							 ;
 			g_caps.supported |= m_instancing ? BGFX_CAPS_INSTANCING : 0;
+
+			for (uint32_t ii = 0; ii < TextureFormat::Count; ++ii)
+			{
+				g_caps.formats[ii] = SUCCEEDED(m_d3d9->CheckDeviceFormat(m_adapter
+					, m_deviceType
+					, adapterFormat
+					, 0
+					, D3DRTYPE_TEXTURE
+					, s_textureFormat[ii].m_fmt
+					) ) ? 1 : 0;
+			}
 #endif // BGFX_CONFIG_RENDERER_USE_EXTENSIONS
 
 			uint32_t index = 1;
@@ -1060,7 +1064,7 @@ namespace bgfx
 		{
 			invalidateSamplerState();
 
-			for (uint32_t stage = 0; stage < BGFX_STATE_TEX_COUNT; ++stage)
+			for (uint32_t stage = 0; stage < BGFX_CONFIG_MAX_TEXTURE_SAMPLERS; ++stage)
 			{
 				DX_CHECK(m_device->SetTexture(stage, NULL) );
 			}
@@ -1132,7 +1136,7 @@ namespace bgfx
 
 		void invalidateSamplerState()
 		{
-			for (uint32_t stage = 0; stage < BGFX_STATE_TEX_COUNT; ++stage)
+			for (uint32_t stage = 0; stage < BGFX_CONFIG_MAX_TEXTURE_SAMPLERS; ++stage)
 			{
 				m_samplerFlags[stage] = UINT32_MAX;
 			}
@@ -1414,7 +1418,7 @@ namespace bgfx
 		UniformRegistry m_uniformReg;
 		void* m_uniforms[BGFX_CONFIG_MAX_UNIFORMS];
 
-		uint32_t m_samplerFlags[BGFX_STATE_TEX_COUNT];
+		uint32_t m_samplerFlags[BGFX_CONFIG_MAX_TEXTURE_SAMPLERS];
 
 		TextureD3D9* m_updateTexture;
 		uint8_t* m_updateTextureBits;
@@ -1543,7 +1547,7 @@ namespace bgfx
 		}
 	}
 
-	static const D3DVERTEXELEMENT9 s_attrib[Attrib::Count+1] =
+	static const D3DVERTEXELEMENT9 s_attrib[] =
 	{
 		{ 0, 0, D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION,     0 },
 		{ 0, 0, D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_NORMAL,       0 },
@@ -1562,6 +1566,7 @@ namespace bgfx
 		{ 0, 0, D3DDECLTYPE_FLOAT2, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD,     7 },
 		D3DDECL_END()
 	};
+	BX_STATIC_ASSERT(Attrib::Count == BX_COUNTOF(s_attrib)-1);
 
 	static const D3DDECLTYPE s_attribType[AttribType::Count][4][2] =
 	{
@@ -2972,10 +2977,8 @@ namespace bgfx
 					}
 				}
 
-//				if (BGFX_STATE_TEX_MASK & changedFlags)
 				{
-					uint64_t flag = BGFX_STATE_TEX0;
-					for (uint32_t stage = 0; stage < BGFX_STATE_TEX_COUNT; ++stage)
+					for (uint32_t stage = 0; stage < BGFX_CONFIG_MAX_TEXTURE_SAMPLERS; ++stage)
 					{
 						const Sampler& sampler = draw.m_sampler[stage];
 						Sampler& current = currentState.m_sampler[stage];
@@ -2994,7 +2997,6 @@ namespace bgfx
 						}
 
 						current = sampler;
-						flag <<= 1;
 					}
 				}
 

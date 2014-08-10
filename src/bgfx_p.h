@@ -127,17 +127,6 @@ namespace stl
 #define BGFX_DEFAULT_WIDTH  1280
 #define BGFX_DEFAULT_HEIGHT 720
 
-#define BGFX_STATE_TEX0      UINT64_C(0x0100000000000000)
-#define BGFX_STATE_TEX1      UINT64_C(0x0200000000000000)
-#define BGFX_STATE_TEX2      UINT64_C(0x0400000000000000)
-#define BGFX_STATE_TEX3      UINT64_C(0x0800000000000000)
-#define BGFX_STATE_TEX4      UINT64_C(0x1000000000000000)
-#define BGFX_STATE_TEX5      UINT64_C(0x2000000000000000)
-#define BGFX_STATE_TEX6      UINT64_C(0x4000000000000000)
-#define BGFX_STATE_TEX7      UINT64_C(0x8000000000000000)
-#define BGFX_STATE_TEX_MASK  UINT64_C(0xff00000000000000)
-#define BGFX_STATE_TEX_COUNT 8
-
 #define BGFX_MAX_COMPUTE_BINDINGS 8
 
 #define BGFX_SAMPLER_DEFAULT_FLAGS UINT32_C(0x10000000)
@@ -819,14 +808,14 @@ namespace bgfx
 		static void decodeOpcode(uint32_t _opcode, UniformType::Enum& _type, uint16_t& _loc, uint16_t& _num, uint16_t& _copy)
 		{
 			const uint32_t type = (_opcode&CONSTANT_OPCODE_TYPE_MASK) >> CONSTANT_OPCODE_TYPE_SHIFT;
-			const uint32_t loc  = (_opcode&CONSTANT_OPCODE_LOC_MASK)  >> CONSTANT_OPCODE_LOC_SHIFT;
-			const uint32_t num  = (_opcode&CONSTANT_OPCODE_NUM_MASK)  >> CONSTANT_OPCODE_NUM_SHIFT;
-			const uint32_t copy = (_opcode&CONSTANT_OPCODE_COPY_MASK) >> CONSTANT_OPCODE_COPY_SHIFT;
+			const uint32_t loc  = (_opcode&CONSTANT_OPCODE_LOC_MASK ) >> CONSTANT_OPCODE_LOC_SHIFT;
+			const uint32_t num  = (_opcode&CONSTANT_OPCODE_NUM_MASK ) >> CONSTANT_OPCODE_NUM_SHIFT;
+			const uint32_t copy = (_opcode&CONSTANT_OPCODE_COPY_MASK); // >> CONSTANT_OPCODE_COPY_SHIFT;
 
 			_type = (UniformType::Enum)(type);
 			_copy = (uint16_t)copy;
-			_num = (uint16_t)num;
-			_loc = (uint16_t)loc;
+			_num  = (uint16_t)num;
+			_loc  = (uint16_t)loc;
 		}
 
 		void write(const void* _data, uint32_t _size)
@@ -855,8 +844,9 @@ namespace bgfx
 
 		uint32_t read()
 		{
-			const char* result = read(sizeof(uint32_t) );
-			return *( (uint32_t*)result);
+			uint32_t result;
+			memcpy(&result, read(sizeof(uint32_t) ), sizeof(uint32_t) );
+			return result;
 		}
 
 		bool isEmpty() const
@@ -989,7 +979,7 @@ namespace bgfx
 			m_indexBuffer.idx = invalidHandle;
 			m_instanceDataBuffer.idx = invalidHandle;
 
-			for (uint32_t ii = 0; ii < BGFX_STATE_TEX_COUNT; ++ii)
+			for (uint32_t ii = 0; ii < BGFX_CONFIG_MAX_TEXTURE_SAMPLERS; ++ii)
 			{
 				m_sampler[ii].m_idx = invalidHandle;
 				m_sampler[ii].m_flags = 0;
@@ -1016,7 +1006,7 @@ namespace bgfx
 		VertexDeclHandle   m_vertexDecl;
 		IndexBufferHandle  m_indexBuffer;
 		VertexBufferHandle m_instanceDataBuffer;
-		Sampler m_sampler[BGFX_STATE_TEX_COUNT];
+		Sampler m_sampler[BGFX_CONFIG_MAX_TEXTURE_SAMPLERS];
 	};
 
 	struct ComputeBinding
@@ -1274,7 +1264,6 @@ namespace bgfx
 
 		void setTexture(uint8_t _stage, UniformHandle _sampler, TextureHandle _handle, uint32_t _flags)
 		{
-			m_flags |= BGFX_STATE_TEX0<<_stage;
 			Sampler& sampler = m_draw.m_sampler[_stage];
 			sampler.m_idx = _handle.idx;
 			sampler.m_flags = (_flags&BGFX_SAMPLER_DEFAULT_FLAGS) ? BGFX_SAMPLER_DEFAULT_FLAGS : _flags;

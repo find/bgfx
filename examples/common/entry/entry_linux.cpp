@@ -216,6 +216,7 @@ namespace entry
 								{
 									m_eventQueue.postMouseEvent(xbutton.x
 										, xbutton.y
+										, 0
 										, mb
 										, event.type == ButtonPress
 										);
@@ -228,6 +229,7 @@ namespace entry
 								const XMotionEvent& xmotion = event.xmotion;
 								m_eventQueue.postMouseEvent(xmotion.x
 										, xmotion.y
+										, 0
 										);
 							}
 							break;
@@ -324,6 +326,11 @@ namespace entry
 		ev.width = (int)_width;
 		ev.height = (int)_height;
 		XSendEvent(s_ctx.m_display, s_ctx.m_window, false, ResizeRedirectMask, (XEvent*)&ev);
+	}
+
+	bool setWindowTitle(const char* _title)
+	{
+		BX_UNUSED(_title);
 	}
 
 	void toggleWindowFrame()
