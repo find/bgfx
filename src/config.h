@@ -6,6 +6,8 @@
 #ifndef BGFX_CONFIG_H_HEADER_GUARD
 #define BGFX_CONFIG_H_HEADER_GUARD
 
+#include <bx/config.h>
+
 #ifndef BGFX_CONFIG_DEBUG
 #	define BGFX_CONFIG_DEBUG 0
 #endif // BGFX_CONFIG_DEBUG
@@ -45,6 +47,7 @@
 					|| BX_PLATFORM_ANDROID \
 					|| BX_PLATFORM_IOS \
 					|| BX_PLATFORM_QNX \
+					|| BX_PLATFORM_RPI \
 					? 1 : 0)
 #	endif // BGFX_CONFIG_RENDERER_OPENGLES
 
@@ -119,6 +122,7 @@
 						|| BX_PLATFORM_NACL \
 						|| BX_PLATFORM_OSX \
 						|| BX_PLATFORM_QNX \
+						|| BX_PLATFORM_RPI \
 						|| BX_PLATFORM_WINDOWS \
 						|| BX_PLATFORM_XBOX360 \
 						? 1 : 0) )

@@ -3,6 +3,9 @@
  * License: http://www.opensource.org/licenses/BSD-2-Clause
  */
 
+#include <vector>
+#include <string>
+
 #include "common.h"
 #include "bgfx_utils.h"
 #include "imgui/imgui.h"
@@ -11,10 +14,6 @@
 #include <bx/readerwriter.h>
 #include <bx/string.h>
 
-#include <vector>
-#include <string>
-
-static bool s_flipV = false;
 static float s_texelHalf = 0.0f;
 
 struct Uniforms
@@ -161,12 +160,17 @@ struct Group
 	PrimitiveArray m_prims;
 };
 
+namespace bgfx
+{
+	int32_t read(bx::ReaderI* _reader, bgfx::VertexDecl& _decl);
+}
+
 struct Mesh
 {
 	void load(const char* _filePath)
 	{
-#define BGFX_CHUNK_MAGIC_VB BX_MAKEFOURCC('V', 'B', ' ', 0x0)
-#define BGFX_CHUNK_MAGIC_IB BX_MAKEFOURCC('I', 'B', ' ', 0x0)
+#define BGFX_CHUNK_MAGIC_VB  BX_MAKEFOURCC('V', 'B', ' ', 0x1)
+#define BGFX_CHUNK_MAGIC_IB  BX_MAKEFOURCC('I', 'B', ' ', 0x0)
 #define BGFX_CHUNK_MAGIC_PRI BX_MAKEFOURCC('P', 'R', 'I', 0x0)
 
 		bx::CrtFileReader reader;
@@ -185,7 +189,7 @@ struct Mesh
 					bx::read(&reader, group.m_aabb);
 					bx::read(&reader, group.m_obb);
 
-					bx::read(&reader, m_decl);
+					bgfx::read(&reader, m_decl);
 					uint16_t stride = m_decl.getStride();
 
 					uint16_t numVertices;
@@ -438,19 +442,6 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		, 1.0f
 		, 0
 		);
-
-	// Setup root path for binary shaders. Shader binaries are different
-	// for each renderer.
-	switch (bgfx::getRendererType() )
-	{
-	default:
-		break;
-
-	case bgfx::RendererType::OpenGL:
-	case bgfx::RendererType::OpenGLES:
-		s_flipV = true;
-		break;
-	}
 
 	// Imgui.
 	void* data = load("font/droidsans.ttf");

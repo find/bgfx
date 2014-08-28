@@ -68,6 +68,7 @@ namespace bgfx
 			Position,  // a_position
 			Normal,    // a_normal
 			Tangent,   // a_tangent
+			Bitangent, // a_bitangent
 			Color0,    // a_color0
 			Color1,    // a_color1
 			Indices,   // a_indices
@@ -123,6 +124,7 @@ namespace bgfx
 
 			Unknown, // compressed formats above
 
+			R1,
 			R8,
 			R16,
 			R16F,
@@ -142,6 +144,7 @@ namespace bgfx
 			RGBA4,
 			RGB5A1,
 			RGB10A2,
+			R11G11B10F,
 
 			UnknownDepth, // depth formats below
 
@@ -309,6 +312,8 @@ namespace bgfx
 	/// Vertex declaration.
 	struct VertexDecl
 	{
+		VertexDecl();
+
 		/// Start VertexDecl.
 		VertexDecl& begin(RendererType::Enum _renderer = RendererType::Null);
 

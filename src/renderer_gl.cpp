@@ -5,7 +5,7 @@
 
 #include "bgfx_p.h"
 
-#if (BGFX_CONFIG_RENDERER_OPENGLES|BGFX_CONFIG_RENDERER_OPENGL)
+#if (BGFX_CONFIG_RENDERER_OPENGLES || BGFX_CONFIG_RENDERER_OPENGL)
 #	include "renderer_gl.h"
 #	include <bx/timer.h>
 #	include <bx/uint32_t.h>
@@ -43,6 +43,7 @@ namespace bgfx
 		"a_position",
 		"a_normal",
 		"a_tangent",
+		"a_bitangent",
 		"a_color0",
 		"a_color1",
 		"a_indices",
@@ -179,103 +180,107 @@ namespace bgfx
 
 	static TextureFormatInfo s_textureFormat[] =
 	{
-		{ GL_COMPRESSED_RGBA_S3TC_DXT1_EXT,            GL_COMPRESSED_RGBA_S3TC_DXT1_EXT,            GL_ZERO,                        false }, // BC1
-		{ GL_COMPRESSED_RGBA_S3TC_DXT3_EXT,            GL_COMPRESSED_RGBA_S3TC_DXT3_EXT,            GL_ZERO,                        false }, // BC2
-		{ GL_COMPRESSED_RGBA_S3TC_DXT5_EXT,            GL_COMPRESSED_RGBA_S3TC_DXT5_EXT,            GL_ZERO,                        false }, // BC3
-		{ GL_COMPRESSED_LUMINANCE_LATC1_EXT,           GL_COMPRESSED_LUMINANCE_LATC1_EXT,           GL_ZERO,                        false }, // BC4
-		{ GL_COMPRESSED_LUMINANCE_ALPHA_LATC2_EXT,     GL_COMPRESSED_LUMINANCE_ALPHA_LATC2_EXT,     GL_ZERO,                        false }, // BC5
-		{ GL_COMPRESSED_RGB_BPTC_SIGNED_FLOAT_ARB,     GL_COMPRESSED_RGB_BPTC_SIGNED_FLOAT_ARB,     GL_ZERO,                        false }, // BC6H
-		{ GL_COMPRESSED_RGBA_BPTC_UNORM_ARB,           GL_COMPRESSED_RGBA_BPTC_UNORM_ARB,           GL_ZERO,                        false }, // BC7
-		{ GL_ETC1_RGB8_OES,                            GL_ETC1_RGB8_OES,                            GL_ZERO,                        false }, // ETC1
-		{ GL_COMPRESSED_RGB8_ETC2,                     GL_COMPRESSED_RGB8_ETC2,                     GL_ZERO,                        false }, // ETC2
-		{ GL_COMPRESSED_RGBA8_ETC2_EAC,                GL_COMPRESSED_RGBA8_ETC2_EAC,                GL_ZERO,                        false }, // ETC2A
-		{ GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2, GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2, GL_ZERO,                        false }, // ETC2A1
-		{ GL_COMPRESSED_RGB_PVRTC_2BPPV1_IMG,          GL_COMPRESSED_RGB_PVRTC_2BPPV1_IMG,          GL_ZERO,                        false }, // PTC12
-		{ GL_COMPRESSED_RGB_PVRTC_4BPPV1_IMG,          GL_COMPRESSED_RGB_PVRTC_4BPPV1_IMG,          GL_ZERO,                        false }, // PTC14
-		{ GL_COMPRESSED_RGBA_PVRTC_2BPPV1_IMG,         GL_COMPRESSED_RGBA_PVRTC_2BPPV1_IMG,         GL_ZERO,                        false }, // PTC12A
-		{ GL_COMPRESSED_RGBA_PVRTC_4BPPV1_IMG,         GL_COMPRESSED_RGBA_PVRTC_4BPPV1_IMG,         GL_ZERO,                        false }, // PTC14A
-		{ GL_COMPRESSED_RGBA_PVRTC_2BPPV2_IMG,         GL_COMPRESSED_RGBA_PVRTC_2BPPV2_IMG,         GL_ZERO,                        false }, // PTC22
-		{ GL_COMPRESSED_RGBA_PVRTC_4BPPV2_IMG,         GL_COMPRESSED_RGBA_PVRTC_4BPPV2_IMG,         GL_ZERO,                        false }, // PTC24
-		{ GL_ZERO,                                     GL_ZERO,                                     GL_ZERO,                        true  }, // Unknown
-		{ GL_LUMINANCE,                                GL_LUMINANCE,                                GL_UNSIGNED_BYTE,               true  }, // R8
-		{ GL_R16,                                      GL_RED,                                      GL_UNSIGNED_SHORT,              true  }, // R16
-		{ GL_R16F,                                     GL_RED,                                      GL_HALF_FLOAT,                  true  }, // R16F
-		{ GL_R32UI,                                    GL_RED,                                      GL_UNSIGNED_INT,                true  }, // R32
-		{ GL_R32F,                                     GL_RED,                                      GL_FLOAT,                       true  }, // R32F
-		{ GL_RG8,                                      GL_RG,                                       GL_UNSIGNED_BYTE,               true  }, // RG8
-		{ GL_RG16,                                     GL_RG,                                       GL_UNSIGNED_SHORT,              true  }, // RG16
-		{ GL_RG16F,                                    GL_RG,                                       GL_FLOAT,                       true  }, // RG16F
-		{ GL_RG32UI,                                   GL_RG,                                       GL_UNSIGNED_INT,                true  }, // RG32
-		{ GL_RG32F,                                    GL_RG,                                       GL_FLOAT,                       true  }, // RG32F
-		{ GL_RGBA,                                     GL_RGBA,                                     GL_UNSIGNED_BYTE,               true  }, // BGRA8
-		{ GL_RGBA16,                                   GL_RGBA,                                     GL_UNSIGNED_BYTE,               true  }, // RGBA16
-		{ GL_RGBA16F,                                  GL_RGBA,                                     GL_HALF_FLOAT,                  true  }, // RGBA16F
-		{ GL_RGBA32UI,                                 GL_RGBA,                                     GL_UNSIGNED_INT,                true  }, // RGBA32
-		{ GL_RGBA32F,                                  GL_RGBA,                                     GL_FLOAT,                       true  }, // RGBA32F
-		{ GL_RGB565,                                   GL_RGB,                                      GL_UNSIGNED_SHORT_5_6_5,        true  }, // R5G6B5
-		{ GL_RGBA4,                                    GL_RGBA,                                     GL_UNSIGNED_SHORT_4_4_4_4,      true  }, // RGBA4
-		{ GL_RGB5_A1,                                  GL_RGBA,                                     GL_UNSIGNED_SHORT_5_5_5_1,      true  }, // RGB5A1
-		{ GL_RGB10_A2,                                 GL_RGBA,                                     GL_UNSIGNED_INT_2_10_10_10_REV, true  }, // RGB10A2
-		{ GL_ZERO,                                     GL_ZERO,                                     GL_ZERO,                        true  }, // UnknownDepth
-		{ GL_DEPTH_COMPONENT16,                        GL_DEPTH_COMPONENT,                          GL_UNSIGNED_SHORT,              false }, // D16
-		{ GL_DEPTH_COMPONENT24,                        GL_DEPTH_COMPONENT,                          GL_UNSIGNED_INT,                false }, // D24
-		{ GL_DEPTH24_STENCIL8,                         GL_DEPTH_STENCIL,                            GL_UNSIGNED_INT_24_8,           false }, // D24S8
-		{ GL_DEPTH_COMPONENT32,                        GL_DEPTH_COMPONENT,                          GL_UNSIGNED_INT,                false }, // D32
-		{ GL_DEPTH_COMPONENT32F,                       GL_DEPTH_COMPONENT,                          GL_FLOAT,                       false }, // D16F
-		{ GL_DEPTH_COMPONENT32F,                       GL_DEPTH_COMPONENT,                          GL_FLOAT,                       false }, // D24F
-		{ GL_DEPTH_COMPONENT32F,                       GL_DEPTH_COMPONENT,                          GL_FLOAT,                       false }, // D32F
-		{ GL_STENCIL_INDEX8,                           GL_DEPTH_STENCIL,                            GL_UNSIGNED_BYTE,               false }, // D0S8
+		{ GL_COMPRESSED_RGBA_S3TC_DXT1_EXT,            GL_COMPRESSED_RGBA_S3TC_DXT1_EXT,            GL_ZERO,                         false }, // BC1
+		{ GL_COMPRESSED_RGBA_S3TC_DXT3_EXT,            GL_COMPRESSED_RGBA_S3TC_DXT3_EXT,            GL_ZERO,                         false }, // BC2
+		{ GL_COMPRESSED_RGBA_S3TC_DXT5_EXT,            GL_COMPRESSED_RGBA_S3TC_DXT5_EXT,            GL_ZERO,                         false }, // BC3
+		{ GL_COMPRESSED_LUMINANCE_LATC1_EXT,           GL_COMPRESSED_LUMINANCE_LATC1_EXT,           GL_ZERO,                         false }, // BC4
+		{ GL_COMPRESSED_LUMINANCE_ALPHA_LATC2_EXT,     GL_COMPRESSED_LUMINANCE_ALPHA_LATC2_EXT,     GL_ZERO,                         false }, // BC5
+		{ GL_COMPRESSED_RGB_BPTC_SIGNED_FLOAT_ARB,     GL_COMPRESSED_RGB_BPTC_SIGNED_FLOAT_ARB,     GL_ZERO,                         false }, // BC6H
+		{ GL_COMPRESSED_RGBA_BPTC_UNORM_ARB,           GL_COMPRESSED_RGBA_BPTC_UNORM_ARB,           GL_ZERO,                         false }, // BC7
+		{ GL_ETC1_RGB8_OES,                            GL_ETC1_RGB8_OES,                            GL_ZERO,                         false }, // ETC1
+		{ GL_COMPRESSED_RGB8_ETC2,                     GL_COMPRESSED_RGB8_ETC2,                     GL_ZERO,                         false }, // ETC2
+		{ GL_COMPRESSED_RGBA8_ETC2_EAC,                GL_COMPRESSED_RGBA8_ETC2_EAC,                GL_ZERO,                         false }, // ETC2A
+		{ GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2, GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2, GL_ZERO,                         false }, // ETC2A1
+		{ GL_COMPRESSED_RGB_PVRTC_2BPPV1_IMG,          GL_COMPRESSED_RGB_PVRTC_2BPPV1_IMG,          GL_ZERO,                         false }, // PTC12
+		{ GL_COMPRESSED_RGB_PVRTC_4BPPV1_IMG,          GL_COMPRESSED_RGB_PVRTC_4BPPV1_IMG,          GL_ZERO,                         false }, // PTC14
+		{ GL_COMPRESSED_RGBA_PVRTC_2BPPV1_IMG,         GL_COMPRESSED_RGBA_PVRTC_2BPPV1_IMG,         GL_ZERO,                         false }, // PTC12A
+		{ GL_COMPRESSED_RGBA_PVRTC_4BPPV1_IMG,         GL_COMPRESSED_RGBA_PVRTC_4BPPV1_IMG,         GL_ZERO,                         false }, // PTC14A
+		{ GL_COMPRESSED_RGBA_PVRTC_2BPPV2_IMG,         GL_COMPRESSED_RGBA_PVRTC_2BPPV2_IMG,         GL_ZERO,                         false }, // PTC22
+		{ GL_COMPRESSED_RGBA_PVRTC_4BPPV2_IMG,         GL_COMPRESSED_RGBA_PVRTC_4BPPV2_IMG,         GL_ZERO,                         false }, // PTC24
+		{ GL_ZERO,                                     GL_ZERO,                                     GL_ZERO,                         true  }, // Unknown
+		{ GL_ZERO,                                     GL_ZERO,                                     GL_ZERO,                         true  }, // R1
+		{ GL_LUMINANCE,                                GL_LUMINANCE,                                GL_UNSIGNED_BYTE,                true  }, // R8
+		{ GL_R16,                                      GL_RED,                                      GL_UNSIGNED_SHORT,               true  }, // R16
+		{ GL_R16F,                                     GL_RED,                                      GL_HALF_FLOAT,                   true  }, // R16F
+		{ GL_R32UI,                                    GL_RED,                                      GL_UNSIGNED_INT,                 true  }, // R32
+		{ GL_R32F,                                     GL_RED,                                      GL_FLOAT,                        true  }, // R32F
+		{ GL_RG8,                                      GL_RG,                                       GL_UNSIGNED_BYTE,                true  }, // RG8
+		{ GL_RG16,                                     GL_RG,                                       GL_UNSIGNED_SHORT,               true  }, // RG16
+		{ GL_RG16F,                                    GL_RG,                                       GL_FLOAT,                        true  }, // RG16F
+		{ GL_RG32UI,                                   GL_RG,                                       GL_UNSIGNED_INT,                 true  }, // RG32
+		{ GL_RG32F,                                    GL_RG,                                       GL_FLOAT,                        true  }, // RG32F
+		{ GL_RGBA,                                     GL_RGBA,                                     GL_UNSIGNED_BYTE,                true  }, // BGRA8
+		{ GL_RGBA16,                                   GL_RGBA,                                     GL_UNSIGNED_BYTE,                true  }, // RGBA16
+		{ GL_RGBA16F,                                  GL_RGBA,                                     GL_HALF_FLOAT,                   true  }, // RGBA16F
+		{ GL_RGBA32UI,                                 GL_RGBA,                                     GL_UNSIGNED_INT,                 true  }, // RGBA32
+		{ GL_RGBA32F,                                  GL_RGBA,                                     GL_FLOAT,                        true  }, // RGBA32F
+		{ GL_RGB565,                                   GL_RGB,                                      GL_UNSIGNED_SHORT_5_6_5,         true  }, // R5G6B5
+		{ GL_RGBA4,                                    GL_RGBA,                                     GL_UNSIGNED_SHORT_4_4_4_4,       true  }, // RGBA4
+		{ GL_RGB5_A1,                                  GL_RGBA,                                     GL_UNSIGNED_SHORT_5_5_5_1,       true  }, // RGB5A1
+		{ GL_RGB10_A2,                                 GL_RGBA,                                     GL_UNSIGNED_INT_2_10_10_10_REV,  true  }, // RGB10A2
+		{ GL_R11F_G11F_B10F,                           GL_RGB,                                      GL_UNSIGNED_INT_10F_11F_11F_REV, true  }, // R11G11B10F
+		{ GL_ZERO,                                     GL_ZERO,                                     GL_ZERO,                         true  }, // UnknownDepth
+		{ GL_DEPTH_COMPONENT16,                        GL_DEPTH_COMPONENT,                          GL_UNSIGNED_SHORT,               false }, // D16
+		{ GL_DEPTH_COMPONENT24,                        GL_DEPTH_COMPONENT,                          GL_UNSIGNED_INT,                 false }, // D24
+		{ GL_DEPTH24_STENCIL8,                         GL_DEPTH_STENCIL,                            GL_UNSIGNED_INT_24_8,            false }, // D24S8
+		{ GL_DEPTH_COMPONENT32,                        GL_DEPTH_COMPONENT,                          GL_UNSIGNED_INT,                 false }, // D32
+		{ GL_DEPTH_COMPONENT32F,                       GL_DEPTH_COMPONENT,                          GL_FLOAT,                        false }, // D16F
+		{ GL_DEPTH_COMPONENT32F,                       GL_DEPTH_COMPONENT,                          GL_FLOAT,                        false }, // D24F
+		{ GL_DEPTH_COMPONENT32F,                       GL_DEPTH_COMPONENT,                          GL_FLOAT,                        false }, // D32F
+		{ GL_STENCIL_INDEX8,                           GL_DEPTH_STENCIL,                            GL_UNSIGNED_BYTE,                false }, // D0S8
 	};
 	BX_STATIC_ASSERT(TextureFormat::Count == BX_COUNTOF(s_textureFormat) );
 
 	static GLenum s_imageFormat[] =
 	{
-		GL_ZERO,     // BC1
-		GL_ZERO,     // BC2
-		GL_ZERO,     // BC3
-		GL_ZERO,     // BC4
-		GL_ZERO,     // BC5
-		GL_ZERO,     // BC6H
-		GL_ZERO,     // BC7
-		GL_ZERO,     // ETC1
-		GL_ZERO,     // ETC2
-		GL_ZERO,     // ETC2A
-		GL_ZERO,     // ETC2A1
-		GL_ZERO,     // PTC12
-		GL_ZERO,     // PTC14
-		GL_ZERO,     // PTC12A
-		GL_ZERO,     // PTC14A
-		GL_ZERO,     // PTC22
-		GL_ZERO,     // PTC24
-		GL_ZERO,     // Unknown
-		GL_R8,       // R8
-		GL_R16,      // R16
-		GL_R16F,     // R16F
-		GL_R32UI,    // R32
-		GL_R32F,     // R32F
-		GL_RG8,      // RG8
-		GL_RG16,     // RG16
-		GL_RG16F,    // RG16F
-		GL_RG32UI,   // RG32
-		GL_RG32F,    // RG32F
-		GL_RGBA8,    // BGRA8
-		GL_RGBA16,   // RGBA16
-		GL_RGBA16F,  // RGBA16F
-		GL_RGBA32UI, // RGBA32
-		GL_RGBA32F,  // RGBA32F
-		GL_RGB565,   // R5G6B5
-		GL_RGBA4,    // RGBA4
-		GL_RGB5_A1,  // RGB5A1
-		GL_RGB10_A2, // RGB10A2
-		GL_ZERO,     // UnknownDepth
-		GL_ZERO,     // D16
-		GL_ZERO,     // D24
-		GL_ZERO,     // D24S8
-		GL_ZERO,     // D32
-		GL_ZERO,     // D16F
-		GL_ZERO,     // D24F
-		GL_ZERO,     // D32F
-		GL_ZERO,     // D0S8
+		GL_ZERO,           // BC1
+		GL_ZERO,           // BC2
+		GL_ZERO,           // BC3
+		GL_ZERO,           // BC4
+		GL_ZERO,           // BC5
+		GL_ZERO,           // BC6H
+		GL_ZERO,           // BC7
+		GL_ZERO,           // ETC1
+		GL_ZERO,           // ETC2
+		GL_ZERO,           // ETC2A
+		GL_ZERO,           // ETC2A1
+		GL_ZERO,           // PTC12
+		GL_ZERO,           // PTC14
+		GL_ZERO,           // PTC12A
+		GL_ZERO,           // PTC14A
+		GL_ZERO,           // PTC22
+		GL_ZERO,           // PTC24
+		GL_ZERO,           // Unknown
+		GL_ZERO,           // R1
+		GL_R8,             // R8
+		GL_R16,            // R16
+		GL_R16F,           // R16F
+		GL_R32UI,          // R32
+		GL_R32F,           // R32F
+		GL_RG8,            // RG8
+		GL_RG16,           // RG16
+		GL_RG16F,          // RG16F
+		GL_RG32UI,         // RG32
+		GL_RG32F,          // RG32F
+		GL_RGBA8,          // BGRA8
+		GL_RGBA16,         // RGBA16
+		GL_RGBA16F,        // RGBA16F
+		GL_RGBA32UI,       // RGBA32
+		GL_RGBA32F,        // RGBA32F
+		GL_RGB565,         // R5G6B5
+		GL_RGBA4,          // RGBA4
+		GL_RGB5_A1,        // RGB5A1
+		GL_RGB10_A2,       // RGB10A2
+		GL_R11F_G11F_B10F, // R11G11B10F
+		GL_ZERO,           // UnknownDepth
+		GL_ZERO,           // D16
+		GL_ZERO,           // D24
+		GL_ZERO,           // D24S8
+		GL_ZERO,           // D32
+		GL_ZERO,           // D16F
+		GL_ZERO,           // D24F
+		GL_ZERO,           // D32F
+		GL_ZERO,           // D0S8
 	};
 	BX_STATIC_ASSERT(TextureFormat::Count == BX_COUNTOF(s_imageFormat) );
 
@@ -283,6 +288,8 @@ namespace bgfx
 	{
 		enum Enum
 		{
+			AMD_conservative_depth,
+
 			ANGLE_depth_texture,
 			ANGLE_framebuffer_blit,
 			ANGLE_framebuffer_multisample,
@@ -296,10 +303,13 @@ namespace bgfx
 			APPLE_texture_max_level,
 
 			ARB_compute_shader,
+			ARB_conservative_depth,
 			ARB_debug_label,
 			ARB_debug_output,
+			ARB_depth_buffer_float,
 			ARB_depth_clamp,
 			ARB_draw_buffers_blend,
+			ARB_draw_instanced,
 			ARB_ES3_compatibility,
 			ARB_framebuffer_object,
 			ARB_framebuffer_sRGB,
@@ -309,9 +319,12 @@ namespace bgfx
 			ARB_instanced_arrays,
 			ARB_map_buffer_range,
 			ARB_multisample,
+			ARB_occlusion_query,
+			ARB_occlusion_query2,
 			ARB_program_interface_query,
 			ARB_sampler_objects,
 			ARB_seamless_cube_map,
+			ARB_shader_bit_encoding,
 			ARB_shader_image_load_store,
 			ARB_shader_storage_buffer_object,
 			ARB_shader_texture_lod,
@@ -348,6 +361,7 @@ namespace bgfx
 			EXT_framebuffer_object,
 			EXT_framebuffer_sRGB,
 			EXT_occlusion_query_boolean,
+			EXT_packed_float,
 			EXT_read_format_bgra,
 			EXT_shader_image_load_store,
 			EXT_shader_texture_lod,
@@ -429,6 +443,8 @@ namespace bgfx
 
 	static Extension s_extension[Extension::Count] =
 	{
+		{ "AMD_conservative_depth",                false,                             true  },
+
 		{ "ANGLE_depth_texture",                   false,                             true  },
 		{ "ANGLE_framebuffer_blit",                false,                             true  },
 		{ "ANGLE_framebuffer_multisample",         false,                             false },
@@ -442,10 +458,13 @@ namespace bgfx
 		{ "APPLE_texture_max_level",               false,                             true  },
 
 		{ "ARB_compute_shader",                    BGFX_CONFIG_RENDERER_OPENGL >= 43, true  },
+		{ "ARB_conservative_depth",                BGFX_CONFIG_RENDERER_OPENGL >= 42, true  },
 		{ "ARB_debug_label",                       false,                             true  },
 		{ "ARB_debug_output",                      BGFX_CONFIG_RENDERER_OPENGL >= 43, true  },
+		{ "ARB_depth_buffer_float",                BGFX_CONFIG_RENDERER_OPENGL >= 33, true  },
 		{ "ARB_depth_clamp",                       BGFX_CONFIG_RENDERER_OPENGL >= 32, true  },
 		{ "ARB_draw_buffers_blend",                BGFX_CONFIG_RENDERER_OPENGL >= 40, true  },
+		{ "ARB_draw_instanced",                    BGFX_CONFIG_RENDERER_OPENGL >= 33, true  },
 		{ "ARB_ES3_compatibility",                 BGFX_CONFIG_RENDERER_OPENGL >= 43, true  },
 		{ "ARB_framebuffer_object",                BGFX_CONFIG_RENDERER_OPENGL >= 30, true  },
 		{ "ARB_framebuffer_sRGB",                  BGFX_CONFIG_RENDERER_OPENGL >= 30, true  },
@@ -455,9 +474,12 @@ namespace bgfx
 		{ "ARB_instanced_arrays",                  BGFX_CONFIG_RENDERER_OPENGL >= 33, true  },
 		{ "ARB_map_buffer_range",                  BGFX_CONFIG_RENDERER_OPENGL >= 30, true  },
 		{ "ARB_multisample",                       false,                             true  },
+		{ "ARB_occlusion_query",                   BGFX_CONFIG_RENDERER_OPENGL >= 33, true  },
+		{ "ARB_occlusion_query2",                  BGFX_CONFIG_RENDERER_OPENGL >= 33, true  },
 		{ "ARB_program_interface_query",           BGFX_CONFIG_RENDERER_OPENGL >= 43, true  },
 		{ "ARB_sampler_objects",                   BGFX_CONFIG_RENDERER_OPENGL >= 33, true  },
 		{ "ARB_seamless_cube_map",                 BGFX_CONFIG_RENDERER_OPENGL >= 32, true  },
+		{ "ARB_shader_bit_encoding",               BGFX_CONFIG_RENDERER_OPENGL >= 33, true  },
 		{ "ARB_shader_image_load_store",           BGFX_CONFIG_RENDERER_OPENGL >= 42, true  },
 		{ "ARB_shader_storage_buffer_object",      BGFX_CONFIG_RENDERER_OPENGL >= 43, true  },
 		{ "ARB_shader_texture_lod",                BGFX_CONFIG_RENDERER_OPENGL >= 30, true  },
@@ -494,6 +516,7 @@ namespace bgfx
 		{ "EXT_framebuffer_object",                BGFX_CONFIG_RENDERER_OPENGL >= 30, true  },
 		{ "EXT_framebuffer_sRGB",                  BGFX_CONFIG_RENDERER_OPENGL >= 30, true  },
 		{ "EXT_occlusion_query_boolean",           false,                             true  },
+		{ "EXT_packed_float",                      BGFX_CONFIG_RENDERER_OPENGL >= 33, true  },
 		{ "EXT_read_format_bgra",                  false,                             true  },
 		{ "EXT_shader_image_load_store",           false,                             true  },
 		{ "EXT_shader_texture_lod",                false,                             true  }, // GLES2 extension.
@@ -4778,9 +4801,29 @@ namespace bgfx
 
 					pos++;
 					tvm.printf(10, pos++, 0x8c, " -------------|    free|  free b|     aux|  aux fb");
-					tvm.printf(10, pos++, 0x8e, "           VBO: %7d, %7d, %7d, %7d", vboFree[0], vboFree[1], vboFree[2], vboFree[3]);
-					tvm.printf(10, pos++, 0x8e, "       Texture: %7d, %7d, %7d, %7d", texFree[0], texFree[1], texFree[2], texFree[3]);
-					tvm.printf(10, pos++, 0x8e, " Render Buffer: %7d, %7d, %7d, %7d", rbfFree[0], rbfFree[1], rbfFree[2], rbfFree[3]);
+
+					char tmp0[16];
+					char tmp1[16];
+					char tmp2[16];
+					char tmp3[16];
+
+					bx::prettify(tmp0, BX_COUNTOF(tmp0), vboFree[0]);
+					bx::prettify(tmp1, BX_COUNTOF(tmp1), vboFree[1]);
+					bx::prettify(tmp2, BX_COUNTOF(tmp2), vboFree[2]);
+					bx::prettify(tmp3, BX_COUNTOF(tmp3), vboFree[3]);
+					tvm.printf(10, pos++, 0x8e, "           VBO: %10s, %10s, %10s, %10s", tmp0, tmp1, tmp2, tmp3);
+
+					bx::prettify(tmp0, BX_COUNTOF(tmp0), texFree[0]);
+					bx::prettify(tmp1, BX_COUNTOF(tmp1), texFree[1]);
+					bx::prettify(tmp2, BX_COUNTOF(tmp2), texFree[2]);
+					bx::prettify(tmp3, BX_COUNTOF(tmp3), texFree[3]);
+					tvm.printf(10, pos++, 0x8e, "       Texture: %10s, %10s, %10s, %10s", tmp0, tmp1, tmp2, tmp3);
+
+					bx::prettify(tmp0, BX_COUNTOF(tmp0), rbfFree[0]);
+					bx::prettify(tmp1, BX_COUNTOF(tmp1), rbfFree[1]);
+					bx::prettify(tmp2, BX_COUNTOF(tmp2), rbfFree[2]);
+					bx::prettify(tmp3, BX_COUNTOF(tmp3), rbfFree[3]);
+					tvm.printf(10, pos++, 0x8e, " Render Buffer: %10s, %10s, %10s, %10s", tmp0, tmp1, tmp2, tmp3);
 				}
 				else if (s_extension[Extension::NVX_gpu_memory_info].m_supported)
 				{
@@ -4789,7 +4832,6 @@ namespace bgfx
 
 					GLint totalAvail;
 					GL_CHECK(glGetIntegerv(GL_GPU_MEMORY_INFO_TOTAL_AVAILABLE_MEMORY_NVX, &totalAvail) );
-
 					GLint currAvail;
 					GL_CHECK(glGetIntegerv(GL_GPU_MEMORY_INFO_CURRENT_AVAILABLE_VIDMEM_NVX, &currAvail) );
 
@@ -4799,11 +4841,21 @@ namespace bgfx
 					GLint evictedMemory;
 					GL_CHECK(glGetIntegerv(GL_GPU_MEMORY_INFO_EVICTED_MEMORY_NVX, &evictedMemory) );
 
-					pos++;
-					tvm.printf(10, pos++, 0x8c, "----------|");
-					tvm.printf(10, pos++, 0x8e, " Dedicated: %7d", dedicated);
-					tvm.printf(10, pos++, 0x8e, " Available: %7d (%7d)", currAvail, totalAvail);
-					tvm.printf(10, pos++, 0x8e, "  Eviction: %7d / %7d", evictedCount, evictedMemory);
+					pos += 2;
+
+					char tmp0[16];
+					char tmp1[16];
+
+					bx::prettify(tmp0, BX_COUNTOF(tmp0), dedicated);
+					tvm.printf(10, pos++, 0x8e, " Dedicated: %10s", tmp0);
+
+					bx::prettify(tmp0, BX_COUNTOF(tmp0), currAvail);
+					bx::prettify(tmp1, BX_COUNTOF(tmp1), totalAvail);
+					tvm.printf(10, pos++, 0x8e, " Available: %10s / %10s", tmp0, tmp1);
+
+					bx::prettify(tmp0, BX_COUNTOF(tmp0), evictedCount);
+					bx::prettify(tmp1, BX_COUNTOF(tmp1), evictedMemory);
+					tvm.printf(10, pos++, 0x8e, "  Eviction: %10s / %10s", tmp0, tmp1);
 				}
 #endif // BGFX_CONFIG_RENDERER_OPENGL
 
@@ -4843,4 +4895,4 @@ namespace bgfx
 	}
 } // namespace bgfx
 
-#endif // (BGFX_CONFIG_RENDERER_OPENGLES|BGFX_CONFIG_RENDERER_OPENGL)
+#endif // (BGFX_CONFIG_RENDERER_OPENGLES || BGFX_CONFIG_RENDERER_OPENGL)

@@ -6,6 +6,17 @@
 #ifndef BGFX_P_H_HEADER_GUARD
 #define BGFX_P_H_HEADER_GUARD
 
+#ifndef BGFX_CONFIG_DEBUG
+#	define BGFX_CONFIG_DEBUG 0
+#endif // BGFX_CONFIG_DEBUG
+
+#if BGFX_CONFIG_DEBUG
+#	define BX_TRACE _BX_TRACE
+#	define BX_WARN  _BX_WARN
+#	define BX_CHECK _BX_CHECK
+#	define BX_CONFIG_ALLOCATOR_DEBUG 1
+#endif // BGFX_CONFIG_DEBUG
+
 #include "bgfx.h"
 #include "config.h"
 
@@ -44,13 +55,6 @@ namespace bgfx
 					} \
 				BX_MACRO_BLOCK_END
 
-#if BGFX_CONFIG_DEBUG
-#	define BX_TRACE _BX_TRACE
-#	define BX_WARN  _BX_WARN
-#	define BX_CHECK _BX_CHECK
-#	define BX_CONFIG_ALLOCATOR_DEBUG 1
-#endif // BGFX_CONFIG_DEBUG
-
 #define BGFX_FATAL(_condition, _err, _format, ...) \
 			BX_MACRO_BLOCK_BEGIN \
 				if (!BX_IGNORE_C4127(_condition) ) \
@@ -77,10 +81,10 @@ namespace bgfx
 #include "bgfxplatform.h"
 #include "image.h"
 
-#define BGFX_CHUNK_MAGIC_CSH BX_MAKEFOURCC('C', 'S', 'H', 0x0)
-#define BGFX_CHUNK_MAGIC_FSH BX_MAKEFOURCC('F', 'S', 'H', 0x2)
+#define BGFX_CHUNK_MAGIC_CSH BX_MAKEFOURCC('C', 'S', 'H', 0x1)
+#define BGFX_CHUNK_MAGIC_FSH BX_MAKEFOURCC('F', 'S', 'H', 0x3)
 #define BGFX_CHUNK_MAGIC_TEX BX_MAKEFOURCC('T', 'E', 'X', 0x0)
-#define BGFX_CHUNK_MAGIC_VSH BX_MAKEFOURCC('V', 'S', 'H', 0x2)
+#define BGFX_CHUNK_MAGIC_VSH BX_MAKEFOURCC('V', 'S', 'H', 0x3)
 
 #include <list> // mingw wants it to be before tr1/unordered_*...
 
@@ -136,8 +140,28 @@ namespace stl
 #define BGFX_RENDERER_NULL_NAME "NULL"
 
 #if BGFX_CONFIG_RENDERER_OPENGL
-#	if BGFX_CONFIG_RENDERER_OPENGL >= 31
-#		define BGFX_RENDERER_OPENGL_NAME "OpenGL 3.1"
+#	if BGFX_CONFIG_RENDERER_OPENGL >= 31 && BGFX_CONFIG_RENDERER_OPENGL <= 33
+#		if BGFX_CONFIG_RENDERER_OPENGL == 31
+#			define BGFX_RENDERER_OPENGL_NAME "OpenGL 3.1"
+#		elif BGFX_CONFIG_RENDERER_OPENGL == 32
+#			define BGFX_RENDERER_OPENGL_NAME "OpenGL 3.2"
+#		else
+#			define BGFX_RENDERER_OPENGL_NAME "OpenGL 3.3"
+#		endif // 31+
+#	elif BGFX_CONFIG_RENDERER_OPENGL >= 40 && BGFX_CONFIG_RENDERER_OPENGL <= 45
+#		if BGFX_CONFIG_RENDERER_OPENGL == 40
+#			define BGFX_RENDERER_OPENGL_NAME "OpenGL 4.0"
+#		elif BGFX_CONFIG_RENDERER_OPENGL == 41
+#			define BGFX_RENDERER_OPENGL_NAME "OpenGL 4.1"
+#		elif BGFX_CONFIG_RENDERER_OPENGL == 42
+#			define BGFX_RENDERER_OPENGL_NAME "OpenGL 4.2"
+#		elif BGFX_CONFIG_RENDERER_OPENGL == 43
+#			define BGFX_RENDERER_OPENGL_NAME "OpenGL 4.3"
+#		elif BGFX_CONFIG_RENDERER_OPENGL == 44
+#			define BGFX_RENDERER_OPENGL_NAME "OpenGL 4.4"
+#		else
+#			define BGFX_RENDERER_OPENGL_NAME "OpenGL 4.5"
+#		endif // 40+
 #	else
 #		define BGFX_RENDERER_OPENGL_NAME "OpenGL 2.1"
 #	endif // BGFX_CONFIG_RENDERER_OPENGL
@@ -685,7 +709,7 @@ namespace bgfx
 		uint8_t  m_view;
 		uint8_t  m_trans;
 	};
-#undef SORT_KEY_CMD
+#undef SORT_KEY_RENDER_DRAW
 
 	BX_ALIGN_STRUCT_16(struct) Matrix4
 	{
@@ -2520,6 +2544,8 @@ namespace bgfx
 			BX_WARN(isValid(handle), "Failed to allocate uniform handle.");
 			if (isValid(handle) )
 			{
+				BX_TRACE("Creating uniform (handle %3d) %s", handle.idx, _name);
+
 				UniformRef& uniform = m_uniformRef[handle.idx];
 				uniform.m_refCount = 1;
 				uniform.m_type = _type;

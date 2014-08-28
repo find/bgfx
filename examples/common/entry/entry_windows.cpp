@@ -67,11 +67,11 @@ namespace entry
 	struct Context
 	{
 		Context()
-			: m_frame(true)
+			: m_mz(0)
+			, m_frame(true)
 			, m_mouseLock(false)
 			, m_init(false)
 			, m_exit(false)
-			, m_mz(0)
 		{
 			memset(s_translateKey, 0, sizeof(s_translateKey) );
 			s_translateKey[VK_ESCAPE]    = Key::Esc;
@@ -586,11 +586,6 @@ namespace entry
 			}
 		}
 
-		bool setWindowTitle(const char* _title)
-		{
-			return (1 == SetWindowText(m_hwnd, _title));
-		}
-
 		static LRESULT CALLBACK wndProc(HWND _hwnd, UINT _id, WPARAM _wparam, LPARAM _lparam);
 
 		EventQueue m_eventQueue;
@@ -639,9 +634,10 @@ namespace entry
 		PostMessage(s_ctx.m_hwnd, WM_USER_SET_WINDOW_SIZE, 0, (_height<<16) | (_width&0xffff) );
 	}
 
-	bool setWindowTitle(const char* _title)
+	void setWindowTitle(const char* _title)
 	{
-		return s_ctx.setWindowTitle(_title);
+		SetWindowTextA(s_ctx.m_hwnd, _title);
+		SetWindowTextA(GetWindow(s_ctx.m_hwnd, GW_HWNDNEXT), _title);
 	}
 
 	void toggleWindowFrame()

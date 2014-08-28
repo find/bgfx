@@ -54,9 +54,9 @@ extern "C"
 #include <fpp.h>
 } // extern "C"
 
-#define BGFX_CHUNK_MAGIC_CSH BX_MAKEFOURCC('C', 'S', 'H', 0x0)
-#define BGFX_CHUNK_MAGIC_VSH BX_MAKEFOURCC('V', 'S', 'H', 0x2)
-#define BGFX_CHUNK_MAGIC_FSH BX_MAKEFOURCC('F', 'S', 'H', 0x2)
+#define BGFX_CHUNK_MAGIC_CSH BX_MAKEFOURCC('C', 'S', 'H', 0x1)
+#define BGFX_CHUNK_MAGIC_FSH BX_MAKEFOURCC('F', 'S', 'H', 0x3)
+#define BGFX_CHUNK_MAGIC_VSH BX_MAKEFOURCC('V', 'S', 'H', 0x3)
 
 #include <bx/commandline.h>
 #include <bx/endian.h>
@@ -66,6 +66,8 @@ extern "C"
 #include <bx/hash.h>
 
 #include "glsl_optimizer.h"
+
+#include "../../src/vertexdecl.h"
 
 #if BX_PLATFORM_WINDOWS
 #	include <sal.h>
@@ -82,30 +84,6 @@ long int fsize(FILE* _file)
 	fseek(_file, pos, SEEK_SET);
 	return size;
 }
-
-struct Attrib
-{
-	enum Enum
-	{
-		Position = 0,
-		Normal,
-		Tangent,
-		Color0,
-		Color1,
-		Indices,
-		Weight,
-		TexCoord0,
-		TexCoord1,
-		TexCoord2,
-		TexCoord3,
-		TexCoord4,
-		TexCoord5,
-		TexCoord6,
-		TexCoord7,
-
-		Count,
-	};
-};
 
 static const char* s_ARB_shader_texture_lod[] =
 {
@@ -150,34 +128,35 @@ static const char* s_OES_texture_3D[] =
 
 struct RemapInputSemantic
 {
-	Attrib::Enum m_attr;
+	bgfx::Attrib::Enum m_attr;
 	const char* m_name;
 	uint8_t m_index;
 };
 
-static const RemapInputSemantic s_remapInputSemantic[Attrib::Count+1] =
+static const RemapInputSemantic s_remapInputSemantic[bgfx::Attrib::Count+1] =
 {
-	{ Attrib::Position,  "POSITION",     0 },
-	{ Attrib::Normal,    "NORMAL",       0 },
-	{ Attrib::Tangent,   "TANGENT",      0 },
-	{ Attrib::Color0,    "COLOR",        0 },
-	{ Attrib::Color1,    "COLOR",        1 },
-	{ Attrib::Indices,   "BLENDINDICES", 0 },
-	{ Attrib::Weight,    "BLENDWEIGHT",  0 },
-	{ Attrib::TexCoord0, "TEXCOORD",     0 },
-	{ Attrib::TexCoord1, "TEXCOORD",     1 },
-	{ Attrib::TexCoord2, "TEXCOORD",     2 },
-	{ Attrib::TexCoord3, "TEXCOORD",     3 },
-	{ Attrib::TexCoord4, "TEXCOORD",     4 },
-	{ Attrib::TexCoord5, "TEXCOORD",     5 },
-	{ Attrib::TexCoord6, "TEXCOORD",     6 },
-	{ Attrib::TexCoord7, "TEXCOORD",     7 },
-	{ Attrib::Count,     "",             0 },
+	{ bgfx::Attrib::Position,  "POSITION",     0 },
+	{ bgfx::Attrib::Normal,    "NORMAL",       0 },
+	{ bgfx::Attrib::Tangent,   "TANGENT",      0 },
+	{ bgfx::Attrib::Bitangent, "BITANGENT",    0 },
+	{ bgfx::Attrib::Color0,    "COLOR",        0 },
+	{ bgfx::Attrib::Color1,    "COLOR",        1 },
+	{ bgfx::Attrib::Indices,   "BLENDINDICES", 0 },
+	{ bgfx::Attrib::Weight,    "BLENDWEIGHT",  0 },
+	{ bgfx::Attrib::TexCoord0, "TEXCOORD",     0 },
+	{ bgfx::Attrib::TexCoord1, "TEXCOORD",     1 },
+	{ bgfx::Attrib::TexCoord2, "TEXCOORD",     2 },
+	{ bgfx::Attrib::TexCoord3, "TEXCOORD",     3 },
+	{ bgfx::Attrib::TexCoord4, "TEXCOORD",     4 },
+	{ bgfx::Attrib::TexCoord5, "TEXCOORD",     5 },
+	{ bgfx::Attrib::TexCoord6, "TEXCOORD",     6 },
+	{ bgfx::Attrib::TexCoord7, "TEXCOORD",     7 },
+	{ bgfx::Attrib::Count,     "",             0 },
 };
 
 const RemapInputSemantic& findInputSemantic(const char* _name, uint8_t _index)
 {
-	for (uint32_t ii = 0; ii < Attrib::Count; ++ii)
+	for (uint32_t ii = 0; ii < bgfx::Attrib::Count; ++ii)
 	{
 		const RemapInputSemantic& ris = s_remapInputSemantic[ii];
 		if (0 == strcmp(ris.m_name, _name)
@@ -187,7 +166,7 @@ const RemapInputSemantic& findInputSemantic(const char* _name, uint8_t _index)
 		}
 	}
 
-	return s_remapInputSemantic[Attrib::Count];
+	return s_remapInputSemantic[bgfx::Attrib::Count];
 }
 
 struct UniformType
@@ -944,50 +923,53 @@ bool compileHLSLShaderDx9(bx::CommandLine& _cmdLine, const std::string& _code, b
 		return false;
 	}
 
-	D3DXCONSTANTTABLE_DESC desc;
-	hr = constantTable->GetDesc(&desc);
-	if (FAILED(hr) )
-	{
-		fprintf(stderr, "Error 0x%08x\n", (uint32_t)hr);
-		return false;
-	}
-
-	BX_TRACE("Creator: %s 0x%08x", desc.Creator, (uint32_t /*mingw warning*/)desc.Version);
-	BX_TRACE("Num constants: %d", desc.Constants);
-	BX_TRACE("#   cl ty RxC   S  By Name");
-
 	UniformArray uniforms;
 
-	for (uint32_t ii = 0; ii < desc.Constants; ++ii)
+	if (NULL != constantTable)
 	{
-		D3DXHANDLE handle = constantTable->GetConstant(NULL, ii);
-		D3DXCONSTANT_DESC constDesc;
-		uint32_t count;
-		constantTable->GetConstantDesc(handle, &constDesc, &count);
-		BX_TRACE("%3d %2d %2d [%dx%d] %d %3d %s[%d] c%d (%d)"
-			, ii
-			, constDesc.Class
-			, constDesc.Type
-			, constDesc.Rows
-			, constDesc.Columns
-			, constDesc.StructMembers
-			, constDesc.Bytes
-			, constDesc.Name
-			, constDesc.Elements
-			, constDesc.RegisterIndex
-			, constDesc.RegisterCount
-			);
-
-		UniformType::Enum type = findUniformTypeDx9(constDesc);
-		if (UniformType::Count != type)
+		D3DXCONSTANTTABLE_DESC desc;
+		hr = constantTable->GetDesc(&desc);
+		if (FAILED(hr) )
 		{
-			Uniform un;
-			un.name = '$' == constDesc.Name[0] ? constDesc.Name+1 : constDesc.Name;
-			un.type = type;
-			un.num = constDesc.Elements;
-			un.regIndex = constDesc.RegisterIndex;
-			un.regCount = constDesc.RegisterCount;
-			uniforms.push_back(un);
+			fprintf(stderr, "Error 0x%08x\n", (uint32_t)hr);
+			return false;
+		}
+
+		BX_TRACE("Creator: %s 0x%08x", desc.Creator, (uint32_t /*mingw warning*/)desc.Version);
+		BX_TRACE("Num constants: %d", desc.Constants);
+		BX_TRACE("#   cl ty RxC   S  By Name");
+
+		for (uint32_t ii = 0; ii < desc.Constants; ++ii)
+		{
+			D3DXHANDLE handle = constantTable->GetConstant(NULL, ii);
+			D3DXCONSTANT_DESC constDesc;
+			uint32_t count;
+			constantTable->GetConstantDesc(handle, &constDesc, &count);
+			BX_TRACE("%3d %2d %2d [%dx%d] %d %3d %s[%d] c%d (%d)"
+				, ii
+				, constDesc.Class
+				, constDesc.Type
+				, constDesc.Rows
+				, constDesc.Columns
+				, constDesc.StructMembers
+				, constDesc.Bytes
+				, constDesc.Name
+				, constDesc.Elements
+				, constDesc.RegisterIndex
+				, constDesc.RegisterCount
+				);
+
+			UniformType::Enum type = findUniformTypeDx9(constDesc);
+			if (UniformType::Count != type)
+			{
+				Uniform un;
+				un.name = '$' == constDesc.Name[0] ? constDesc.Name+1 : constDesc.Name;
+				un.type = type;
+				un.num = constDesc.Elements;
+				un.regIndex = constDesc.RegisterIndex;
+				un.regCount = constDesc.RegisterCount;
+				uniforms.push_back(un);
+			}
 		}
 	}
 
@@ -1183,27 +1165,31 @@ bool compileHLSLShaderDx11(bx::CommandLine& _cmdLine, const std::string& _code, 
 	BX_TRACE("Num constant buffers: %d", desc.ConstantBuffers);
 
 	BX_TRACE("Input:");
-	uint8_t attrMask[Attrib::Count];
-	memset(attrMask, 0, sizeof(attrMask) );
+	uint8_t numAttrs = 0;
+	uint16_t attrs[bgfx::Attrib::Count];
 
-	for (uint32_t ii = 0; ii < desc.InputParameters; ++ii)
+	if (profile[0] == 'v') // Only care about input semantic on vertex shaders
 	{
-		D3D11_SIGNATURE_PARAMETER_DESC spd;
-		reflect->GetInputParameterDesc(ii, &spd);
-		BX_TRACE("\t%2d: %s%d, vt %d, ct %d, mask %x, reg %d"
-			, ii
-			, spd.SemanticName
-			, spd.SemanticIndex
-			, spd.SystemValueType
-			, spd.ComponentType
-			, spd.Mask
-			, spd.Register
-			);
-
-		const RemapInputSemantic& ris = findInputSemantic(spd.SemanticName, spd.SemanticIndex);
-		if (ris.m_attr != Attrib::Count)
+		for (uint32_t ii = 0; ii < desc.InputParameters; ++ii)
 		{
-			attrMask[ris.m_attr] = 0xff;
+			D3D11_SIGNATURE_PARAMETER_DESC spd;
+			reflect->GetInputParameterDesc(ii, &spd);
+			BX_TRACE("\t%2d: %s%d, vt %d, ct %d, mask %x, reg %d"
+				, ii
+				, spd.SemanticName
+				, spd.SemanticIndex
+				, spd.SystemValueType
+				, spd.ComponentType
+				, spd.Mask
+				, spd.Register
+				);
+
+			const RemapInputSemantic& ris = findInputSemantic(spd.SemanticName, spd.SemanticIndex);
+			if (ris.m_attr != bgfx::Attrib::Count)
+			{
+				attrs[numAttrs] = bgfx::attribToId(ris.m_attr);
+				++numAttrs;
+			}
 		}
 	}
 
@@ -1328,7 +1314,9 @@ bool compileHLSLShaderDx11(bx::CommandLine& _cmdLine, const std::string& _code, 
 	uint8_t nul = 0;
 	bx::write(_writer, nul);
 
-	bx::write(_writer, attrMask, sizeof(attrMask) );
+	bx::write(_writer, numAttrs);
+	bx::write(_writer, attrs, numAttrs*sizeof(uint16_t) );
+
 	bx::write(_writer, size);
 
 	if (_cmdLine.hasArg('\0', "disasm") )
@@ -1563,20 +1551,6 @@ struct Preprocessor
 	uint32_t m_fgetsPos;
 };
 
-const char* baseName(const char* _filePath)
-{
-	const char* bs = strrchr(_filePath, '\\');
-	const char* fs = strrchr(_filePath, '/');
-	const char* column = strrchr(_filePath, ':');
-	const char* basename = std::max(std::max(bs, fs), column);
-	if (NULL != basename)
-	{
-		return basename+1;
-	}
-
-	return _filePath;
-}
-
 typedef std::vector<std::string> InOut;
 
 uint32_t parseInOut(InOut& _inout, const char* _str, const char* _eol)
@@ -1749,12 +1723,18 @@ int main(int _argc, const char* _argv[])
 
 	uint32_t gles = 0;
 	uint32_t hlsl = 2;
+	uint32_t d3d  = 11;
 	const char* profile = cmdLine.findOption('p', "profile");
 	if (NULL != profile)
 	{
-		if (0 == strncmp(&profile[1], "s_3", 3) )
+		if (0 == strncmp(&profile[1], "s_4_0_level", 11) )
+		{
+			hlsl = 2;
+		}
+		else if (0 == strncmp(&profile[1], "s_3", 3) )
 		{
 			hlsl = 3;
+			d3d  = 9;
 		}
 		else if (0 == strncmp(&profile[1], "s_4", 3) )
 		{
@@ -1776,7 +1756,7 @@ int main(int _argc, const char* _argv[])
 		bin2c = cmdLine.findOption("bin2c");
 		if (NULL == bin2c)
 		{
-			bin2c = baseName(outFilePath);
+			bin2c = bx::baseName(outFilePath);
 			uint32_t len = (uint32_t)strlen(bin2c);
 			char* temp = (char*)alloca(len+1);
 			for (char *out = temp; *bin2c != '\0';)
@@ -1805,7 +1785,7 @@ int main(int _argc, const char* _argv[])
 
 	std::string dir;
 	{
-		const char* base = baseName(filePath);
+		const char* base = bx::baseName(filePath);
 
 		if (base != filePath)
 		{
@@ -2111,7 +2091,7 @@ int main(int _argc, const char* _argv[])
 			}
 			else
 			{
-				if (hlsl > 3)
+				if (d3d > 9)
 				{
 					compiled = compileHLSLShaderDx11(cmdLine, input, writer);
 				}
@@ -2277,7 +2257,7 @@ int main(int _argc, const char* _argv[])
 						}
 						else
 						{
-							if (hlsl > 3)
+							if (d3d > 9)
 							{
 								compiled = compileHLSLShaderDx11(cmdLine, preprocessor.m_preprocessed, writer);
 							}
@@ -2482,7 +2462,8 @@ int main(int _argc, const char* _argv[])
 								);
 						}
 
-						if (hasFrontFacing)
+						if (hasFrontFacing
+						&&  hlsl >= 3)
 						{
 							preprocessor.writef(
 								" \\\n\t%sfloat __vface : VFACE"
@@ -2496,9 +2477,18 @@ int main(int _argc, const char* _argv[])
 
 						if (hasFrontFacing)
 						{
-							preprocessor.writef(
-								"#define gl_FrontFacing (__vface <= 0.0)\n"
-								);
+							if (hlsl >= 3)
+							{
+								preprocessor.writef(
+									"#define gl_FrontFacing (__vface <= 0.0)\n"
+									);
+							}
+							else
+							{
+								preprocessor.writef(
+									"#define gl_FrontFacing false\n"
+									);
+							}
 						}
 					}
 					else if ('v' == shaderType)
@@ -2711,7 +2701,7 @@ int main(int _argc, const char* _argv[])
 						}
 						else
 						{
-							if (hlsl > 3)
+							if (d3d > 9)
 							{
 								compiled = compileHLSLShaderDx11(cmdLine, preprocessor.m_preprocessed, writer);
 							}

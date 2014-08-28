@@ -13,7 +13,7 @@ Supported rendering backends:
  * OpenGL 2.1
  * OpenGL 3.1
  * OpenGL ES 2
- * OpenGL ES 3
+ * OpenGL ES 3.1
 
 Platforms:
 
@@ -23,6 +23,7 @@ Platforms:
  * Linux
  * Native Client
  * OSX
+ * RaspberryPi
  * Windows
 
 Languages:
@@ -196,6 +197,7 @@ draw calls per frame.
 | Xperia Z     | ES2          | Adreno320 | GCC    | ARM  | Android    |  11 |  1331 |
 | iPod 4       | ES2          | PVR SGX535| Clang  | ARM  | iOS6       |   7 |   343 |
 | i7-920 2.66  | ES2-Mali     | GTX650Ti  | VS2008 | x86  | Windows7   |   6 |   216 |
+| RaspberryPi  | ES2          | VC IV     | GCC    | ARM  | Raspbian   |   6 |   216 |
 
 To test browsers in 60Hz mode following changes were made:
 
@@ -328,6 +330,15 @@ Visual Studio 2008 command line:
 Visual Studio 2008 IDE:
 
 	start .build/projects/vs2008/bgfx.sln
+
+Xcode 5 IDE:
+
+	open .build/projects/xcode4/bgfx.xcworkspace
+Due to [inability](http://industriousone.com/debugdir) to set working directory for an Xcode project from premake configuration file, it has to be set manually for each example project:
+
+1. Open *"Edit scheme..."* dialog for a given project.
+2. Select *"Run"* settings.
+3. Check *"Use custom working directory"* and enter following path: `${PROJECT_DIR}/../../../examples/runtime`.
 
 Linux 64-bit:
 

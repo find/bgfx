@@ -3,7 +3,7 @@
 -- License: http://www.opensource.org/licenses/BSD-2-Clause
 --
 
-function bgfxProject(_name, _uuid, _kind)
+function bgfxProject(_name, _uuid, _kind, _defines)
 
 	project ("bgfx" .. _name)
 		uuid (_uuid)
@@ -26,6 +26,7 @@ function bgfxProject(_name, _uuid, _kind)
 		configuration { "Debug" }
 			defines {
 				"BGFX_CONFIG_DEBUG=1",
+				_defines,
 			}
 
 		configuration { "android*" }
@@ -34,12 +35,17 @@ function bgfxProject(_name, _uuid, _kind)
 				"GLESv2",
 			}
 
-		configuration { "windows" }
+		configuration { "windows", "not vs2012" }
 			includedirs {
 				"$(DXSDK_DIR)/include",
 			}
 
-		configuration { "osx or ios*" }
+		configuration { "windows" }
+			links {
+				"gdi32",
+			}
+
+		configuration { "xcode4 or osx or ios*" }
 			files {
 				BGFX_DIR .. "src/**.mm",
 			}
@@ -49,7 +55,7 @@ function bgfxProject(_name, _uuid, _kind)
 				"Cocoa.framework",
 			}
 
-		configuration { "vs* or linux or mingw or osx or ios*" }
+		configuration { "vs* or linux or mingw or xcode4 or osx or ios* or rpi" }
 			includedirs {
 				--nacl has GLES2 headers modified...
 				BGFX_DIR .. "3rdparty/khronos",

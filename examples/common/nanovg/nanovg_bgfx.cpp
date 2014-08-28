@@ -271,7 +271,7 @@ namespace
 			.add(bgfx::Attrib::TexCoord0, 2, bgfx::AttribType::Float)
 			.end();
 
-		int align = 1;
+		int align = 16;
 		gl->fragSize = sizeof(struct GLNVGfragUniforms) + align - sizeof(struct GLNVGfragUniforms) % align;
 
 		return 1;
@@ -962,6 +962,11 @@ namespace
 		bgfx::destroyUniform(gl->u_extentRadius);
 		bgfx::destroyUniform(gl->u_params);
 		bgfx::destroyUniform(gl->s_tex);
+
+		if (bgfx::isValid(gl->u_halfTexel) )
+		{
+			bgfx::destroyUniform(gl->u_halfTexel);
+		}
 
 		for (uint32_t ii = 0, num = gl->ntextures; ii < num; ++ii)
 		{

@@ -203,6 +203,7 @@ namespace bgfx
 		{ D3DFMT_UNKNOWN       }, // PTC22
 		{ D3DFMT_UNKNOWN       }, // PTC24
 		{ D3DFMT_UNKNOWN       }, // Unknown
+		{ D3DFMT_A1            }, // R1
 		{ D3DFMT_L8            }, // R8
 		{ D3DFMT_G16R16        }, // R16
 		{ D3DFMT_R16F          }, // R16F
@@ -222,6 +223,7 @@ namespace bgfx
 		{ D3DFMT_A4R4G4B4      }, // RGBA4
 		{ D3DFMT_A1R5G5B5      }, // RGB5A1
 		{ D3DFMT_A2B10G10R10   }, // RGB10A2
+		{ D3DFMT_UNKNOWN       }, // R11G11B10F
 		{ D3DFMT_UNKNOWN       }, // UnknownDepth
 		{ D3DFMT_D16           }, // D16  
 		{ D3DFMT_D24X8         }, // D24  
@@ -230,11 +232,7 @@ namespace bgfx
 		{ D3DFMT_DF16          }, // D16F 
 		{ D3DFMT_DF24          }, // D24F
 		{ D3DFMT_D32F_LOCKABLE }, // D32F
-#if defined(D3D_DISABLE_9EX)
-		{ D3DFMT_UNKNOWN       }, // D0S8
-#else
-		{ D3DFMT_INTZ /*D3DFMT_S8_LOCKABLE*/   }, // D0S8
-#endif // defined(D3D_DISABLE_9EX)
+		{ D3DFMT_S8_LOCKABLE   }, // D0S8
 	};
 	BX_STATIC_ASSERT(TextureFormat::Count == BX_COUNTOF(s_textureFormat) );
 
@@ -942,6 +940,14 @@ namespace bgfx
 
 		void setFrameBuffer(FrameBufferHandle _fbh, bool _msaa = true)
 		{
+			if (isValid(m_fbh)
+			&&  m_fbh.idx != _fbh.idx
+			&&  m_rtMsaa)
+			{
+				FrameBufferD3D9& frameBuffer = m_frameBuffers[m_fbh.idx];
+				frameBuffer.resolve();
+			}
+
 			if (!isValid(_fbh) )
 			{
 				DX_CHECK(m_device->SetRenderTarget(0, m_backBufferColor) );
@@ -955,7 +961,7 @@ namespace bgfx
 			{
 				const FrameBufferD3D9& frameBuffer = m_frameBuffers[_fbh.idx];
 
-				// If frame buffer has only depth attachement D3DFMT_NULL
+				// If frame buffer has only depth attachment D3DFMT_NULL
 				// render target is created.
 				uint32_t fbnum = bx::uint32_max(1, frameBuffer.m_num);
 
@@ -971,14 +977,6 @@ namespace bgfx
 
 				IDirect3DSurface9* depthStencil = frameBuffer.m_depthStencil;
 				DX_CHECK(m_device->SetDepthStencilSurface(NULL != depthStencil ? depthStencil : m_backBufferDepthStencil) );
-			}
-
-			if (isValid(m_fbh)
-				&&  m_fbh.idx != _fbh.idx
-				&&  m_rtMsaa)
-			{
-				FrameBufferD3D9& frameBuffer = m_frameBuffers[m_fbh.idx];
-				frameBuffer.resolve();
 			}
 
 			m_fbh = _fbh;
@@ -1552,6 +1550,7 @@ namespace bgfx
 		{ 0, 0, D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION,     0 },
 		{ 0, 0, D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_NORMAL,       0 },
 		{ 0, 0, D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TANGENT,      0 },
+		{ 0, 0, D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_BINORMAL,     0 },
 		{ 0, 0, D3DDECLTYPE_UBYTE4, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_COLOR,        0 },
 		{ 0, 0, D3DDECLTYPE_UBYTE4, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_COLOR,        1 },
 		{ 0, 0, D3DDECLTYPE_UBYTE4, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_BLENDINDICES, 0 },
