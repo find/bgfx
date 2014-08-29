@@ -175,7 +175,7 @@ vec3 convertYIQ2RGB(vec3 _yiq)
 
 vec3 toLinear(vec3 _rgb)
 {
-	return pow(_rgb, vec3_splat(2.2) );
+	return pow(abs(_rgb), vec3_splat(2.2) );
 }
 
 vec4 toLinear(vec4 _rgba)
@@ -183,9 +183,14 @@ vec4 toLinear(vec4 _rgba)
 	return vec4(toLinear(_rgba.xyz), _rgba.w);
 }
 
+float toGamma(float _r)
+{
+	return pow(abs(_r), 1.0/2.2);
+}
+
 vec3 toGamma(vec3 _rgb)
 {
-	return pow(_rgb, vec3_splat(1.0/2.2) );
+	return pow(abs(_rgb), vec3_splat(1.0/2.2) );
 }
 
 vec4 toGamma(vec4 _rgba)

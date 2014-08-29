@@ -5,16 +5,20 @@
 
 #include <memory.h>
 #include <string>
-#include <unordered_map>
 
 #include "entry_p.h"
 #include "input.h"
+
+#include <tinystl/allocator.h>
+#include <tinystl/unordered_map.h>
+namespace stl = tinystl;
 
 struct Mouse
 {
 	Mouse()
 		: m_width(1280)
 		, m_height(720)
+		, m_wheelDelta(120)
 		, m_lock(false)
 	{
 	}
@@ -25,6 +29,7 @@ struct Mouse
 		{
 			m_norm[0] = 0.0f;
 			m_norm[1] = 0.0f;
+			m_norm[2] = 0.0f;
 		}
 
 		memset(m_buttons, 0, sizeof(m_buttons) );
@@ -36,12 +41,14 @@ struct Mouse
 		m_height = _height;
 	}
 
-	void setPos(int32_t _mx, int32_t _my)
+	void setPos(int32_t _mx, int32_t _my, int32_t _mz)
 	{
 		m_absolute[0] = _mx;
 		m_absolute[1] = _my;
+		m_absolute[2] = _mz;
 		m_norm[0] = float(_mx)/float(m_width);
 		m_norm[1] = float(_my)/float(m_height);
+		m_norm[2] = float(_mz)/float(m_wheelDelta);
 	}
 
 	void setButtonState(entry::MouseButton::Enum _button, uint8_t _state)
@@ -49,12 +56,13 @@ struct Mouse
 		m_buttons[_button] = _state;
 	}
 
-	int32_t m_absolute[2];
-	float m_norm[2];
+	int32_t m_absolute[3];
+	float m_norm[3];
 	int32_t m_wheel;
 	uint8_t m_buttons[entry::MouseButton::Count];
 	uint16_t m_width;
 	uint16_t m_height;
+	uint16_t m_wheelDelta;
 	bool m_lock;
 };
 
@@ -107,12 +115,12 @@ struct Input
 
 	void addBindings(const char* _name, const InputBinding* _bindings)
 	{
-		m_inputBindingsMap.insert(std::make_pair(_name, _bindings) );
+		m_inputBindingsMap.insert(stl::make_pair(_name, _bindings) );
 	}
 
 	void removeBindings(const char* _name)
 	{
-		m_inputBindingsMap.erase(_name);
+		m_inputBindingsMap.erase(m_inputBindingsMap.find(_name));
 	}
 
 	void process(const InputBinding* _bindings)
@@ -164,7 +172,7 @@ struct Input
 		m_keyboard.reset();
 	}
 
-	typedef std::unordered_map<std::string, const InputBinding*> InputBindingMap;
+	typedef stl::unordered_map<const char*, const InputBinding*> InputBindingMap;
 	InputBindingMap m_inputBindingsMap;
 	Mouse m_mouse;
 	Keyboard m_keyboard;
@@ -197,9 +205,9 @@ void inputSetKeyState(entry::Key::Enum _key, uint8_t _modifiers, bool _down)
 	s_input.m_keyboard.setKeyState(_key, _modifiers, _down);
 }
 
-void inputSetMousePos(int32_t _mx, int32_t _my)
+void inputSetMousePos(int32_t _mx, int32_t _my, int32_t _mz)
 {
-	s_input.m_mouse.setPos(_mx, _my);
+	s_input.m_mouse.setPos(_mx, _my, _mz);
 }
 
 void inputSetMouseButtonState(entry::MouseButton::Enum _button, uint8_t _state)
@@ -207,12 +215,14 @@ void inputSetMouseButtonState(entry::MouseButton::Enum _button, uint8_t _state)
 	s_input.m_mouse.setButtonState(_button, _state);
 }
 
-void inputGetMouse(float _mouse[2])
+void inputGetMouse(float _mouse[3])
 {
 	_mouse[0] = s_input.m_mouse.m_norm[0];
 	_mouse[1] = s_input.m_mouse.m_norm[1];
+	_mouse[2] = s_input.m_mouse.m_norm[2];
 	s_input.m_mouse.m_norm[0] = 0.0f;
 	s_input.m_mouse.m_norm[1] = 0.0f;
+	s_input.m_mouse.m_norm[2] = 0.0f;
 }
 
 bool inputIsMouseLocked()
@@ -230,6 +240,7 @@ void inputSetMouseLock(bool _lock)
 		{
 			s_input.m_mouse.m_norm[0] = 0.0f;
 			s_input.m_mouse.m_norm[1] = 0.0f;
+			s_input.m_mouse.m_norm[2] = 0.0f;
 		}
 	}
 }

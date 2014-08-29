@@ -3,16 +3,17 @@
  * License: http://www.opensource.org/licenses/BSD-2-Clause
  */
 
-#include "common.h"
-#include "bgfx_utils.h"
-#include "imgui/imgui.h"
-
-#include <bx/readerwriter.h>
-
 #include <vector>
 #include <string>
 
-static bool s_flipV = false;
+#include "common.h"
+#include "bgfx_utils.h"
+#include "imgui/imgui.h"
+#include "nanovg/nanovg.h"
+
+#include <bx/readerwriter.h>
+#include <bx/string.h>
+
 static float s_texelHalf = 0.0f;
 
 struct Uniforms
@@ -24,7 +25,7 @@ struct Uniforms
 
 		u_time    = bgfx::createUniform("u_time",     bgfx::UniformType::Uniform1f);
 		u_mtx     = bgfx::createUniform("u_mtx",      bgfx::UniformType::Uniform4x4fv);
-		u_params  = bgfx::createUniform("u_params",  bgfx::UniformType::Uniform4fv);
+		u_params  = bgfx::createUniform("u_params",   bgfx::UniformType::Uniform4fv);
 		u_flags   = bgfx::createUniform("u_flags",    bgfx::UniformType::Uniform4fv);
 		u_camPos  = bgfx::createUniform("u_camPos",   bgfx::UniformType::Uniform3fv);
 		u_rgbDiff = bgfx::createUniform("u_rgbDiff",  bgfx::UniformType::Uniform3fv);
@@ -159,12 +160,17 @@ struct Group
 	PrimitiveArray m_prims;
 };
 
+namespace bgfx
+{
+	int32_t read(bx::ReaderI* _reader, bgfx::VertexDecl& _decl);
+}
+
 struct Mesh
 {
 	void load(const char* _filePath)
 	{
-#define BGFX_CHUNK_MAGIC_VB BX_MAKEFOURCC('V', 'B', ' ', 0x0)
-#define BGFX_CHUNK_MAGIC_IB BX_MAKEFOURCC('I', 'B', ' ', 0x0)
+#define BGFX_CHUNK_MAGIC_VB  BX_MAKEFOURCC('V', 'B', ' ', 0x1)
+#define BGFX_CHUNK_MAGIC_IB  BX_MAKEFOURCC('I', 'B', ' ', 0x0)
 #define BGFX_CHUNK_MAGIC_PRI BX_MAKEFOURCC('P', 'R', 'I', 0x0)
 
 		bx::CrtFileReader reader;
@@ -183,7 +189,7 @@ struct Mesh
 					bx::read(&reader, group.m_aabb);
 					bx::read(&reader, group.m_obb);
 
-					bx::read(&reader, m_decl);
+					bgfx::read(&reader, m_decl);
 					uint16_t stride = m_decl.getStride();
 
 					uint16_t numVertices;
@@ -380,13 +386,41 @@ void screenSpaceQuad(float _textureWidth, float _textureHeight, bool _originBott
 	}
 }
 
-void imguiBool(const char* _str, bool& _flag, bool _enabled = true)
+struct LightProbe
 {
-	if (imguiCheck(_str, _flag, _enabled) )
+	enum Enum
 	{
-		_flag = !_flag;
+		Wells,
+		Uffizi,
+		Pisa,
+		Ennis,
+		Grace,
+
+		Count
+	};
+
+	void load(const char* _name)
+	{
+		char filePath[512];
+
+		strcpy(filePath, _name);
+		strcat(filePath, "_lod.dds");
+		m_tex = loadTexture(filePath, BGFX_TEXTURE_U_CLAMP|BGFX_TEXTURE_V_CLAMP|BGFX_TEXTURE_W_CLAMP);
+
+		strcpy(filePath, _name);
+		strcat(filePath, "_irr.dds");
+		m_texIrr = loadTexture(filePath, BGFX_TEXTURE_U_CLAMP|BGFX_TEXTURE_V_CLAMP|BGFX_TEXTURE_W_CLAMP);
 	}
-}
+
+	void destroy()
+	{
+		bgfx::destroyTexture(m_tex);
+		bgfx::destroyTexture(m_texIrr);
+	}
+
+	bgfx::TextureHandle m_tex;
+	bgfx::TextureHandle m_texIrr;
+};
 
 int _main_(int /*_argc*/, char** /*_argv*/)
 {
@@ -409,19 +443,6 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		, 0
 		);
 
-	// Setup root path for binary shaders. Shader binaries are different
-	// for each renderer.
-	switch (bgfx::getRendererType() )
-	{
-	default:
-		break;
-
-	case bgfx::RendererType::OpenGL:
-	case bgfx::RendererType::OpenGLES:
-		s_flipV = true;
-		break;
-	}
-
 	// Imgui.
 	void* data = load("font/droidsans.ttf");
 	imguiCreate(data);
@@ -433,49 +454,13 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 	// Vertex declarations.
 	PosColorTexCoord0Vertex::init();
 
-	struct LightProbe
-	{
-		void load(const char* _name)
-		{
-			char filePath[512];
-
-			strcpy(filePath, _name);
-			strcat(filePath, "_lod.dds");
-			m_tex = loadTexture(filePath, BGFX_TEXTURE_U_CLAMP|BGFX_TEXTURE_V_CLAMP|BGFX_TEXTURE_W_CLAMP);
-
-			strcpy(filePath, _name);
-			strcat(filePath, "_irr.dds");
-			m_texIrr = loadTexture(filePath, BGFX_TEXTURE_U_CLAMP|BGFX_TEXTURE_V_CLAMP|BGFX_TEXTURE_W_CLAMP);
-		}
-
-		void destroy()
-		{
-			bgfx::destroyTexture(m_tex);
-			bgfx::destroyTexture(m_texIrr);
-		}
-
-		bgfx::TextureHandle m_tex;
-		bgfx::TextureHandle m_texIrr;
-	};
-
-	enum LightProbes
-	{
-		LPWells,
-		LPUffizi,
-		LPPisa,
-		LPEnnis,
-		LPGrace,
-
-		LPCount
-	};
-
-	LightProbe lightProbes[LPCount];
-	lightProbes[LPWells].load("wells");
-	lightProbes[LPUffizi].load("uffizi");
-	lightProbes[LPPisa].load("pisa");
-	lightProbes[LPEnnis].load("ennis");
-	lightProbes[LPGrace].load("grace");
-	uint8_t currentLightProbe = LPWells;
+	LightProbe lightProbes[LightProbe::Count];
+	lightProbes[LightProbe::Wells ].load("wells");
+	lightProbes[LightProbe::Uffizi].load("uffizi");
+	lightProbes[LightProbe::Pisa  ].load("pisa");
+	lightProbes[LightProbe::Ennis ].load("ennis");
+	lightProbes[LightProbe::Grace ].load("grace");
+	LightProbe::Enum currentLightProbe = LightProbe::Wells;
 
 	bgfx::UniformHandle u_time   = bgfx::createUniform("u_time",   bgfx::UniformType::Uniform1f);
 	bgfx::UniformHandle u_mtx    = bgfx::createUniform("u_mtx",    bgfx::UniformType::Uniform4x4fv);
@@ -485,11 +470,6 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 	bgfx::UniformHandle u_texCube    = bgfx::createUniform("u_texCube",    bgfx::UniformType::Uniform1i);
 	bgfx::UniformHandle u_texCubeIrr = bgfx::createUniform("u_texCubeIrr", bgfx::UniformType::Uniform1i);
-
-	bgfx::UniformHandle u_texAlbedo    = bgfx::createUniform("u_texAlbedo",    bgfx::UniformType::Uniform1i);
-	bgfx::UniformHandle u_texNormal    = bgfx::createUniform("u_texNormal",    bgfx::UniformType::Uniform1i);
-	bgfx::UniformHandle u_texSpecular  = bgfx::createUniform("u_texSpecular",  bgfx::UniformType::Uniform1i);
-	bgfx::UniformHandle u_texRoughness = bgfx::createUniform("u_texRoughness", bgfx::UniformType::Uniform1i);
 
 	bgfx::ProgramHandle programMesh = loadProgram("vs_ibl_mesh",   "fs_ibl_mesh");
 	bgfx::ProgramHandle programSky  = loadProgram("vs_ibl_skybox", "fs_ibl_skybox");
@@ -509,8 +489,8 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		bool m_specular;
 		bool m_diffuseIbl;
 		bool m_specularIbl;
-		bool m_singleSliderDiff;
-		bool m_singleSliderSpec;
+		bool m_showDiffColorWheel;
+		bool m_showSpecColorWheel;
 	};
 
 	Settings settings;
@@ -528,12 +508,14 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 	settings.m_specular = true;
 	settings.m_diffuseIbl = true;
 	settings.m_specularIbl = true;
-	settings.m_singleSliderDiff = false;
-	settings.m_singleSliderSpec = false;
+	settings.m_showDiffColorWheel = false;
+	settings.m_showSpecColorWheel = false;
 
 	float time = 0.0f;
 
 	s_uniforms.submitConstUniforms();
+
+	int32_t leftScrollArea = 0;
 
 	entry::MouseState mouseState;
 	while (!entry::processEvents(width, height, debug, reset, &mouseState) )
@@ -558,67 +540,35 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		imguiBool("IBL Specular", settings.m_specularIbl);
 
 		imguiSeparatorLine();
-		imguiSlider("Speed", &settings.m_speed, 0.0f, 1.0f, 0.01f);
+		imguiSlider("Speed", settings.m_speed, 0.0f, 1.0f, 0.01f);
 
 		imguiSeparatorLine();
 		imguiLabel("Environment:");
-		currentLightProbe = imguiChoose(currentLightProbe
-									   , "Wells"
-									   , "Uffizi"
-									   , "Pisa"
-									   , "Ennis"
-									   , "Grace"
-									   );
+		currentLightProbe = LightProbe::Enum(imguiChoose(currentLightProbe
+													   , "Wells"
+													   , "Uffizi"
+													   , "Pisa"
+													   , "Ennis"
+													   , "Grace"
+													   ) );
 
 		imguiSeparator();
-		imguiSlider("Exposure", &settings.m_exposure, -8.0f, 8.0f, 0.01f);
+		imguiSlider("Exposure", settings.m_exposure, -8.0f, 8.0f, 0.01f);
 		imguiEndScrollArea();
 
-		static int32_t leftScrollArea = 0;
 		imguiBeginScrollArea("Settings", 10, 70, 256, 576, &leftScrollArea);
 
 		imguiLabel("Material properties:");
 		imguiSeparator();
-		imguiSlider("Diffuse - Specular", &settings.m_diffspec,   0.0f, 1.0f, 0.01f);
-		imguiSlider("Glossiness"        , &settings.m_glossiness, 0.0f, 1.0f, 0.01f);
-
-		imguiSeparatorLine();
-		imguiLabel("Diffuse color:");
+		imguiSlider("Diffuse - Specular", settings.m_diffspec,   0.0f, 1.0f, 0.01f);
+		imguiSlider("Glossiness"        , settings.m_glossiness, 0.0f, 1.0f, 0.01f);
 		imguiSeparator();
-		imguiBool("Single slider", settings.m_singleSliderDiff);
-		if (settings.m_singleSliderDiff)
-		{
-			imguiSlider("RGB:", &settings.m_rgbDiff[0], 0.0f, 1.0f, 0.01f);
-			settings.m_rgbDiff[1] = settings.m_rgbDiff[0];
-			settings.m_rgbDiff[2] = settings.m_rgbDiff[0];
 
-		}
-		else
-		{
-			imguiSlider("R:", &settings.m_rgbDiff[0], 0.0f, 1.0f, 0.01f);
-			imguiSlider("G:", &settings.m_rgbDiff[1], 0.0f, 1.0f, 0.01f);
-			imguiSlider("B:", &settings.m_rgbDiff[2], 0.0f, 1.0f, 0.01f);
-		}
-
-		imguiSeparatorLine();
-		imguiLabel("Specular color:");
+		imguiColorWheel("Diffuse color:", &settings.m_rgbDiff[0], settings.m_showDiffColorWheel);
 		imguiSeparator();
-		imguiBool("Single slider", settings.m_singleSliderSpec);
-		if (settings.m_singleSliderSpec)
-		{
-			imguiSlider("RGB:", &settings.m_rgbSpec[0], 0.0f, 1.0f, 0.01f);
-			settings.m_rgbSpec[1] = settings.m_rgbSpec[0];
-			settings.m_rgbSpec[2] = settings.m_rgbSpec[0];
+		imguiColorWheel("Specular color:", &settings.m_rgbSpec[0], settings.m_showSpecColorWheel);
 
-		}
-		else
-		{
-			imguiSlider("R:", &settings.m_rgbSpec[0], 0.0f, 1.0f, 0.01f);
-			imguiSlider("G:", &settings.m_rgbSpec[1], 0.0f, 1.0f, 0.01f);
-			imguiSlider("B:", &settings.m_rgbSpec[2], 0.0f, 1.0f, 0.01f);
-		}
-
-		imguiSeparatorLine();
+		imguiSeparator();
 		imguiLabel("Predefined materials:");
 		imguiSeparator();
 
@@ -634,8 +584,6 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 			settings.m_rgbSpec[0] = 1.0f;
 			settings.m_rgbSpec[1] = 0.86f;
 			settings.m_rgbSpec[2] = 0.58f;
-
-			settings.m_singleSliderSpec = false;
 		}
 
 		if (imguiButton("Copper") )
@@ -650,8 +598,6 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 			settings.m_rgbSpec[0] = 0.98f;
 			settings.m_rgbSpec[1] = 0.82f;
 			settings.m_rgbSpec[2] = 0.76f;
-
-			settings.m_singleSliderSpec = false;
 		}
 
 		if (imguiButton("Titanium") )
@@ -666,8 +612,6 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 			settings.m_rgbSpec[0] = 0.76f;
 			settings.m_rgbSpec[1] = 0.73f;
 			settings.m_rgbSpec[2] = 0.71f;
-
-			settings.m_singleSliderSpec = false;
 		}
 
 		if (imguiButton("Steel") )
@@ -682,11 +626,10 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 			settings.m_rgbSpec[0] = 0.77f;
 			settings.m_rgbSpec[1] = 0.78f;
 			settings.m_rgbSpec[2] = 0.77f;
-
-			settings.m_singleSliderSpec = false;
 		}
 
 		imguiEndScrollArea();
+
 		imguiEndFrame();
 
 		s_uniforms.m_glossiness = settings.m_glossiness;
@@ -745,6 +688,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		bgfx::setProgram(programSky);
 		bgfx::setState(BGFX_STATE_RGB_WRITE|BGFX_STATE_ALPHA_WRITE);
 		screenSpaceQuad( (float)width, (float)height, true);
+		s_uniforms.submitPerDrawUniforms();
 		bgfx::submit(0);
 
 		// View 1.
@@ -782,15 +726,10 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 	bgfx::destroyUniform(u_mtx);
 	bgfx::destroyUniform(u_time);
 
-	bgfx::destroyUniform(u_texRoughness);
-	bgfx::destroyUniform(u_texSpecular);
-	bgfx::destroyUniform(u_texNormal);
-	bgfx::destroyUniform(u_texAlbedo);
-
 	bgfx::destroyUniform(u_texCube);
 	bgfx::destroyUniform(u_texCubeIrr);
 
-	for (uint8_t ii = 0; ii < LPCount; ++ii)
+	for (uint8_t ii = 0; ii < LightProbe::Count; ++ii)
 	{
 		lightProbes[ii].destroy();
 	}

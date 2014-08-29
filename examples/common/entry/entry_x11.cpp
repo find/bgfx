@@ -5,7 +5,7 @@
 
 #include "entry_p.h"
 
-#if ENTRY_CONFIG_USE_NATIVE && BX_PLATFORM_LINUX
+#if ENTRY_CONFIG_USE_NATIVE && (BX_PLATFORM_FREEBSD || BX_PLATFORM_LINUX || BX_PLATFORM_RPI)
 
 #define XK_MISCELLANY
 #define XK_LATIN1
@@ -216,6 +216,7 @@ namespace entry
 								{
 									m_eventQueue.postMouseEvent(xbutton.x
 										, xbutton.y
+										, 0
 										, mb
 										, event.type == ButtonPress
 										);
@@ -228,6 +229,7 @@ namespace entry
 								const XMotionEvent& xmotion = event.xmotion;
 								m_eventQueue.postMouseEvent(xmotion.x
 										, xmotion.y
+										, 0
 										);
 							}
 							break;
@@ -326,6 +328,11 @@ namespace entry
 		XSendEvent(s_ctx.m_display, s_ctx.m_window, false, ResizeRedirectMask, (XEvent*)&ev);
 	}
 
+	void setWindowTitle(const char* _title)
+	{
+		BX_UNUSED(_title);
+	}
+
 	void toggleWindowFrame()
 	{
 	}
@@ -343,4 +350,4 @@ int main(int _argc, char** _argv)
 	return s_ctx.run(_argc, _argv);
 }
 
-#endif // ENTRY_CONFIG_USE_NATIVE && BX_PLATFORM_LINUX
+#endif // ENTRY_CONFIG_USE_NATIVE && (BX_PLATFORM_FREEBSD || BX_PLATFORM_LINUX || BX_PLATFORM_RPI)

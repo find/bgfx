@@ -99,7 +99,7 @@ bgfx::ProgramHandle program;
 bgfx::VertexBufferHandle vbh;
 bgfx::IndexBufferHandle ibh;
 
-bool mainloop()
+BX_NO_INLINE bool mainloop()
 {
 	if (!entry::processEvents(width, height, debug, reset, &mouseState) )
 	{
@@ -115,7 +115,7 @@ bool mainloop()
 
 		if (deltaTimeNs > 1000000)
 		{
-			deltaTimeAvgNs = deltaTimeNs / numFrames;
+			deltaTimeAvgNs = deltaTimeNs / bx::int64_max(1, numFrames);
 
 			if (autoAdjust)
 			{
@@ -162,7 +162,7 @@ bool mainloop()
 			autoAdjust ^= true;
 		}
 
-		imguiSlider("Dim", &dim, 5, 40);
+		imguiSlider("Dim", dim, 5, 40);
 		imguiLabel("Draw calls: %d", dim*dim*dim);
 		imguiLabel("Avg Delta Time (1 second) [ms]: %0.4f", deltaTimeAvgNs/1000.0f);
 

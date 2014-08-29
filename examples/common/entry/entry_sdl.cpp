@@ -186,7 +186,7 @@ namespace entry
 				case SDL_MOUSEMOTION:
 					{
 						const SDL_MouseMotionEvent& mev = event.motion;
-						m_eventQueue.postMouseEvent(mev.x, mev.y);
+						m_eventQueue.postMouseEvent(mev.x, mev.y, 0);
 					}
 					break;
 
@@ -194,7 +194,7 @@ namespace entry
 				case SDL_MOUSEBUTTONUP:
 					{
 						const SDL_MouseButtonEvent& mev = event.button;
-						m_eventQueue.postMouseEvent(mev.x, mev.y, MouseButton::Left, mev.type == SDL_MOUSEBUTTONDOWN);
+						m_eventQueue.postMouseEvent(mev.x, mev.y, 0, MouseButton::Left, mev.type == SDL_MOUSEBUTTONDOWN);
 					}
 					break;
 
@@ -304,6 +304,11 @@ namespace entry
 			}
 		}
 
+		void setWindowTitle(const char* _title)
+		{
+			SDL_WM_SetCaption(_title, NULL);
+		}
+
 		MainThreadEntry m_mte;
 		bx::Thread m_thread;
 
@@ -340,6 +345,11 @@ namespace entry
 		uev.data1 = reinterpret_cast<void*>(_width);
 		uev.data2 = reinterpret_cast<void*>(_height);
 		SDL_PushEvent(&event);
+	}
+
+	void setWindowTitle(const char* _title)
+	{
+		s_ctx.setWindowTitle(_title);
 	}
 
 	void toggleWindowFrame()

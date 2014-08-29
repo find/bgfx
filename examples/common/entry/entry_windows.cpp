@@ -67,7 +67,8 @@ namespace entry
 	struct Context
 	{
 		Context()
-			: m_frame(true)
+			: m_mz(0)
+			, m_frame(true)
 			, m_mouseLock(false)
 			, m_init(false)
 			, m_exit(false)
@@ -324,7 +325,7 @@ namespace entry
 							rect.bottom = rect.top + height + m_frameHeight;
 							break;
 						}
-						
+
 						m_eventQueue.postSizeEvent(m_width, m_height);
 					}
 					return 0;
@@ -374,7 +375,18 @@ namespace entry
 							setMousePos(m_mx, m_my);
 						}
 
-						m_eventQueue.postMouseEvent(mx, my);
+						m_eventQueue.postMouseEvent(mx, my, m_mz);
+					}
+					break;
+
+				case WM_MOUSEWHEEL:
+					{
+						POINT pt = { GET_X_LPARAM(_lparam), GET_Y_LPARAM(_lparam) };
+						ScreenToClient(m_hwnd, &pt);
+						int32_t mx = pt.x;
+						int32_t my = pt.y;
+						m_mz += GET_WHEEL_DELTA_WPARAM(_wparam);
+						m_eventQueue.postMouseEvent(mx, my, m_mz);
 					}
 					break;
 
@@ -384,7 +396,7 @@ namespace entry
 					{
 						int32_t mx = GET_X_LPARAM(_lparam);
 						int32_t my = GET_Y_LPARAM(_lparam);
-						m_eventQueue.postMouseEvent(mx, my, MouseButton::Left, _id == WM_LBUTTONDOWN);
+						m_eventQueue.postMouseEvent(mx, my, m_mz, MouseButton::Left, _id == WM_LBUTTONDOWN);
 					}
 					break;
 
@@ -394,7 +406,7 @@ namespace entry
 					{
 						int32_t mx = GET_X_LPARAM(_lparam);
 						int32_t my = GET_Y_LPARAM(_lparam);
-						m_eventQueue.postMouseEvent(mx, my, MouseButton::Middle, _id == WM_MBUTTONDOWN);
+						m_eventQueue.postMouseEvent(mx, my, m_mz, MouseButton::Middle, _id == WM_MBUTTONDOWN);
 					}
 					break;
 
@@ -404,7 +416,7 @@ namespace entry
 					{
 						int32_t mx = GET_X_LPARAM(_lparam);
 						int32_t my = GET_Y_LPARAM(_lparam);
-						m_eventQueue.postMouseEvent(mx, my, MouseButton::Right, _id == WM_RBUTTONDOWN);
+						m_eventQueue.postMouseEvent(mx, my, m_mz, MouseButton::Right, _id == WM_RBUTTONDOWN);
 					}
 					break;
 
@@ -591,6 +603,7 @@ namespace entry
 
 		int32_t m_mx;
 		int32_t m_my;
+		int32_t m_mz;
 
 		bool m_frame;
 		bool m_mouseLock;
@@ -619,6 +632,12 @@ namespace entry
 	void setWindowSize(uint32_t _width, uint32_t _height)
 	{
 		PostMessage(s_ctx.m_hwnd, WM_USER_SET_WINDOW_SIZE, 0, (_height<<16) | (_width&0xffff) );
+	}
+
+	void setWindowTitle(const char* _title)
+	{
+		SetWindowTextA(s_ctx.m_hwnd, _title);
+		SetWindowTextA(GetWindow(s_ctx.m_hwnd, GW_HWNDNEXT), _title);
 	}
 
 	void toggleWindowFrame()

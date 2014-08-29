@@ -124,6 +124,8 @@ namespace entry
 			KeyX,
 			KeyY,
 			KeyZ,
+
+			Count,
 		};
 	};
 
@@ -132,6 +134,7 @@ namespace entry
 		MouseState()
 			: m_mx(0)
 			, m_my(0)
+			, m_mz(0)
 		{
 			for (uint32_t ii = 0; ii < entry::MouseButton::Count; ++ii)
 			{
@@ -139,15 +142,28 @@ namespace entry
 			}
 		}
 
-		uint32_t m_mx;
-		uint32_t m_my;
+		int32_t m_mx;
+		int32_t m_my;
+		int32_t m_mz;
 		uint8_t m_buttons[entry::MouseButton::Count];
 	};
 
-	bool processEvents(uint32_t& _width, uint32_t& _height, uint32_t& _debug, uint32_t& _reset, MouseState* _mouse = NULL);
+	struct KeyState
+	{
+		uint8_t m_modifiers;
+		bool m_keysDown[entry::Key::Count];
+	};
+
+	char keyToAscii(entry::Key::Enum _key, bool _shiftModifier);
+	bool processEvents(uint32_t& _width, uint32_t& _height, uint32_t& _debug, uint32_t& _reset, MouseState* _mouse = NULL, KeyState* _keyboard = NULL);
 
 	bx::FileReaderI* getFileReader();
 	bx::FileWriterI* getFileWriter();
+
+	void setWindowSize(uint32_t _width, uint32_t _height);
+	void setWindowTitle(const char* _title);
+	void toggleWindowFrame();
+	void setMouseLock(bool _lock);
 
 } // namespace entry
 

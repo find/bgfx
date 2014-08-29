@@ -206,14 +206,6 @@ void imguiEnum(LightType::Enum& _enum)
 			);
 }
 
-void imguiBool(const char* _str, bool& _flag, bool _enabled = true)
-{
-	if (imguiCheck(_str, _flag, _enabled) )
-	{
-		_flag = !_flag;
-	}
-}
-
 struct PosNormalTexcoordVertex
 {
 	float    m_x;
@@ -225,8 +217,7 @@ struct PosNormalTexcoordVertex
 };
 
 static const float s_texcoord = 5.0f;
-static const uint32_t s_numHPlaneVertices = 4;
-static PosNormalTexcoordVertex s_hplaneVertices[s_numHPlaneVertices] =
+static PosNormalTexcoordVertex s_hplaneVertices[] =
 {
 	{ -1.0f, 0.0f,  1.0f, packF4u(0.0f, 1.0f, 0.0f), s_texcoord, s_texcoord },
 	{  1.0f, 0.0f,  1.0f, packF4u(0.0f, 1.0f, 0.0f), s_texcoord, 0.0f       },
@@ -234,8 +225,7 @@ static PosNormalTexcoordVertex s_hplaneVertices[s_numHPlaneVertices] =
 	{  1.0f, 0.0f, -1.0f, packF4u(0.0f, 1.0f, 0.0f), 0.0f,       0.0f       },
 };
 
-static const uint32_t s_numVPlaneVertices = 4;
-static PosNormalTexcoordVertex s_vplaneVertices[s_numVPlaneVertices] =
+static PosNormalTexcoordVertex s_vplaneVertices[] =
 {
 	{ -1.0f,  1.0f, 0.0f, packF4u(0.0f, 0.0f, -1.0f), 1.0f, 1.0f },
 	{  1.0f,  1.0f, 0.0f, packF4u(0.0f, 0.0f, -1.0f), 1.0f, 0.0f },
@@ -243,8 +233,7 @@ static PosNormalTexcoordVertex s_vplaneVertices[s_numVPlaneVertices] =
 	{  1.0f, -1.0f, 0.0f, packF4u(0.0f, 0.0f, -1.0f), 0.0f, 0.0f },
 };
 
-static const uint32_t s_numPlaneIndices = 6;
-static const uint16_t s_planeIndices[s_numPlaneIndices] =
+static const uint16_t s_planeIndices[] =
 {
 	0, 1, 2,
 	1, 3, 2,
@@ -949,6 +938,11 @@ struct Group
 	PrimitiveArray m_prims;
 };
 
+namespace bgfx
+{
+	int32_t read(bx::ReaderI* _reader, bgfx::VertexDecl& _decl);
+}
+
 struct Mesh
 {
 	void load(const void* _vertices, uint32_t _numVertices, const bgfx::VertexDecl _decl, const uint16_t* _indices, uint32_t _numIndices)
@@ -976,8 +970,8 @@ struct Mesh
 
 	void load(const char* _filePath)
 	{
-#define BGFX_CHUNK_MAGIC_VB BX_MAKEFOURCC('V', 'B', ' ', 0x0)
-#define BGFX_CHUNK_MAGIC_IB BX_MAKEFOURCC('I', 'B', ' ', 0x0)
+#define BGFX_CHUNK_MAGIC_VB  BX_MAKEFOURCC('V', 'B', ' ', 0x1)
+#define BGFX_CHUNK_MAGIC_IB  BX_MAKEFOURCC('I', 'B', ' ', 0x0)
 #define BGFX_CHUNK_MAGIC_PRI BX_MAKEFOURCC('P', 'R', 'I', 0x0)
 
 		bx::CrtFileReader reader;
@@ -996,7 +990,7 @@ struct Mesh
 					bx::read(&reader, group.m_aabb);
 					bx::read(&reader, group.m_obb);
 
-					bx::read(&reader, m_decl);
+					bgfx::read(&reader, m_decl);
 					uint16_t stride = m_decl.getStride();
 
 					uint16_t numVertices;
@@ -1504,8 +1498,8 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 	treeMesh.load("meshes/tree.bin");
 	cubeMesh.load("meshes/cube.bin");
 	hollowcubeMesh.load("meshes/hollowcube.bin");
-	hplaneMesh.load(s_hplaneVertices, s_numHPlaneVertices, PosNormalTexcoordDecl, s_planeIndices, s_numPlaneIndices);
-	vplaneMesh.load(s_vplaneVertices, s_numVPlaneVertices, PosNormalTexcoordDecl, s_planeIndices, s_numPlaneIndices);
+	hplaneMesh.load(s_hplaneVertices, BX_COUNTOF(s_hplaneVertices), PosNormalTexcoordDecl, s_planeIndices, BX_COUNTOF(s_planeIndices) );
+	vplaneMesh.load(s_vplaneVertices, BX_COUNTOF(s_vplaneVertices), PosNormalTexcoordDecl, s_planeIndices, BX_COUNTOF(s_planeIndices) );
 
 	// Materials.
 	Material defaultMaterial =
@@ -2098,7 +2092,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 #define IMGUI_FLOAT_SLIDER(_name, _val) \
 			imguiSlider(_name \
-					, &_val \
+					, _val \
 					, *(((float*)&_val)+1) \
 					, *(((float*)&_val)+2) \
 					, *(((float*)&_val)+3) \
@@ -2196,26 +2190,26 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		if (LightType::SpotLight == settings.m_lightType)
 		{
 			imguiLabel("Spot light");
-			imguiSlider("Shadow map area:", &settings.m_coverageSpotL, 45.0f, 120.0f, 1.0f);
+			imguiSlider("Shadow map area:", settings.m_coverageSpotL, 45.0f, 120.0f, 1.0f);
 
 			imguiSeparator();
-			imguiSlider("Spot outer cone:", &settings.m_spotOuterAngle, 0.0f, 91.0f, 0.1f);
-			imguiSlider("Spot inner cone:", &settings.m_spotInnerAngle, 0.0f, 90.0f, 0.1f);
+			imguiSlider("Spot outer cone:", settings.m_spotOuterAngle, 0.0f, 91.0f, 0.1f);
+			imguiSlider("Spot inner cone:", settings.m_spotInnerAngle, 0.0f, 90.0f, 0.1f);
 		}
 		else if (LightType::PointLight == settings.m_lightType)
 		{
 			imguiLabel("Point light");
 			imguiBool("Stencil pack", settings.m_stencilPack);
 
-			imguiSlider("Fov X adjust:", &settings.m_fovXAdjust, -20.0f, 20.0f, 0.0001f);
-			imguiSlider("Fov Y adjust:", &settings.m_fovYAdjust, -20.0f, 20.0f, 0.0001f);
+			imguiSlider("Fov X adjust:", settings.m_fovXAdjust, -20.0f, 20.0f, 0.0001f);
+			imguiSlider("Fov Y adjust:", settings.m_fovYAdjust, -20.0f, 20.0f, 0.0001f);
 		}
 		else if (LightType::DirectionalLight == settings.m_lightType)
 		{
 			imguiLabel("Directional light");
 			imguiBool("Stabilize cascades", settings.m_stabilize);
-			imguiSlider("Cascade splits:", &settings.m_numSplitsf, 1.0f, 4.0f, 1.0f);
-			imguiSlider("Cascade distribution:", &settings.m_splitDistribution, 0.0f, 1.0f, 0.001f);
+			imguiSlider("Cascade splits:", settings.m_numSplitsf, 1.0f, 4.0f, 1.0f);
+			imguiSlider("Cascade distribution:", settings.m_splitDistribution, 0.0f, 1.0f, 0.001f);
 			settings.m_numSplits = uint8_t(settings.m_numSplitsf);
 		}
 
