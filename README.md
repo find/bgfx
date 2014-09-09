@@ -52,6 +52,10 @@ https://github.com/taylor001/crown Crown is a general purpose data-driven game
 engine, written from scratch with a minimalistic and data-oriented design
 philosophy in mind.
 
+https://d-gamedev-team.github.io/gfm/ - GFM is a feature-rich library to ease
+the creation of video games / multimedia applications with the D programming
+language.
+
 Examples
 --------
 
@@ -267,8 +271,8 @@ Building
 
 ### Prerequisites
 
-Premake 4.4 beta5 ([prebuilt binaries are part of bx](https://github.com/bkaradzic/bx/tree/master/tools/bin))  
-[http://industriousone.com/premake/download](http://industriousone.com/premake/download)
+To generate project files you need [premake-fork](https://github.com/bkaradzic/premake-fork),
+prebuilt binaries are [part of bx](https://github.com/bkaradzic/bx/tree/master/tools/bin).
 
 Windows users download GnuWin32 utilities from:  
 [http://gnuwin32.sourceforge.net/packages/make.htm](http://gnuwin32.sourceforge.net/packages/make.htm)  
