@@ -12,9 +12,9 @@
 #include <bgfx.h>
 #include <bx/timer.h>
 #include <bx/readerwriter.h>
+#include <bx/fpumath.h>
 #include "entry/entry.h"
 #include "camera.h"
-#include "fpumath.h"
 #include "imgui/imgui.h"
 
 #define RENDERVIEW_SHADOWMAP_0_ID 1
@@ -206,14 +206,6 @@ void imguiEnum(LightType::Enum& _enum)
 			);
 }
 
-void imguiBool(const char* _str, bool& _flag, bool _enabled = true)
-{
-	if (imguiCheck(_str, _flag, _enabled) )
-	{
-		_flag = !_flag;
-	}
-}
-
 struct PosNormalTexcoordVertex
 {
 	float    m_x;
@@ -225,8 +217,7 @@ struct PosNormalTexcoordVertex
 };
 
 static const float s_texcoord = 5.0f;
-static const uint32_t s_numHPlaneVertices = 4;
-static PosNormalTexcoordVertex s_hplaneVertices[s_numHPlaneVertices] =
+static PosNormalTexcoordVertex s_hplaneVertices[] =
 {
 	{ -1.0f, 0.0f,  1.0f, packF4u(0.0f, 1.0f, 0.0f), s_texcoord, s_texcoord },
 	{  1.0f, 0.0f,  1.0f, packF4u(0.0f, 1.0f, 0.0f), s_texcoord, 0.0f       },
@@ -234,8 +225,7 @@ static PosNormalTexcoordVertex s_hplaneVertices[s_numHPlaneVertices] =
 	{  1.0f, 0.0f, -1.0f, packF4u(0.0f, 1.0f, 0.0f), 0.0f,       0.0f       },
 };
 
-static const uint32_t s_numVPlaneVertices = 4;
-static PosNormalTexcoordVertex s_vplaneVertices[s_numVPlaneVertices] =
+static PosNormalTexcoordVertex s_vplaneVertices[] =
 {
 	{ -1.0f,  1.0f, 0.0f, packF4u(0.0f, 0.0f, -1.0f), 1.0f, 1.0f },
 	{  1.0f,  1.0f, 0.0f, packF4u(0.0f, 0.0f, -1.0f), 1.0f, 0.0f },
@@ -243,8 +233,7 @@ static PosNormalTexcoordVertex s_vplaneVertices[s_numVPlaneVertices] =
 	{  1.0f, -1.0f, 0.0f, packF4u(0.0f, 0.0f, -1.0f), 0.0f, 0.0f },
 };
 
-static const uint32_t s_numPlaneIndices = 6;
-static const uint16_t s_planeIndices[s_numPlaneIndices] =
+static const uint16_t s_planeIndices[] =
 {
 	0, 1, 2,
 	1, 3, 2,
@@ -479,7 +468,7 @@ struct Light
 
 	void computeViewSpaceComponents(float* _viewMtx)
 	{
-		vec4MulMtx(m_position_viewSpace, m_position.m_v, _viewMtx);
+		bx::vec4MulMtx(m_position_viewSpace, m_position.m_v, _viewMtx);
 
 		float tmp[] =
 		{
@@ -488,7 +477,7 @@ struct Light
 			, m_spotDirectionInner.m_z
 			, 0.0f
 		};
-		vec4MulMtx(m_spotDirectionInner_viewSpace, tmp, _viewMtx);
+		bx::vec4MulMtx(m_spotDirectionInner_viewSpace, tmp, _viewMtx);
 		m_spotDirectionInner_viewSpace[3] = m_spotDirectionInner.m_v[3];
 	}
 
@@ -949,6 +938,11 @@ struct Group
 	PrimitiveArray m_prims;
 };
 
+namespace bgfx
+{
+	int32_t read(bx::ReaderI* _reader, bgfx::VertexDecl& _decl);
+}
+
 struct Mesh
 {
 	void load(const void* _vertices, uint32_t _numVertices, const bgfx::VertexDecl _decl, const uint16_t* _indices, uint32_t _numIndices)
@@ -976,8 +970,8 @@ struct Mesh
 
 	void load(const char* _filePath)
 	{
-#define BGFX_CHUNK_MAGIC_VB BX_MAKEFOURCC('V', 'B', ' ', 0x0)
-#define BGFX_CHUNK_MAGIC_IB BX_MAKEFOURCC('I', 'B', ' ', 0x0)
+#define BGFX_CHUNK_MAGIC_VB  BX_MAKEFOURCC('V', 'B', ' ', 0x1)
+#define BGFX_CHUNK_MAGIC_IB  BX_MAKEFOURCC('I', 'B', ' ', 0x0)
 #define BGFX_CHUNK_MAGIC_PRI BX_MAKEFOURCC('P', 'R', 'I', 0x0)
 
 		bx::CrtFileReader reader;
@@ -996,7 +990,7 @@ struct Mesh
 					bx::read(&reader, group.m_aabb);
 					bx::read(&reader, group.m_obb);
 
-					bx::read(&reader, m_decl);
+					bgfx::read(&reader, m_decl);
 					uint16_t stride = m_decl.getStride();
 
 					uint16_t numVertices;
@@ -1235,7 +1229,7 @@ void worldSpaceFrustumCorners(float* _corners24f
 	float (*out)[3] = (float(*)[3])_corners24f;
 	for (uint8_t ii = 0; ii < numCorners; ++ii)
 	{
-		vec3MulMtx( (float*)&out[ii], (float*)&corners[ii], _invViewMtx);
+		bx::vec3MulMtx( (float*)&out[ii], (float*)&corners[ii], _invViewMtx);
 	}
 }
 
@@ -1504,8 +1498,8 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 	treeMesh.load("meshes/tree.bin");
 	cubeMesh.load("meshes/cube.bin");
 	hollowcubeMesh.load("meshes/hollowcube.bin");
-	hplaneMesh.load(s_hplaneVertices, s_numHPlaneVertices, PosNormalTexcoordDecl, s_planeIndices, s_numPlaneIndices);
-	vplaneMesh.load(s_vplaneVertices, s_numVPlaneVertices, PosNormalTexcoordDecl, s_planeIndices, s_numPlaneIndices);
+	hplaneMesh.load(s_hplaneVertices, BX_COUNTOF(s_hplaneVertices), PosNormalTexcoordDecl, s_planeIndices, BX_COUNTOF(s_planeIndices) );
+	vplaneMesh.load(s_vplaneVertices, BX_COUNTOF(s_vplaneVertices), PosNormalTexcoordDecl, s_planeIndices, BX_COUNTOF(s_planeIndices) );
 
 	// Materials.
 	Material defaultMaterial =
@@ -2074,7 +2068,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 	const float camFar     = 2000.0f;
 	const float projHeight = 1.0f/tanf(camFovy*( (float)M_PI/180.0f)*0.5f);
 	const float projWidth  = projHeight * 1.0f/camAspect;
-	mtxProj(viewState.m_proj, camFovy, camAspect, camNear, camFar);
+	bx::mtxProj(viewState.m_proj, camFovy, camAspect, camNear, camFar);
 	cameraGetViewMtx(viewState.m_view);
 
 	float timeAccumulatorLight = 0.0f;
@@ -2098,7 +2092,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 #define IMGUI_FLOAT_SLIDER(_name, _val) \
 			imguiSlider(_name \
-					, &_val \
+					, _val \
 					, *(((float*)&_val)+1) \
 					, *(((float*)&_val)+2) \
 					, *(((float*)&_val)+3) \
@@ -2196,26 +2190,26 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		if (LightType::SpotLight == settings.m_lightType)
 		{
 			imguiLabel("Spot light");
-			imguiSlider("Shadow map area:", &settings.m_coverageSpotL, 45.0f, 120.0f, 1.0f);
+			imguiSlider("Shadow map area:", settings.m_coverageSpotL, 45.0f, 120.0f, 1.0f);
 
 			imguiSeparator();
-			imguiSlider("Spot outer cone:", &settings.m_spotOuterAngle, 0.0f, 91.0f, 0.1f);
-			imguiSlider("Spot inner cone:", &settings.m_spotInnerAngle, 0.0f, 90.0f, 0.1f);
+			imguiSlider("Spot outer cone:", settings.m_spotOuterAngle, 0.0f, 91.0f, 0.1f);
+			imguiSlider("Spot inner cone:", settings.m_spotInnerAngle, 0.0f, 90.0f, 0.1f);
 		}
 		else if (LightType::PointLight == settings.m_lightType)
 		{
 			imguiLabel("Point light");
 			imguiBool("Stencil pack", settings.m_stencilPack);
 
-			imguiSlider("Fov X adjust:", &settings.m_fovXAdjust, -20.0f, 20.0f, 0.0001f);
-			imguiSlider("Fov Y adjust:", &settings.m_fovYAdjust, -20.0f, 20.0f, 0.0001f);
+			imguiSlider("Fov X adjust:", settings.m_fovXAdjust, -20.0f, 20.0f, 0.0001f);
+			imguiSlider("Fov Y adjust:", settings.m_fovYAdjust, -20.0f, 20.0f, 0.0001f);
 		}
 		else if (LightType::DirectionalLight == settings.m_lightType)
 		{
 			imguiLabel("Directional light");
 			imguiBool("Stabilize cascades", settings.m_stabilize);
-			imguiSlider("Cascade splits:", &settings.m_numSplitsf, 1.0f, 4.0f, 1.0f);
-			imguiSlider("Cascade distribution:", &settings.m_splitDistribution, 0.0f, 1.0f, 0.001f);
+			imguiSlider("Cascade splits:", settings.m_numSplitsf, 1.0f, 4.0f, 1.0f);
+			imguiSlider("Cascade distribution:", settings.m_splitDistribution, 0.0f, 1.0f, 0.001f);
 			settings.m_numSplits = uint8_t(settings.m_numSplitsf);
 		}
 
@@ -2293,7 +2287,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		// Setup instance matrices.
 		float mtxFloor[16];
 		const float floorScale = 550.0f;
-		mtxSRT(mtxFloor
+		bx::mtxSRT(mtxFloor
 			, floorScale //scaleX
 			, floorScale //scaleY
 			, floorScale //scaleZ
@@ -2306,7 +2300,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 			);
 
 		float mtxBunny[16];
-		mtxSRT(mtxBunny
+		bx::mtxSRT(mtxBunny
 			, 5.0f
 			, 5.0f
 			, 5.0f
@@ -2319,7 +2313,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 			);
 
 		float mtxHollowcube[16];
-		mtxSRT(mtxHollowcube
+		bx::mtxSRT(mtxHollowcube
 			, 2.5f
 			, 2.5f
 			, 2.5f
@@ -2332,7 +2326,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 			);
 
 		float mtxCube[16];
-		mtxSRT(mtxCube
+		bx::mtxSRT(mtxCube
 			, 2.5f
 			, 2.5f
 			, 2.5f
@@ -2348,17 +2342,17 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		float mtxTrees[numTrees][16];
 		for (uint8_t ii = 0; ii < numTrees; ++ii)
 		{
-			mtxSRT(mtxTrees[ii]
-					, 2.0f
-					, 2.0f
-					, 2.0f
-					, 0.0f
-					, float(ii)
-					, 0.0f
-					, sin(float(ii)*2.0f*float(M_PI)/float(numTrees) ) * 60.0f
-					, 0.0f
-					, cos(float(ii)*2.0f*float(M_PI)/float(numTrees) ) * 60.0f
-					);
+			bx::mtxSRT(mtxTrees[ii]
+				, 2.0f
+				, 2.0f
+				, 2.0f
+				, 0.0f
+				, float(ii)
+				, 0.0f
+				, sinf(float(ii)*2.0f*float(M_PI)/float(numTrees) ) * 60.0f
+				, 0.0f
+				, cosf(float(ii)*2.0f*float(M_PI)/float(numTrees) ) * 60.0f
+				);
 		}
 
 		// Compute transform matrices.
@@ -2369,14 +2363,14 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 		float screenProj[16];
 		float screenView[16];
-		mtxIdentity(screenView);
-		mtxOrtho(screenProj, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 100.0f);
+		bx::mtxIdentity(screenView);
+		bx::mtxOrtho(screenProj, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 100.0f);
 
 	    if (LightType::SpotLight == settings.m_lightType)
 		{
 			const float fovy = settings.m_coverageSpotL;
 			const float aspect = 1.0f;
-			mtxProj(lightProj[ProjType::Horizontal], fovy, aspect, currentSmSettings->m_near, currentSmSettings->m_far);
+			bx::mtxProj(lightProj[ProjType::Horizontal], fovy, aspect, currentSmSettings->m_near, currentSmSettings->m_far);
 
 			//For linear depth, prevent depth division by variable w-component in shaders and divide here by far plane
 			if (DepthImpl::Linear == settings.m_depthImpl)
@@ -2386,17 +2380,17 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 			}
 
 			float at[3];
-			vec3Add(at, pointLight.m_position.m_v, pointLight.m_spotDirectionInner.m_v);
-			mtxLookAt(lightView[TetrahedronFaces::Green], pointLight.m_position.m_v, at);
+			bx::vec3Add(at, pointLight.m_position.m_v, pointLight.m_spotDirectionInner.m_v);
+			bx::mtxLookAt(lightView[TetrahedronFaces::Green], pointLight.m_position.m_v, at);
 		}
 		else if (LightType::PointLight == settings.m_lightType)
 		{
 			float ypr[TetrahedronFaces::Count][3] =
 			{
-				 { toRad(  0.0f), toRad( 27.36780516f), toRad(0.0f) }
-				,{ toRad(180.0f), toRad( 27.36780516f), toRad(0.0f) }
-				,{ toRad(-90.0f), toRad(-27.36780516f), toRad(0.0f) }
-				,{ toRad( 90.0f), toRad(-27.36780516f), toRad(0.0f) }
+				{ bx::toRad(  0.0f), bx::toRad( 27.36780516f), bx::toRad(0.0f) },
+				{ bx::toRad(180.0f), bx::toRad( 27.36780516f), bx::toRad(0.0f) },
+				{ bx::toRad(-90.0f), bx::toRad(-27.36780516f), bx::toRad(0.0f) },
+				{ bx::toRad( 90.0f), bx::toRad(-27.36780516f), bx::toRad(0.0f) },
 			};
 
 
@@ -2404,9 +2398,9 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 			{
 				const float fovx = 143.98570868f + 3.51f + settings.m_fovXAdjust;
 				const float fovy = 125.26438968f + 9.85f + settings.m_fovYAdjust;
-				const float aspect = tanf(toRad(fovx*0.5f) )/tanf(toRad(fovy*0.5f) );
+				const float aspect = tanf(bx::toRad(fovx*0.5f) )/tanf(bx::toRad(fovy*0.5f) );
 
-				mtxProj(lightProj[ProjType::Vertical]
+				bx::mtxProj(lightProj[ProjType::Vertical]
 						, fovx
 						, aspect
 						, currentSmSettings->m_near
@@ -2420,17 +2414,17 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 					lightProj[ProjType::Vertical][14] /= currentSmSettings->m_far;
 				}
 
-				ypr[TetrahedronFaces::Green][2]  = toRad(180.0f);
-				ypr[TetrahedronFaces::Yellow][2] = toRad(  0.0f);
-				ypr[TetrahedronFaces::Blue][2]   = toRad( 90.0f);
-				ypr[TetrahedronFaces::Red][2]    = toRad(-90.0f);
+				ypr[TetrahedronFaces::Green ][2] = bx::toRad(180.0f);
+				ypr[TetrahedronFaces::Yellow][2] = bx::toRad(  0.0f);
+				ypr[TetrahedronFaces::Blue  ][2] = bx::toRad( 90.0f);
+				ypr[TetrahedronFaces::Red   ][2] = bx::toRad(-90.0f);
 			}
 
 			const float fovx = 143.98570868f + 7.8f + settings.m_fovXAdjust;
 			const float fovy = 125.26438968f + 3.0f + settings.m_fovYAdjust;
-			const float aspect = tanf(toRad(fovx*0.5f) )/tanf(toRad(fovy*0.5f) );
+			const float aspect = tanf(bx::toRad(fovx*0.5f) )/tanf(bx::toRad(fovy*0.5f) );
 
-			mtxProj(lightProj[ProjType::Horizontal], fovy, aspect, currentSmSettings->m_near, currentSmSettings->m_far);
+			bx::mtxProj(lightProj[ProjType::Horizontal], fovy, aspect, currentSmSettings->m_near, currentSmSettings->m_far);
 
 			//For linear depth, prevent depth division by variable w component in shaders and divide here by far plane
 			if (DepthImpl::Linear == settings.m_depthImpl)
@@ -2447,12 +2441,12 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 				float tmp[3] =
 				{
-					  -vec3Dot(pointLight.m_position.m_v, &mtxTmp[0])
-					, -vec3Dot(pointLight.m_position.m_v, &mtxTmp[4])
-					, -vec3Dot(pointLight.m_position.m_v, &mtxTmp[8])
+					-bx::vec3Dot(pointLight.m_position.m_v, &mtxTmp[0]),
+					-bx::vec3Dot(pointLight.m_position.m_v, &mtxTmp[4]),
+					-bx::vec3Dot(pointLight.m_position.m_v, &mtxTmp[8]),
 				};
 
-				mtxTranspose(mtxYpr[ii], mtxTmp);
+				bx::mtxTranspose(mtxYpr[ii], mtxTmp);
 
 				memcpy(lightView[ii], mtxYpr[ii], 12*sizeof(float) );
 				lightView[ii][12] = tmp[0];
@@ -2471,11 +2465,11 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 				, -directionalLight.m_position.m_z
 			};
 			float at[3] = { 0.0f, 0.0f, 0.0f };
-			mtxLookAt(lightView[0], eye, at);
+			bx::mtxLookAt(lightView[0], eye, at);
 
 			// Compute camera inverse view mtx.
 			float mtxViewInv[16];
-			mtxInverse(mtxViewInv, viewState.m_view);
+			bx::mtxInverse(mtxViewInv, viewState.m_view);
 
 			// Compute split distances.
 			const uint8_t maxNumSplits = 4;
@@ -2492,7 +2486,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 			}
 
 			float mtxProj[16];
-			mtxOrtho(mtxProj, 1.0f, -1.0f, 1.0f, -1.0f, -currentSmSettings->m_far, currentSmSettings->m_far);
+			bx::mtxOrtho(mtxProj, 1.0f, -1.0f, 1.0f, -1.0f, -currentSmSettings->m_far, currentSmSettings->m_far);
 
 			const uint8_t numCorners = 8;
 			float frustumCorners[maxNumSplits][numCorners][3];
@@ -2508,21 +2502,21 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 				{
 					// Transform to light space.
 					float lightSpaceFrustumCorner[3];
-					vec3MulMtx(lightSpaceFrustumCorner, frustumCorners[ii][jj], lightView[0]);
+					bx::vec3MulMtx(lightSpaceFrustumCorner, frustumCorners[ii][jj], lightView[0]);
 
 					// Update bounding box.
-					min[0] = fminf(min[0], lightSpaceFrustumCorner[0]);
-					max[0] = fmaxf(max[0], lightSpaceFrustumCorner[0]);
-					min[1] = fminf(min[1], lightSpaceFrustumCorner[1]);
-					max[1] = fmaxf(max[1], lightSpaceFrustumCorner[1]);
-					min[2] = fminf(min[2], lightSpaceFrustumCorner[2]);
-					max[2] = fmaxf(max[2], lightSpaceFrustumCorner[2]);
+					min[0] = bx::fmin(min[0], lightSpaceFrustumCorner[0]);
+					max[0] = bx::fmax(max[0], lightSpaceFrustumCorner[0]);
+					min[1] = bx::fmin(min[1], lightSpaceFrustumCorner[1]);
+					max[1] = bx::fmax(max[1], lightSpaceFrustumCorner[1]);
+					min[2] = bx::fmin(min[2], lightSpaceFrustumCorner[2]);
+					max[2] = bx::fmax(max[2], lightSpaceFrustumCorner[2]);
 				}
 
 				float minproj[3];
 				float maxproj[3];
-				vec3MulMtxH(minproj, min, mtxProj);
-				vec3MulMtxH(maxproj, max, mtxProj);
+				bx::vec3MulMtxH(minproj, min, mtxProj);
+				bx::vec3MulMtxH(maxproj, max, mtxProj);
 
 				float offsetx, offsety;
 				float scalex, scaley;
@@ -2548,13 +2542,13 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 				}
 
 				float mtxCrop[16];
-				mtxIdentity(mtxCrop);
+				bx::mtxIdentity(mtxCrop);
 				mtxCrop[ 0] = scalex;
 				mtxCrop[ 5] = scaley;
 				mtxCrop[12] = offsetx;
 				mtxCrop[13] = offsety;
 
-				mtxMul(lightProj[ii], mtxCrop, mtxProj);
+				bx::mtxMul(lightProj[ii], mtxCrop, mtxProj);
 			}
 		}
 
@@ -2976,8 +2970,8 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 			if (LightType::SpotLight == settings.m_lightType)
 			{
 				float mtxTmp[16];
-				mtxMul(mtxTmp, lightProj[ProjType::Horizontal], mtxBias);
-				mtxMul(mtxShadow, lightView[0], mtxTmp); //lightViewProjBias
+				bx::mtxMul(mtxTmp, lightProj[ProjType::Horizontal], mtxBias);
+				bx::mtxMul(mtxShadow, lightView[0], mtxTmp); //lightViewProjBias
 			}
 			else if (LightType::PointLight == settings.m_lightType)
 			{
@@ -3061,11 +3055,11 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 					uint8_t biasIndex = cropBiasIndices[settings.m_stencilPack][uint8_t(s_flipV)][ii];
 
 					float mtxTmp[16];
-					mtxMul(mtxTmp, mtxYpr[ii], lightProj[projType]);
-					mtxMul(shadowMapMtx[ii], mtxTmp, mtxCropBias[settings.m_stencilPack][biasIndex]); //mtxYprProjBias
+					bx::mtxMul(mtxTmp, mtxYpr[ii], lightProj[projType]);
+					bx::mtxMul(shadowMapMtx[ii], mtxTmp, mtxCropBias[settings.m_stencilPack][biasIndex]); //mtxYprProjBias
 				}
 
-				mtxTranslate(mtxShadow //lightInvTranslate
+				bx::mtxTranslate(mtxShadow //lightInvTranslate
 						, -pointLight.m_position.m_v[0]
 						, -pointLight.m_position.m_v[1]
 						, -pointLight.m_position.m_v[2]
@@ -3077,15 +3071,15 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 				{
 					float mtxTmp[16];
 
-					mtxMul(mtxTmp, lightProj[ii], mtxBias);
-					mtxMul(shadowMapMtx[ii], lightView[0], mtxTmp); //lViewProjCropBias
+					bx::mtxMul(mtxTmp, lightProj[ii], mtxBias);
+					bx::mtxMul(shadowMapMtx[ii], lightView[0], mtxTmp); //lViewProjCropBias
 				}
 			}
 
 			// Floor.
 			if (LightType::DirectionalLight != settings.m_lightType)
 			{
-				mtxMul(lightMtx, mtxFloor, mtxShadow); //not needed for directional light
+				bx::mtxMul(lightMtx, mtxFloor, mtxShadow); //not needed for directional light
 			}
 			hplaneMesh.submit(RENDERVIEW_DRAWSCENE_0_ID
 					, mtxFloor
@@ -3096,7 +3090,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 			// Bunny.
 			if (LightType::DirectionalLight != settings.m_lightType)
 			{
-				mtxMul(lightMtx, mtxBunny, mtxShadow);
+				bx::mtxMul(lightMtx, mtxBunny, mtxShadow);
 			}
 			bunnyMesh.submit(RENDERVIEW_DRAWSCENE_0_ID
 					, mtxBunny
@@ -3107,7 +3101,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 			// Hollow cube.
 			if (LightType::DirectionalLight != settings.m_lightType)
 			{
-				mtxMul(lightMtx, mtxHollowcube, mtxShadow);
+				bx::mtxMul(lightMtx, mtxHollowcube, mtxShadow);
 			}
 			hollowcubeMesh.submit(RENDERVIEW_DRAWSCENE_0_ID
 					, mtxHollowcube
@@ -3118,7 +3112,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 			// Cube.
 			if (LightType::DirectionalLight != settings.m_lightType)
 			{
-				mtxMul(lightMtx, mtxCube, mtxShadow);
+				bx::mtxMul(lightMtx, mtxCube, mtxShadow);
 			}
 			cubeMesh.submit(RENDERVIEW_DRAWSCENE_0_ID
 					, mtxCube
@@ -3131,7 +3125,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 			{
 				if (LightType::DirectionalLight != settings.m_lightType)
 				{
-					mtxMul(lightMtx, mtxTrees[ii], mtxShadow);
+					bx::mtxMul(lightMtx, mtxTrees[ii], mtxShadow);
 				}
 				treeMesh.submit(RENDERVIEW_DRAWSCENE_0_ID
 						, mtxTrees[ii]
@@ -3156,7 +3150,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 			// Draw floor bottom.
 			float floorBottomMtx[16];
-			mtxSRT(floorBottomMtx
+			bx::mtxSRT(floorBottomMtx
 					, floorScale //scaleX
 					, floorScale //scaleY
 					, floorScale //scaleZ

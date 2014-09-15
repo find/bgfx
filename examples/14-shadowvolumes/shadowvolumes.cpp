@@ -8,8 +8,10 @@
 
 #include <string>
 #include <vector>
-#include <unordered_map>
 #include <map>
+#include <tinystl/allocator.h>
+#include <tinystl/unordered_map.h>
+namespace stl = tinystl;
 
 namespace std { namespace tr1 {} }
 using namespace std::tr1;
@@ -22,9 +24,9 @@ using namespace std::tr1;
 #include <bx/allocator.h>
 #include <bx/hash.h>
 #include <bx/float4_t.h>
+#include <bx/fpumath.h>
 #include "entry/entry.h"
 #include "camera.h"
-#include "fpumath.h"
 #include "imgui/imgui.h"
 
 #define SV_USE_SIMD 1
@@ -69,11 +71,24 @@ struct PosNormalTexcoordVertex
 	uint32_t m_normal;
 	float    m_u;
 	float    m_v;
+
+	static void init()
+	{
+		ms_decl
+			.begin()
+			.add(bgfx::Attrib::Position,  3, bgfx::AttribType::Float)
+			.add(bgfx::Attrib::Normal,    4, bgfx::AttribType::Uint8, true, true)
+			.add(bgfx::Attrib::TexCoord0, 2, bgfx::AttribType::Float)
+			.end();
+	}
+
+	static bgfx::VertexDecl ms_decl;
 };
 
+bgfx::VertexDecl PosNormalTexcoordVertex::ms_decl;
+
 static const float s_texcoord = 50.0f;
-static const uint32_t s_numHPlaneVertices = 4;
-static PosNormalTexcoordVertex s_hplaneVertices[s_numHPlaneVertices] =
+static PosNormalTexcoordVertex s_hplaneVertices[] =
 {
 	{ -1.0f, 0.0f,  1.0f, packF4u(0.0f, 1.0f, 0.0f), s_texcoord, s_texcoord },
 	{  1.0f, 0.0f,  1.0f, packF4u(0.0f, 1.0f, 0.0f), s_texcoord, 0.0f       },
@@ -81,8 +96,7 @@ static PosNormalTexcoordVertex s_hplaneVertices[s_numHPlaneVertices] =
 	{  1.0f, 0.0f, -1.0f, packF4u(0.0f, 1.0f, 0.0f), 0.0f,       0.0f       },
 };
 
-static const uint32_t s_numVPlaneVertices = 4;
-static PosNormalTexcoordVertex s_vplaneVertices[s_numVPlaneVertices] =
+static PosNormalTexcoordVertex s_vplaneVertices[] =
 {
 	{ -1.0f,  1.0f, 0.0f, packF4u(0.0f, 0.0f, -1.0f), 1.0f, 1.0f },
 	{  1.0f,  1.0f, 0.0f, packF4u(0.0f, 0.0f, -1.0f), 1.0f, 0.0f },
@@ -90,15 +104,13 @@ static PosNormalTexcoordVertex s_vplaneVertices[s_numVPlaneVertices] =
 	{  1.0f, -1.0f, 0.0f, packF4u(0.0f, 0.0f, -1.0f), 0.0f, 0.0f },
 };
 
-static const uint32_t s_numPlaneIndices = 6;
-static const uint16_t s_planeIndices[s_numPlaneIndices] =
+static const uint16_t s_planeIndices[] =
 {
 	0, 1, 2,
 	1, 3, 2,
 };
 
 static const char* s_shaderPath = NULL;
-static bool s_flipV = false;
 static float s_texelHalf = 0.0f;
 
 static uint32_t s_viewMask = 0;
@@ -217,10 +229,10 @@ void planeNormal(float* __restrict _result
 	vec1[1] = _v2[1] - _v1[1];
 	vec1[2] = _v2[2] - _v1[2];
 
-	vec3Cross(cross, vec0, vec1);
-	vec3Norm(_result, cross);
+	bx::vec3Cross(cross, vec0, vec1);
+	bx::vec3Norm(_result, cross);
 
-	_result[3] = -vec3Dot(_result, _v0);
+	_result[3] = -bx::vec3Dot(_result, _v0);
 }
 
 struct Uniforms
@@ -258,8 +270,6 @@ struct Uniforms
 
 		m_time = 0.0f;
 
-		m_flipV = float(s_flipV) * 2.0f - 1.0f;
-
 		m_lightPosRadius[0] = 0.0f;
 		m_lightPosRadius[1] = 0.0f;
 		m_lightPosRadius[2] = 0.0f;
@@ -283,7 +293,6 @@ struct Uniforms
 		u_fog                           = bgfx::createUniform("u_fog",                           bgfx::UniformType::Uniform4fv);
 		u_color                         = bgfx::createUniform("u_color",                         bgfx::UniformType::Uniform4fv);
 		u_time                          = bgfx::createUniform("u_time",                          bgfx::UniformType::Uniform1f );
-		u_flipV                         = bgfx::createUniform("u_flipV",                         bgfx::UniformType::Uniform1f );
 		u_lightPosRadius                = bgfx::createUniform("u_lightPosRadius",                bgfx::UniformType::Uniform4fv);
 		u_lightRgbInnerR                = bgfx::createUniform("u_lightRgbInnerR",                bgfx::UniformType::Uniform4fv);
 		u_virtualLightPos_extrusionDist = bgfx::createUniform("u_virtualLightPos_extrusionDist", bgfx::UniformType::Uniform4fv);
@@ -296,7 +305,6 @@ struct Uniforms
 		bgfx::setUniform(u_diffuse,            &m_diffuse);
 		bgfx::setUniform(u_specular_shininess, &m_specular_shininess);
 		bgfx::setUniform(u_fog,                &m_fog);
-		bgfx::setUniform(u_flipV,              &m_flipV);
 	}
 
 	//call this once per frame
@@ -326,7 +334,6 @@ struct Uniforms
 		bgfx::destroyUniform(u_fog);
 		bgfx::destroyUniform(u_color);
 		bgfx::destroyUniform(u_time);
-		bgfx::destroyUniform(u_flipV);
 		bgfx::destroyUniform(u_lightPosRadius);
 		bgfx::destroyUniform(u_lightRgbInnerR);
 		bgfx::destroyUniform(u_virtualLightPos_extrusionDist);
@@ -356,7 +363,6 @@ struct Uniforms
 	float m_fog[4];
 	float m_color[4];
 	float m_time;
-	float m_flipV;
 	float m_lightPosRadius[4];
 	float m_lightRgbInnerR[4];
 	float m_virtualLightPos_extrusionDist[4];
@@ -381,7 +387,6 @@ struct Uniforms
 	bgfx::UniformHandle u_fog;
 	bgfx::UniformHandle u_color;
 	bgfx::UniformHandle u_time;
-	bgfx::UniformHandle u_flipV;
 	bgfx::UniformHandle u_lightPosRadius;
 	bgfx::UniformHandle u_lightRgbInnerR;
 	bgfx::UniformHandle u_virtualLightPos_extrusionDist;
@@ -692,7 +697,7 @@ struct HalfEdges
 	{
 		m_data = (HalfEdge*)malloc(2 * _numIndices * sizeof(HalfEdge) );
 
-		std::unordered_map<uint16_t, std::vector<uint16_t> > edges;
+		stl::unordered_map<uint16_t, std::vector<uint16_t> > edges;
 		for (uint32_t ii = 0; ii < _numIndices; ii+=3)
 		{
 			uint16_t idx0 = _indices[ii];
@@ -1028,6 +1033,11 @@ struct Group
 
 typedef std::vector<Group> GroupArray;
 
+namespace bgfx
+{
+	int32_t read(bx::ReaderI* _reader, bgfx::VertexDecl& _decl);
+}
+
 struct Mesh
 {
 	void load(const void* _vertices, uint32_t _numVertices, const bgfx::VertexDecl _decl, const uint16_t* _indices, uint32_t _numIndices)
@@ -1061,8 +1071,8 @@ struct Mesh
 
 	void load(const char* _filePath)
 	{
-#define BGFX_CHUNK_MAGIC_VB BX_MAKEFOURCC('V', 'B', ' ', 0x0)
-#define BGFX_CHUNK_MAGIC_IB BX_MAKEFOURCC('I', 'B', ' ', 0x0)
+#define BGFX_CHUNK_MAGIC_VB  BX_MAKEFOURCC('V', 'B', ' ', 0x1)
+#define BGFX_CHUNK_MAGIC_IB  BX_MAKEFOURCC('I', 'B', ' ', 0x0)
 #define BGFX_CHUNK_MAGIC_PRI BX_MAKEFOURCC('P', 'R', 'I', 0x0)
 
 		bx::CrtFileReader reader;
@@ -1081,7 +1091,7 @@ struct Mesh
 					bx::read(&reader, group.m_aabb);
 					bx::read(&reader, group.m_obb);
 
-					bx::read(&reader, m_decl);
+					bgfx::read(&reader, m_decl);
 					uint16_t stride = m_decl.getStride();
 
 					bx::read(&reader, group.m_numVertices);
@@ -1145,6 +1155,7 @@ struct Mesh
 
 			default:
 				DBG("%08x at %d", chunk, reader.seek() );
+				abort();
 				break;
 			}
 		}
@@ -1248,7 +1259,7 @@ struct Instance
 		memcpy(s_uniforms.m_color, m_color, 3*sizeof(float) );
 
 		float mtx[16];
-		mtxSRT(mtx
+		bx::mtxSRT(mtx
 			, m_scale[0]
 			, m_scale[1]
 			, m_scale[2]
@@ -1360,34 +1371,34 @@ void shadowVolumeLightTransform(float* __restrict _outLightPos
 	 */
 
 	float pivot[16];
-	mtxTranslate(pivot
+	bx::mtxTranslate(pivot
 		, _lightPos[0] - _translate[0]
 		, _lightPos[1] - _translate[1]
 		, _lightPos[2] - _translate[2]
 		);
 
 	float mzyx[16];
-	mtxRotateZYX(mzyx
+	bx::mtxRotateZYX(mzyx
 		, -_rotate[0]
 		, -_rotate[1]
 		, -_rotate[2]
 		);
 
 	float invScale[16];
-	mtxScale(invScale
+	bx::mtxScale(invScale
 		, 1.0f / _scale[0]
 		, 1.0f / _scale[1]
 		, 1.0f / _scale[2]
 		);
 
 	float tmp0[16];
-	mtxMul(tmp0, pivot, mzyx);
+	bx::mtxMul(tmp0, pivot, mzyx);
 
 	float mtx[16];
-	mtxMul(mtx, tmp0, invScale);
+	bx::mtxMul(mtx, tmp0, invScale);
 
 	float origin[3] = { 0.0f, 0.0f, 0.0f };
-	vec3MulMtx(_outLightPos, origin, mtx);
+	bx::vec3MulMtx(_outLightPos, origin, mtx);
 }
 
 void shadowVolumeCreate(ShadowVolume& _shadowVolume
@@ -1452,7 +1463,7 @@ void shadowVolumeCreate(ShadowVolume& _shadowVolume
 			const Face& face = *iter;
 
 			bool frontFacing = false;
-			float f = vec3Dot(face.m_plane, _light) + face.m_plane[3];
+			float f = bx::vec3Dot(face.m_plane, _light) + face.m_plane[3];
 			if (f > 0.0f)
 			{
 				frontFacing = true;
@@ -1759,16 +1770,16 @@ void createNearClipVolume(float* __restrict _outPlanes24f
 
 	float mtxViewInv[16];
 	float mtxViewTrans[16];
-	mtxInverse(mtxViewInv, _view);
-	mtxTranspose(mtxViewTrans, _view);
+	bx::mtxInverse(mtxViewInv, _view);
+	bx::mtxTranspose(mtxViewTrans, _view);
 
 	float lightPosV[4];
-	vec4MulMtx(lightPosV, _lightPos, _view);
+	bx::vec4MulMtx(lightPosV, _lightPos, _view);
 
 	const float delta = 0.1f;
 
 	float nearNormal[4] = { 0.0f, 0.0f, 1.0f, _near };
-	float d = vec3Dot(lightPosV, nearNormal) + lightPosV[3] * nearNormal[3];
+	float d = bx::vec3Dot(lightPosV, nearNormal) + lightPosV[3] * nearNormal[3];
 
 	// Light is:
 	//  1.0f - in front of near plane
@@ -1790,10 +1801,10 @@ void createNearClipVolume(float* __restrict _outPlanes24f
 	};
 
 	float corners[4][3];
-	vec3MulMtx(corners[0], cornersV[0], mtxViewInv);
-	vec3MulMtx(corners[1], cornersV[1], mtxViewInv);
-	vec3MulMtx(corners[2], cornersV[2], mtxViewInv);
-	vec3MulMtx(corners[3], cornersV[3], mtxViewInv);
+	bx::vec3MulMtx(corners[0], cornersV[0], mtxViewInv);
+	bx::vec3MulMtx(corners[1], cornersV[1], mtxViewInv);
+	bx::vec3MulMtx(corners[2], cornersV[2], mtxViewInv);
+	bx::vec3MulMtx(corners[3], cornersV[3], mtxViewInv);
 
 	float planeNormals[4][3];
 	for (uint8_t ii = 0; ii < 4; ++ii)
@@ -1802,25 +1813,25 @@ void createNearClipVolume(float* __restrict _outPlanes24f
 		float* plane = volumePlanes[ii];
 
 		float planeVec[3];
-		vec3Sub(planeVec, corners[ii], corners[(ii-1)%4]);
+		bx::vec3Sub(planeVec, corners[ii], corners[(ii-1)%4]);
 
 		float light[3];
 		float tmp[3];
-		vec3Mul(tmp, corners[ii], _lightPos[3]);
-		vec3Sub(light, _lightPos, tmp);
+		bx::vec3Mul(tmp, corners[ii], _lightPos[3]);
+		bx::vec3Sub(light, _lightPos, tmp);
 
-		vec3Cross(normal, planeVec, light);
+		bx::vec3Cross(normal, planeVec, light);
 
 		normal[0] *= lightSide;
 		normal[1] *= lightSide;
 		normal[2] *= lightSide;
 
-		float lenInv = 1.0f / sqrtf(vec3Dot(normal, normal) );
+		float lenInv = 1.0f / sqrtf(bx::vec3Dot(normal, normal) );
 
 		plane[0] = normal[0] * lenInv;
 		plane[1] = normal[1] * lenInv;
 		plane[2] = normal[2] * lenInv;
-		plane[3] = -vec3Dot(normal, corners[ii]) * lenInv;
+		plane[3] = -bx::vec3Dot(normal, corners[ii]) * lenInv;
 	}
 
 	float nearPlaneV[4] =
@@ -1830,26 +1841,26 @@ void createNearClipVolume(float* __restrict _outPlanes24f
 		1.0f * lightSide,
 		_near * lightSide,
 	};
-	vec4MulMtx(volumePlanes[4], nearPlaneV, mtxViewTrans);
+	bx::vec4MulMtx(volumePlanes[4], nearPlaneV, mtxViewTrans);
 
 	float* lightPlane = volumePlanes[5];
 	float lightPlaneNormal[3] = { 0.0f, 0.0f, -_near * lightSide };
 	float tmp[3];
-	vec3MulMtx(tmp, lightPlaneNormal, mtxViewInv);
-	vec3Sub(lightPlaneNormal, tmp, _lightPos);
+	bx::vec3MulMtx(tmp, lightPlaneNormal, mtxViewInv);
+	bx::vec3Sub(lightPlaneNormal, tmp, _lightPos);
 
-	float lenInv = 1.0f / sqrtf(vec3Dot(lightPlaneNormal, lightPlaneNormal) );
+	float lenInv = 1.0f / sqrtf(bx::vec3Dot(lightPlaneNormal, lightPlaneNormal) );
 
 	lightPlane[0] = lightPlaneNormal[0] * lenInv;
 	lightPlane[1] = lightPlaneNormal[1] * lenInv;
 	lightPlane[2] = lightPlaneNormal[2] * lenInv;
-	lightPlane[3] = -vec3Dot(lightPlaneNormal, _lightPos) * lenInv;
+	lightPlane[3] = -bx::vec3Dot(lightPlaneNormal, _lightPos) * lenInv;
 }
 
 bool clipTest(const float* _planes, uint8_t _planeNum, const Mesh& _mesh, const float* _scale, const float* _translate)
 {
 	float (*volumePlanes)[4] = (float(*)[4])_planes;
-	float scale = fmaxf(fmaxf(_scale[0], _scale[1]), _scale[2]);
+	float scale = bx::fmax(bx::fmax(_scale[0], _scale[1]), _scale[2]);
 
 	const GroupArray& groups = _mesh.m_groups;
 	for (GroupArray::const_iterator it = groups.begin(), itEnd = groups.end(); it != itEnd; ++it)
@@ -1867,7 +1878,7 @@ bool clipTest(const float* _planes, uint8_t _planeNum, const Mesh& _mesh, const 
 		{
 			const float* plane = volumePlanes[ii];
 
-			float positiveSide = vec3Dot(plane, sphere.m_center) + plane[3] + sphere.m_radius;
+			float positiveSide = bx::vec3Dot(plane, sphere.m_center) + plane[3] + sphere.m_radius;
 
 			if (positiveSide < 0.0f)
 			{
@@ -1915,12 +1926,10 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 	case bgfx::RendererType::OpenGL:
 		s_shaderPath = "shaders/glsl/";
-		s_flipV = true;
 		break;
 
 	case bgfx::RendererType::OpenGLES:
 		s_shaderPath = "shaders/gles/";
-		s_flipV = true;
 		break;
 	}
 
@@ -1936,12 +1945,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 	free(data);
 
-	bgfx::VertexDecl PosNormalTexcoordDecl;
-	PosNormalTexcoordDecl.begin()
-		.add(bgfx::Attrib::Position,  3, bgfx::AttribType::Float)
-		.add(bgfx::Attrib::Normal,    4, bgfx::AttribType::Uint8, true, true)
-		.add(bgfx::Attrib::TexCoord0, 2, bgfx::AttribType::Float)
-		.end();
+	PosNormalTexcoordVertex::init();
 
 	s_uniforms.init();
 	s_uniforms.submitConstUniforms();
@@ -2045,15 +2049,15 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 	cubeModel.m_program = programTextureLightning;
 	cubeModel.m_texture = figureTex;
 
-	hplaneFieldModel.load(s_hplaneVertices, s_numHPlaneVertices, PosNormalTexcoordDecl, s_planeIndices, s_numPlaneIndices);
+	hplaneFieldModel.load(s_hplaneVertices, BX_COUNTOF(s_hplaneVertices), PosNormalTexcoordVertex::ms_decl, s_planeIndices, BX_COUNTOF(s_planeIndices) );
 	hplaneFieldModel.m_program = programTextureLightning;
 	hplaneFieldModel.m_texture = fieldstoneTex;
 
-	hplaneFigureModel.load(s_hplaneVertices, s_numHPlaneVertices, PosNormalTexcoordDecl, s_planeIndices, s_numPlaneIndices);
+	hplaneFigureModel.load(s_hplaneVertices, BX_COUNTOF(s_hplaneVertices), PosNormalTexcoordVertex::ms_decl, s_planeIndices, BX_COUNTOF(s_planeIndices) );
 	hplaneFigureModel.m_program = programTextureLightning;
 	hplaneFigureModel.m_texture = figureTex;
 
-	vplaneModel.load(s_vplaneVertices, s_numVPlaneVertices, PosNormalTexcoordDecl, s_planeIndices, s_numPlaneIndices);
+	vplaneModel.load(s_vplaneVertices, BX_COUNTOF(s_vplaneVertices), PosNormalTexcoordVertex::ms_decl, s_planeIndices, BX_COUNTOF(s_planeIndices) );
 	vplaneModel.m_program = programColorTexture;
 	vplaneModel.m_texture = flareTex;
 
@@ -2134,7 +2138,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 	const float aspect = float(viewState.m_width)/float(viewState.m_height);
 	const float nearPlane = 1.0f;
 	const float farPlane = 1000.0f;
-	mtxProj(viewState.m_proj, fov, aspect, nearPlane, farPlane);
+	bx::mtxProj(viewState.m_proj, fov, aspect, nearPlane, farPlane);
 
 	float initialPos[3] = { 3.0f, 20.0f, -58.0f };
 	cameraCreate();
@@ -2195,7 +2199,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 			currentScene = Scene1;
 		}
 
-		imguiSlider("Lights", &settings_numLights, 1.0f, float(MAX_LIGHTS_COUNT), 1.0f);
+		imguiSlider("Lights", settings_numLights, 1.0f, float(MAX_LIGHTS_COUNT), 1.0f);
 
 		if (imguiCheck("Update lights", settings_updateLights) )
 		{
@@ -2261,7 +2265,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 		if (Scene1 == currentScene)
 		{
-			imguiSlider("Instance count", &settings_instanceCount, 1.0f, float(MAX_INSTANCE_COUNT), 1.0f);
+			imguiSlider("Instance count", settings_instanceCount, 1.0f, float(MAX_INSTANCE_COUNT), 1.0f);
 		}
 
 		imguiLabel("CPU Time: %7.1f [ms]", double(profTime)*toMs);
@@ -2431,7 +2435,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 		// Scene 0 - shadow casters - Columns.
 		const float dist = 16.0f;
-		const float columnPositions[4][3] =
+		const float columnPositions[][3] =
 		{
 			{  dist, 3.3f,  dist },
 			{ -dist, 3.3f,  dist },
@@ -2705,7 +2709,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 				// Compute transform for shadow volume.
 				float shadowVolumeMtx[16];
-				mtxSRT(shadowVolumeMtx
+				bx::mtxSRT(shadowVolumeMtx
 						, instance.m_scale[0]
 						, instance.m_scale[1]
 						, instance.m_scale[2]

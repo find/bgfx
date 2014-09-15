@@ -8,140 +8,14 @@
 #include <stdlib.h> // size_t
 #include <string.h> // strlen
 #include <bx/hash.h>
+#include <bx/tokenizecmd.h>
 
 #include "dbg.h"
 #include "cmd.h"
 #include <string>
-#include <unordered_map>
-
-// Reference:
-// http://msdn.microsoft.com/en-us/library/a1y7w461.aspx
-static const char* tokenizeCommandLine(const char* _commandLine, char* _buffer, uint32_t& _bufferSize, int& _argc, char* _argv[], int _maxArgvs, char _term)
-{
-	int argc = 0;
-	const char* curr = _commandLine;
-	char* currOut = _buffer;
-	char term = ' ';
-	bool sub = false;
-
-	enum ParserState
-	{
-		SkipWhitespace,
-		SetTerm,
-		Copy,
-		Escape,
-		End,
-	};
-
-	ParserState state = SkipWhitespace;
-
-	while ('\0' != *curr
-	&&     _term != *curr
-	&&     argc < _maxArgvs)
-	{
-		switch (state)
-		{
-		case SkipWhitespace:
-			for (; isspace(*curr); ++curr) {}; // skip whitespace
-			state = SetTerm;
-			break;
-
-		case SetTerm:
-			if ('"' == *curr)
-			{
-				term = '"';
-				++curr; // skip begining quote
-			}
-			else
-			{
-				term = ' ';
-			}
-
-			_argv[argc] = currOut;
-			++argc;
-
-			state = Copy;
-			break;
-
-		case Copy:
-			if ('\\' == *curr)
-			{
-				state = Escape;
-			}
-			else if ('"' == *curr
-				&&  '"' != term)
-			{
-				sub = !sub;
-			}
-			else if (isspace(*curr) && !sub)
-			{
-				state = End;
-			}
-			else if (term != *curr || sub)
-			{
-				*currOut = *curr;
-				++currOut;
-			}
-			else
-			{
-				state = End;
-			}
-			++curr;
-			break;
-
-		case Escape:
-			{
-				const char* start = --curr;
-				for (; '\\' == *curr; ++curr) {};
-
-				if ('"' != *curr)
-				{
-					int count = (int)(curr-start);
-
-					curr = start;
-					for (int ii = 0; ii < count; ++ii)
-					{
-						*currOut = *curr;
-						++currOut;
-						++curr;
-					}
-				}
-				else
-				{
-					curr = start+1;
-					*currOut = *curr;
-					++currOut;
-					++curr;
-				}
-			}
-			state = Copy;
-			break;
-
-		case End:
-			*currOut = '\0';
-			++currOut;
-			state = SkipWhitespace;
-			break;
-		}
-	}
-
-	*currOut = '\0';
-	if (0 < argc
-		&&  '\0' == _argv[argc-1][0])
-	{
-		--argc;
-	}
-
-	_bufferSize = (uint32_t)(currOut - _buffer);
-	_argc = argc;
-
-	if ('\0' != *curr)
-	{
-		++curr;
-	}
-
-	return curr;
-}
+#include <tinystl/allocator.h>
+#include <tinystl/unordered_map.h>
+namespace stl = tinystl;
 
 struct CmdContext
 {
@@ -158,7 +32,7 @@ struct CmdContext
 		uint32_t cmd = bx::hashMurmur2A(_name, (uint32_t)strlen(_name) );
 		BX_CHECK(m_lookup.end() == m_lookup.find(cmd), "Command \"%s\" already exist.", _name);
 		Func fn = { _fn, _userData };
-		m_lookup.insert(std::make_pair(cmd, fn) );
+		m_lookup.insert(stl::make_pair(cmd, fn) );
 	}
 
 	void exec(const char* _cmd)
@@ -169,7 +43,7 @@ struct CmdContext
 			uint32_t size = sizeof(commandLine);
 			int argc;
 			char* argv[64];
-			next = tokenizeCommandLine(_cmd, commandLine, size, argc, argv, BX_COUNTOF(argv), '\n');
+			next = bx::tokenizeCommandLine(_cmd, commandLine, size, argc, argv, BX_COUNTOF(argv), '\n');
 			if (argc > 0)
 			{
 				int err = -1;
@@ -210,7 +84,7 @@ struct CmdContext
 		void* m_userData;
 	};
 
-	typedef std::unordered_map<uint32_t, Func> CmdLookup;
+	typedef stl::unordered_map<uint32_t, Func> CmdLookup;
 	CmdLookup m_lookup;
 };
 

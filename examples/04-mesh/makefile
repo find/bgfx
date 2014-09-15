@@ -7,12 +7,7 @@ BGFX_DIR=../..
 RUNTIME_DIR=$(BGFX_DIR)/examples/runtime
 BUILD_DIR=../../.build
 
-include $(BGFX_DIR)/premake/shader.mk
-
-geometry: ../runtime/meshes/bunny.bin
-
-../runtime/meshes/bunny.bin: bunny.obj
-	../../tools/bin/geometryc -f bunny.obj -o ../runtime/meshes/bunny.bin --packnormal 1
+include $(BGFX_DIR)/scripts/shader.mk
 
 rebuild:
 	@make -s --no-print-directory TARGET=0 clean all

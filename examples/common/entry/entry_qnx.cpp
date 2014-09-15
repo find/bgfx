@@ -3,12 +3,11 @@
  * License: http://www.opensource.org/licenses/BSD-2-Clause
  */
 
-#include "entry.h"
+#include "entry_p.h"
 
 #if ENTRY_CONFIG_USE_NATIVE && BX_PLATFORM_QNX
 
 #include <stdio.h>
-#include "entry.h"
 
 namespace entry
 {
@@ -23,6 +22,11 @@ namespace entry
 
 	void setWindowSize(uint32_t _width, uint32_t _height)
 	{
+	}
+
+	void setWindowTitle(const char* _title)
+	{
+		BX_UNUSED(_title);
 	}
 
 	void toggleWindowFrame()

@@ -155,7 +155,7 @@ static const uint16_t s_cubeIndices[36] =
 
 	 8, 10,  9,
 	 9, 10, 11,
-    12, 13, 14,
+	12, 13, 14,
 	13, 15, 14,
 
 	16, 18, 17,
@@ -232,18 +232,25 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 	// Enable debug text.
 	bgfx::setDebug(debug);
 
-	// Set view 0 clear state.
+	// Set clear color palette for index 0
+	bgfx::setClearColor(0, UINT32_C(0x00000000) );
+
+	// Set clear color palette for index 1
+	bgfx::setClearColor(1, UINT32_C(0x303030ff) );
+
+	// Set geometry pass view clear state.
 	bgfx::setViewClear(RENDER_PASS_GEOMETRY_ID
 		, BGFX_CLEAR_COLOR_BIT|BGFX_CLEAR_DEPTH_BIT
-		, 0x303030ff
 		, 1.0f
 		, 0
+		, 1
 		);
 
+	// Set light pass view clear state.
 	bgfx::setViewClear(RENDER_PASS_LIGHT_ID
 		, BGFX_CLEAR_COLOR_BIT|BGFX_CLEAR_DEPTH_BIT
-		, 0
 		, 1.0f
+		, 0
 		, 0
 		);
 
@@ -277,8 +284,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 	bgfx::UniformHandle s_depth  = bgfx::createUniform("s_depth",  bgfx::UniformType::Uniform1iv);
 	bgfx::UniformHandle s_light  = bgfx::createUniform("s_light",  bgfx::UniformType::Uniform1iv);
 
-	bgfx::UniformHandle u_mtx    = bgfx::createUniform("u_mtx",    bgfx::UniformType::Uniform4x4fv);
-
+	bgfx::UniformHandle u_mtx            = bgfx::createUniform("u_mtx",            bgfx::UniformType::Uniform4x4fv);
 	bgfx::UniformHandle u_lightPosRadius = bgfx::createUniform("u_lightPosRadius", bgfx::UniformType::Uniform4fv);
 	bgfx::UniformHandle u_lightRgbInnerR = bgfx::createUniform("u_lightRgbInnerR", bgfx::UniformType::Uniform4fv);
 
@@ -412,7 +418,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 			imguiBeginScrollArea("Settings", width - width / 5 - 10, 10, width / 5, height / 3, &scrollArea);
 			imguiSeparatorLine();
 
-			imguiSlider("Num lights", &numLights, 1, 2048);
+			imguiSlider("Num lights", numLights, 1, 2048);
 
 			if (imguiCheck("Show G-Buffer.", showGBuffer) )
 			{
@@ -429,7 +435,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 				animateMesh = !animateMesh;
 			}
 
-			imguiSlider("Lights animation speed", &lightAnimationSpeed, 0.0f, 0.4f, 0.01f);
+			imguiSlider("Lights animation speed", lightAnimationSpeed, 0.0f, 0.4f, 0.01f);
 			
 			imguiEndScrollArea();
 			imguiEndFrame();
@@ -454,15 +460,15 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 				bgfx::setViewFrameBuffer(RENDER_PASS_LIGHT_ID, lightBuffer);
 
 				float proj[16];
-				mtxProj(proj, 60.0f, float(width)/float(height), 0.1f, 100.0f);
+				bx::mtxProj(proj, 60.0f, float(width)/float(height), 0.1f, 100.0f);
 
 				bgfx::setViewFrameBuffer(RENDER_PASS_GEOMETRY_ID, gbuffer);
 				bgfx::setViewTransform(RENDER_PASS_GEOMETRY_ID, view, proj);
 
-				mtxMul(vp, view, proj);
-				mtxInverse(invMvp, vp);
+				bx::mtxMul(vp, view, proj);
+				bx::mtxInverse(invMvp, vp);
 
-				mtxOrtho(proj, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 100.0f);
+				bx::mtxOrtho(proj, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 100.0f);
 				bgfx::setViewTransformMask(0
 					| RENDER_PASS_LIGHT_BIT
 					| RENDER_PASS_COMBINE_BIT
@@ -471,10 +477,10 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 				const float aspectRatio = float(height)/float(width);
 				const float size = 10.0f;
-				mtxOrtho(proj, -size, size, size*aspectRatio, -size*aspectRatio, 0.0f, 1000.0f);
+				bx::mtxOrtho(proj, -size, size, size*aspectRatio, -size*aspectRatio, 0.0f, 1000.0f);
 				bgfx::setViewTransform(RENDER_PASS_DEBUG_GBUFFER_ID, NULL, proj); 
 
-				mtxOrtho(proj, 0.0f, (float)width, 0.0f, (float)height, 0.0f, 1000.0f);
+				bx::mtxOrtho(proj, 0.0f, (float)width, 0.0f, (float)height, 0.0f, 1000.0f);
 				bgfx::setViewTransform(RENDER_PASS_DEBUG_LIGHTS_ID, NULL, proj); 
 			}
 
@@ -489,11 +495,11 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 					float mtx[16];
 					if (animateMesh)
 					{
-						mtxRotateXY(mtx, time*1.023f + xx*0.21f, time*0.03f + yy*0.37f);
+						bx::mtxRotateXY(mtx, time*1.023f + xx*0.21f, time*0.03f + yy*0.37f);
 					}
 					else
 					{
-						mtxIdentity(mtx);
+						bx::mtxIdentity(mtx);
 					}
 					mtx[12] = -offset + float(xx)*3.0f;
 					mtx[13] = -offset + float(yy)*3.0f;
@@ -554,7 +560,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 				};
 
 				float xyz[3];
-				vec3MulMtxH(xyz, box[0], vp);
+				bx::vec3MulMtxH(xyz, box[0], vp);
 				float minx = xyz[0];
 				float miny = xyz[1];
 				float maxx = xyz[0];
@@ -563,21 +569,21 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 				for (uint32_t ii = 1; ii < 8; ++ii)
 				{
-					vec3MulMtxH(xyz, box[ii], vp);
-					minx = fminf(minx, xyz[0]);
-					miny = fminf(miny, xyz[1]);
-					maxx = fmaxf(maxx, xyz[0]);
-					maxy = fmaxf(maxy, xyz[1]);
-					maxz = fmaxf(maxz, xyz[2]);
+					bx::vec3MulMtxH(xyz, box[ii], vp);
+					minx = bx::fmin(minx, xyz[0]);
+					miny = bx::fmin(miny, xyz[1]);
+					maxx = bx::fmax(maxx, xyz[0]);
+					maxy = bx::fmax(maxy, xyz[1]);
+					maxz = bx::fmax(maxz, xyz[2]);
 				}
 
 				// Cull light if it's fully behind camera.
 				if (maxz >= 0.0f)
 				{
-					float x0 = fclamp( (minx * 0.5f + 0.5f) * width,  0.0f, (float)width);
-					float y0 = fclamp( (miny * 0.5f + 0.5f) * height, 0.0f, (float)height);
-					float x1 = fclamp( (maxx * 0.5f + 0.5f) * width,  0.0f, (float)width);
-					float y1 = fclamp( (maxy * 0.5f + 0.5f) * height, 0.0f, (float)height);
+					float x0 = bx::fclamp( (minx * 0.5f + 0.5f) * width,  0.0f, (float)width);
+					float y0 = bx::fclamp( (miny * 0.5f + 0.5f) * height, 0.0f, (float)height);
+					float x1 = bx::fclamp( (maxx * 0.5f + 0.5f) * width,  0.0f, (float)width);
+					float y1 = bx::fclamp( (maxy * 0.5f + 0.5f) * height, 0.0f, (float)height);
 
 					if (showScissorRects)
 					{
@@ -680,7 +686,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 				for (uint32_t ii = 0; ii < BX_COUNTOF(gbufferTex); ++ii)
 				{
 					float mtx[16];
-					mtxSRT(mtx
+					bx::mtxSRT(mtx
 						, aspectRatio, 1.0f, 1.0f
 						, 0.0f, 0.0f, 0.0f
 						, -7.9f - BX_COUNTOF(gbufferTex)*0.1f*0.5f + ii*2.1f*aspectRatio, 4.0f, 0.0f
@@ -706,8 +712,11 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 	cameraDestroy();
 	imguiDestroy();
 
-	bgfx::destroyFrameBuffer(gbuffer);
-	bgfx::destroyFrameBuffer(lightBuffer);
+	if (bgfx::isValid(gbuffer) )
+	{
+		bgfx::destroyFrameBuffer(gbuffer);
+		bgfx::destroyFrameBuffer(lightBuffer);
+	}
 
 	bgfx::destroyIndexBuffer(ibh);
 	bgfx::destroyVertexBuffer(vbh);

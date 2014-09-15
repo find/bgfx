@@ -11,9 +11,9 @@
 #include <bgfx.h>
 #include <bx/timer.h>
 #include <bx/readerwriter.h>
+#include <bx/fpumath.h>
 #include "entry/entry.h"
 #include "camera.h"
-#include "fpumath.h"
 #include "imgui/imgui.h"
 
 #define RENDER_VIEWID_RANGE1_PASS_0   1 
@@ -60,11 +60,24 @@ struct PosNormalTexcoordVertex
 	uint32_t m_normal;
 	float    m_u;
 	float    m_v;
+
+	static void init()
+	{
+		ms_decl
+			.begin()
+			.add(bgfx::Attrib::Position,  3, bgfx::AttribType::Float)
+			.add(bgfx::Attrib::Normal,    4, bgfx::AttribType::Uint8, true, true)
+			.add(bgfx::Attrib::TexCoord0, 2, bgfx::AttribType::Float)
+			.end();
+	}
+
+	static bgfx::VertexDecl ms_decl;
 };
 
+bgfx::VertexDecl PosNormalTexcoordVertex::ms_decl;
+
 static const float s_texcoord = 5.0f;
-static const uint32_t s_numHPlaneVertices = 4;
-static PosNormalTexcoordVertex s_hplaneVertices[s_numHPlaneVertices] =
+static PosNormalTexcoordVertex s_hplaneVertices[] =
 {
 	{ -1.0f, 0.0f,  1.0f, packF4u(0.0f, 1.0f, 0.0f), s_texcoord, s_texcoord },
 	{  1.0f, 0.0f,  1.0f, packF4u(0.0f, 1.0f, 0.0f), s_texcoord, 0.0f       },
@@ -72,8 +85,7 @@ static PosNormalTexcoordVertex s_hplaneVertices[s_numHPlaneVertices] =
 	{  1.0f, 0.0f, -1.0f, packF4u(0.0f, 1.0f, 0.0f), 0.0f,       0.0f       },
 };
 
-static const uint32_t s_numVPlaneVertices = 4;
-static PosNormalTexcoordVertex s_vplaneVertices[s_numVPlaneVertices] =
+static PosNormalTexcoordVertex s_vplaneVertices[] =
 {
 	{ -1.0f,  1.0f, 0.0f, packF4u(0.0f, 0.0f, -1.0f), 1.0f, 1.0f },
 	{  1.0f,  1.0f, 0.0f, packF4u(0.0f, 0.0f, -1.0f), 1.0f, 0.0f },
@@ -81,8 +93,7 @@ static PosNormalTexcoordVertex s_vplaneVertices[s_numVPlaneVertices] =
 	{  1.0f, -1.0f, 0.0f, packF4u(0.0f, 0.0f, -1.0f), 0.0f, 0.0f },
 };
 
-static const uint32_t s_numCubeVertices = 24;
-static const PosNormalTexcoordVertex s_cubeVertices[s_numCubeVertices] =
+static const PosNormalTexcoordVertex s_cubeVertices[] =
 {
 	{ -1.0f,  1.0f,  1.0f, packF4u( 0.0f,  1.0f,  0.0f), 1.0f, 1.0f },
 	{  1.0f,  1.0f,  1.0f, packF4u( 0.0f,  1.0f,  0.0f), 0.0f, 1.0f },
@@ -110,8 +121,7 @@ static const PosNormalTexcoordVertex s_cubeVertices[s_numCubeVertices] =
 	{ -1.0f, -1.0f,  1.0f, packF4u(-1.0f,  0.0f,  0.0f), 0.0f, 0.0f },
 };
 
-static const uint32_t s_numCubeIndices = 36;
-static const uint16_t s_cubeIndices[s_numCubeIndices] =
+static const uint16_t s_cubeIndices[] =
 {
 	0,  1,  2,
 	1,  3,  2,
@@ -129,8 +139,7 @@ static const uint16_t s_cubeIndices[s_numCubeIndices] =
 	21, 22, 23,
 };
 
-static const uint32_t s_numPlaneIndices = 6;
-static const uint16_t s_planeIndices[s_numPlaneIndices] =
+static const uint16_t s_planeIndices[] =
 {
 	0, 1, 2,
 	1, 3, 2,
@@ -211,7 +220,7 @@ void mtxReflected(float*__restrict _result
 				  , const float* __restrict _n  /* normal */
 				  )
 {
-	float dot = vec3Dot(_p, _n);
+	float dot = bx::vec3Dot(_p, _n);
 
 	_result[ 0] =  1.0f -  2.0f * _n[0] * _n[0]; //1-2Nx^2
 	_result[ 1] = -2.0f * _n[0] * _n[1];         //-2*Nx*Ny
@@ -621,24 +630,6 @@ void clearViewMask(uint32_t _viewMask, uint8_t _flags, const ClearValues& _clear
 	s_clearMask |= _viewMask;
 }
 
-void submit(uint8_t _id, int32_t _depth = 0)
-{
-	// Submit
-	bgfx::submit(_id, _depth);
-
-	// Keep track of submited view ids
-	s_viewMask |= 1 << _id;
-}
-
-void submitMask(uint32_t _viewMask, int32_t _depth = 0)
-{
-	// Submit
-	bgfx::submitMask(_viewMask, _depth);
-
-	// Keep track of submited view ids
-	s_viewMask |= _viewMask;
-}
-
 struct Aabb
 {
 	float m_min[3];
@@ -692,6 +683,11 @@ struct Group
 	PrimitiveArray m_prims;
 };
 
+namespace bgfx
+{
+	int32_t read(bx::ReaderI* _reader, bgfx::VertexDecl& _decl);
+}
+
 struct Mesh
 {
 	void load(const void* _vertices, uint32_t _numVertices, const bgfx::VertexDecl _decl
@@ -720,8 +716,8 @@ struct Mesh
 
 	void load(const char* _filePath)
 	{
-#define BGFX_CHUNK_MAGIC_VB BX_MAKEFOURCC('V', 'B', ' ', 0x0)
-#define BGFX_CHUNK_MAGIC_IB BX_MAKEFOURCC('I', 'B', ' ', 0x0)
+#define BGFX_CHUNK_MAGIC_VB  BX_MAKEFOURCC('V', 'B', ' ', 0x1)
+#define BGFX_CHUNK_MAGIC_IB  BX_MAKEFOURCC('I', 'B', ' ', 0x0)
 #define BGFX_CHUNK_MAGIC_PRI BX_MAKEFOURCC('P', 'R', 'I', 0x0)
 
 		bx::CrtFileReader reader;
@@ -740,7 +736,7 @@ struct Mesh
 					bx::read(&reader, group.m_aabb);
 					bx::read(&reader, group.m_obb);
 
-					bx::read(&reader, m_decl);
+					bgfx::read(&reader, m_decl);
 					uint16_t stride = m_decl.getStride();
 
 					uint16_t numVertices;
@@ -801,6 +797,7 @@ struct Mesh
 
 			default:
 				DBG("%08x at %d", chunk, reader.seek() );
+				abort();
 				break;
 			}
 		}
@@ -855,7 +852,10 @@ struct Mesh
 			bgfx::setState(_renderState.m_state, _renderState.m_blendFactorRgba);
 
 			// Submit
-			::submit(_viewId);
+			bgfx::submit(_viewId);
+
+			// Keep track of submited view ids
+			s_viewMask |= 1 << _viewId;
 		}
 	}
 
@@ -913,12 +913,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 	free(data);
 
-	bgfx::VertexDecl PosNormalTexcoordDecl;
-	PosNormalTexcoordDecl.begin();
-	PosNormalTexcoordDecl.add(bgfx::Attrib::Position,  3, bgfx::AttribType::Float);
-	PosNormalTexcoordDecl.add(bgfx::Attrib::Normal,    4, bgfx::AttribType::Uint8, true, true);
-	PosNormalTexcoordDecl.add(bgfx::Attrib::TexCoord0, 2, bgfx::AttribType::Float);
-	PosNormalTexcoordDecl.end();
+	PosNormalTexcoordVertex::init();
 
 	s_uniforms.init();
 	s_uniforms.submitConstUniforms();
@@ -938,9 +933,9 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 	Mesh vplaneMesh;
 	bunnyMesh.load("meshes/bunny.bin");
 	columnMesh.load("meshes/column.bin");
-	cubeMesh.load(s_cubeVertices, s_numCubeVertices, PosNormalTexcoordDecl, s_cubeIndices, s_numCubeIndices);
-	hplaneMesh.load(s_hplaneVertices, s_numHPlaneVertices, PosNormalTexcoordDecl, s_planeIndices, s_numPlaneIndices);
-	vplaneMesh.load(s_vplaneVertices, s_numVPlaneVertices, PosNormalTexcoordDecl, s_planeIndices, s_numPlaneIndices);
+	cubeMesh.load(s_cubeVertices, BX_COUNTOF(s_cubeVertices), PosNormalTexcoordVertex::ms_decl, s_cubeIndices, BX_COUNTOF(s_cubeIndices) );
+	hplaneMesh.load(s_hplaneVertices, BX_COUNTOF(s_hplaneVertices), PosNormalTexcoordVertex::ms_decl, s_planeIndices, BX_COUNTOF(s_planeIndices) );
+	vplaneMesh.load(s_vplaneVertices, BX_COUNTOF(s_vplaneVertices), PosNormalTexcoordVertex::ms_decl, s_planeIndices, BX_COUNTOF(s_planeIndices) );
 
 	const bgfx::Memory* mem;
 
@@ -954,8 +949,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 	bgfx::TextureHandle fieldstoneTex = bgfx::createTexture(mem);
 
 	// Setup lights.
-	const uint8_t colorCount = 5;
-	const float rgbInnerR[colorCount][4] =
+	const float rgbInnerR[][4] =
 	{
 		{ 1.0f, 0.7f, 0.2f, 0.0f }, //yellow
 		{ 0.7f, 0.2f, 1.0f, 0.0f }, //purple
@@ -967,7 +961,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 	float lightRgbInnerR[MAX_NUM_LIGHTS][4];
 	for (uint8_t ii = 0, jj = 0; ii < MAX_NUM_LIGHTS; ++ii, ++jj)
 	{
-		const uint8_t index = jj%colorCount;
+		const uint8_t index = jj%BX_COUNTOF(rgbInnerR);
 		lightRgbInnerR[ii][0] = rgbInnerR[index][0];
 		lightRgbInnerR[ii][1] = rgbInnerR[index][1];
 		lightRgbInnerR[ii][2] = rgbInnerR[index][2];
@@ -977,7 +971,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 	// Set view and projection matrices.
 	const float aspect = float(viewState.m_width)/float(viewState.m_height);
-	mtxProj(viewState.m_proj, 60.0f, aspect, 0.1f, 100.0f);
+	bx::mtxProj(viewState.m_proj, 60.0f, aspect, 0.1f, 100.0f);
 
 	float initialPos[3] = { 0.0f, 18.0f, -40.0f };
 	cameraCreate();
@@ -1033,10 +1027,10 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		}
 
 		imguiSeparatorLine();
-		imguiSlider("Lights", &settings_numLights, 1.0f, float(MAX_NUM_LIGHTS), 1.0f);
+		imguiSlider("Lights", settings_numLights, 1.0f, float(MAX_NUM_LIGHTS), 1.0f);
 		if (scene == StencilReflectionScene)
 		{
-			imguiSlider("Reflection value", &settings_reflectionValue, 0.0f, 1.0f, 0.01f);
+			imguiSlider("Reflection value", settings_reflectionValue, 0.0f, 1.0f, 0.01f);
 		}
 
 		if (imguiCheck("Update lights", settings_updateLights) )
@@ -1107,7 +1101,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 		// Floor position.
 		float floorMtx[16];
-		mtxSRT(floorMtx
+		bx::mtxSRT(floorMtx
 			, 20.0f  //scaleX
 			, 20.0f  //scaleY
 			, 20.0f  //scaleZ
@@ -1121,7 +1115,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 		// Bunny position.
 		float bunnyMtx[16];
-		mtxSRT(bunnyMtx
+		bx::mtxSRT(bunnyMtx
 			, 5.0f
 			, 5.0f
 			, 5.0f
@@ -1146,7 +1140,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		float columnMtx[4][16];
 		for (uint8_t ii = 0; ii < 4; ++ii)
 		{
-			mtxSRT(columnMtx[ii]
+			bx::mtxSRT(columnMtx[ii]
 				, 1.0f
 				, 1.0f
 				, 1.0f
@@ -1163,7 +1157,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		float cubeMtx[numCubes][16];
 		for (uint16_t ii = 0; ii < numCubes; ++ii)
 		{
-			mtxSRT(cubeMtx[ii]
+			bx::mtxSRT(cubeMtx[ii]
 				, 1.0f
 				, 1.0f
 				, 1.0f
@@ -1178,7 +1172,8 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 		// Make sure at the beginning everything gets cleared.
 		clearView(0, BGFX_CLEAR_COLOR_BIT | BGFX_CLEAR_DEPTH_BIT | BGFX_CLEAR_STENCIL_BIT, clearValues);
-		submit(0);
+		bgfx::submit(0);
+		s_viewMask |= 1;
 
 		// Bunny and columns color.
 		s_uniforms.m_color[0] = 0.70f;
@@ -1217,14 +1212,14 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 				float reflectedLights[MAX_NUM_LIGHTS][4];
 				for (uint8_t ii = 0; ii < numLights; ++ii)
 				{
-					vec3MulMtx(reflectedLights[ii], lightPosRadius[ii], reflectMtx);
+					bx::vec3MulMtx(reflectedLights[ii], lightPosRadius[ii], reflectMtx);
 					reflectedLights[ii][3] = lightPosRadius[ii][3];
 				}
 				memcpy(s_uniforms.m_lightPosRadius, reflectedLights, numLights * 4*sizeof(float));
 
 				// Reflect and submit bunny.
 				float mtxReflectedBunny[16];
-				mtxMul(mtxReflectedBunny, bunnyMtx, reflectMtx);
+				bx::mtxMul(mtxReflectedBunny, bunnyMtx, reflectMtx);
 				bunnyMesh.submit(RENDER_VIEWID_RANGE1_PASS_1
 					, mtxReflectedBunny
 					, programColorLightning
@@ -1235,7 +1230,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 				float mtxReflectedColumn[16];
 				for (uint8_t ii = 0; ii < 4; ++ii)
 				{
-					mtxMul(mtxReflectedColumn, columnMtx[ii], reflectMtx);
+					bx::mtxMul(mtxReflectedColumn, columnMtx[ii], reflectMtx);
 					columnMesh.submit(RENDER_VIEWID_RANGE1_PASS_1
 						, mtxReflectedColumn
 						, programColorLightning
@@ -1314,7 +1309,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 				float plane_pos[3] = { 0.0f, 0.0f, 0.0f };
 				float normal[3] = { 0.0f, 1.0f, 0.0f };
 				memcpy(ground, normal, sizeof(float) * 3);
-				ground[3] = -vec3Dot(plane_pos, normal) - 0.01f; // - 0.01 against z-fighting
+				ground[3] = -bx::vec3Dot(plane_pos, normal) - 0.01f; // - 0.01 against z-fighting
 
 				for (uint8_t ii = 0, viewId = RENDER_VIEWID_RANGE5_PASS_6; ii < numLights; ++ii, ++viewId)
 				{
@@ -1335,7 +1330,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 					// Submit bunny's shadow.
 					float mtxShadowedBunny[16];
-					mtxMul(mtxShadowedBunny, bunnyMtx, shadowMtx);
+					bx::mtxMul(mtxShadowedBunny, bunnyMtx, shadowMtx);
 					bunnyMesh.submit(viewId
 						, mtxShadowedBunny
 						, programColorBlack
@@ -1346,7 +1341,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 					float mtxShadowedCube[16];
 					for (uint8_t jj = 0; jj < numCubes; ++jj)
 					{
-						mtxMul(mtxShadowedCube, cubeMtx[jj], shadowMtx);
+						bx::mtxMul(mtxShadowedCube, cubeMtx[jj], shadowMtx);
 						cubeMesh.submit(viewId
 							, mtxShadowedCube
 							, programColorBlack
@@ -1414,7 +1409,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 		// Draw floor bottom.
 		float floorBottomMtx[16];
-		mtxSRT(floorBottomMtx
+		bx::mtxSRT(floorBottomMtx
 			, 20.0f  //scaleX
 			, 20.0f  //scaleY
 			, 20.0f  //scaleZ

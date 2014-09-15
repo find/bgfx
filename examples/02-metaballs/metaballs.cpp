@@ -431,7 +431,7 @@ uint32_t triangulate(uint8_t* _result, uint32_t _stride, const float* __restrict
 	const int8_t* indices = s_indices[cubeindex];
 	for (uint32_t ii = 0; indices[ii] != -1; ++ii)
 	{
-		const float* vertex = verts[indices[ii] ];
+		const float* vertex = verts[uint8_t(indices[ii])];
 
 		float* xyz = (float*)_result;
 		xyz[0] = _xyz[0] + vertex[0];
@@ -547,8 +547,8 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		
 		float view[16];
 		float proj[16];
-		mtxLookAt(view, eye, at);
-		mtxProj(proj, 60.0f, float(width)/float(height), 0.1f, 100.0f);
+		bx::mtxLookAt(view, eye, at);
+		bx::mtxProj(proj, 60.0f, float(width)/float(height), 0.1f, 100.0f);
 
 		// Set view and projection matrix for view 0.
 		bgfx::setViewTransform(0, view, proj);
@@ -629,7 +629,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 						grid[xoffset-zpitch].m_val - grid[xoffset+zpitch].m_val,
 					};
 
-					vec3Norm(grid[xoffset].m_normal, normal);
+					bx::vec3Norm(grid[xoffset].m_normal, normal);
 				}
 			}
 		}
@@ -688,7 +688,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		profTriangulate = bx::getHPCounter() - profTriangulate;
 
 		float mtx[16];
-		mtxRotateXY(mtx, time*0.67f, time);
+		bx::mtxRotateXY(mtx, time*0.67f, time);
 
 		// Set model matrix for rendering.
 		bgfx::setTransform(mtx);

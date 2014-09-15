@@ -5,7 +5,7 @@
 
 #include "bgfx_p.h"
 
-#if BX_PLATFORM_NACL & (BGFX_CONFIG_RENDERER_OPENGLES|BGFX_CONFIG_RENDERER_OPENGL)
+#if BX_PLATFORM_NACL && (BGFX_CONFIG_RENDERER_OPENGLES || BGFX_CONFIG_RENDERER_OPENGL)
 #	include <bgfxplatform.h>
 #	include "renderer_gl.h"
 
@@ -158,9 +158,24 @@ namespace bgfx
 		s_ppapi.resize(_width, _height, _vsync);
 	}
 
-	void GlContext::swap()
+	SwapChainGL* GlContext::createSwapChain(void* /*_nwh*/)
+	{
+		BX_CHECK(false, "Shouldn't be called!");
+		return NULL;
+	}
+
+	void GlContext::destorySwapChain(SwapChainGL*  /*_swapChain*/)
+	{
+		BX_CHECK(false, "Shouldn't be called!");
+	}
+
+	void GlContext::swap(SwapChainGL* /*_swapChain*/)
 	{
 		s_ppapi.swap();
+	}
+
+	void GlContext::makeCurrent(SwapChainGL* /*_swapChain*/)
+	{
 	}
 
 	void GlContext::import()
@@ -174,4 +189,4 @@ namespace bgfx
 
 } // namespace bgfx
 
-#endif // BX_PLATFORM_NACL & (BGFX_CONFIG_RENDERER_OPENGLES|BGFX_CONFIG_RENDERER_OPENGL)
+#endif // BX_PLATFORM_NACL && (BGFX_CONFIG_RENDERER_OPENGLES || BGFX_CONFIG_RENDERER_OPENGL)

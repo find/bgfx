@@ -12,8 +12,8 @@
 #include <bgfx.h>
 #include <bx/timer.h>
 #include <bx/readerwriter.h>
+#include <bx/fpumath.h>
 #include "entry/entry.h"
-#include "fpumath.h"
 
 #define RENDER_SHADOW_PASS_ID 0
 #define RENDER_SHADOW_PASS_BIT (1<<RENDER_SHADOW_PASS_ID)
@@ -54,8 +54,7 @@ struct PosNormalVertex
 	uint32_t m_normal;
 };
 
-static const uint32_t s_numHPlaneVertices = 4;
-static PosNormalVertex s_hplaneVertices[s_numHPlaneVertices] =
+static PosNormalVertex s_hplaneVertices[] =
 {
 	{ -1.0f, 0.0f,  1.0f, packF4u(0.0f, 1.0f, 0.0f) },
 	{  1.0f, 0.0f,  1.0f, packF4u(0.0f, 1.0f, 0.0f) },
@@ -63,8 +62,7 @@ static PosNormalVertex s_hplaneVertices[s_numHPlaneVertices] =
 	{  1.0f, 0.0f, -1.0f, packF4u(0.0f, 1.0f, 0.0f) },
 };
 
-static const uint32_t s_numPlaneIndices = 6;
-static const uint16_t s_planeIndices[s_numPlaneIndices] =
+static const uint16_t s_planeIndices[] =
 {
 	0, 1, 2,
 	1, 3, 2,
@@ -184,7 +182,11 @@ struct Group
 	Obb m_obb;
 	PrimitiveArray m_prims;
 };
-;
+
+namespace bgfx
+{
+	int32_t read(bx::ReaderI* _reader, bgfx::VertexDecl& _decl);
+}
 
 struct Mesh
 {
@@ -213,8 +215,8 @@ struct Mesh
 
 	void load(const char* _filePath)
 	{
-#define BGFX_CHUNK_MAGIC_VB BX_MAKEFOURCC('V', 'B', ' ', 0x0)
-#define BGFX_CHUNK_MAGIC_IB BX_MAKEFOURCC('I', 'B', ' ', 0x0)
+#define BGFX_CHUNK_MAGIC_VB  BX_MAKEFOURCC('V', 'B', ' ', 0x1)
+#define BGFX_CHUNK_MAGIC_IB  BX_MAKEFOURCC('I', 'B', ' ', 0x0)
 #define BGFX_CHUNK_MAGIC_PRI BX_MAKEFOURCC('P', 'R', 'I', 0x0)
 
 		bx::CrtFileReader reader;
@@ -233,7 +235,7 @@ struct Mesh
 					bx::read(&reader, group.m_aabb);
 					bx::read(&reader, group.m_obb);
 
-					bx::read(&reader, m_decl);
+					bgfx::read(&reader, m_decl);
 					uint16_t stride = m_decl.getStride();
 
 					uint16_t numVertices;
@@ -437,7 +439,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 	bunnyMesh.load("meshes/bunny.bin");
 	cubeMesh.load("meshes/cube.bin");
 	hollowcubeMesh.load("meshes/hollowcube.bin");
-	hplaneMesh.load(s_hplaneVertices, s_numHPlaneVertices, PosNormalDecl, s_planeIndices, s_numPlaneIndices);
+	hplaneMesh.load(s_hplaneVertices, BX_COUNTOF(s_hplaneVertices), PosNormalDecl, s_planeIndices, BX_COUNTOF(s_planeIndices) );
 
 	// Render targets.
 	uint16_t shadowMapSize = 512;
@@ -484,10 +486,10 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 	const float eye[3] = { 0.0f, 30.0f, -60.0f };
 	const float at[3]  = { 0.0f, 5.0f, 0.0f };
-	mtxLookAt(view, eye, at);
+	bx::mtxLookAt(view, eye, at);
 
 	const float aspect = float(int32_t(width) ) / float(int32_t(height) );
-	mtxProj(proj, 60.0f, aspect, 0.1f, 1000.0f);
+	bx::mtxProj(proj, 60.0f, aspect, 0.1f, 1000.0f);
 
 	// Time acumulators.
 	float timeAccumulatorLight = 0.0f;
@@ -526,28 +528,28 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 		// Setup instance matrices.
 		float mtxFloor[16];
-		mtxSRT(mtxFloor
+		bx::mtxSRT(mtxFloor
 			, 30.0f, 30.0f, 30.0f
 			, 0.0f, 0.0f, 0.0f
 			, 0.0f, 0.0f, 0.0f
 			);
 
 		float mtxBunny[16];
-		mtxSRT(mtxBunny
+		bx::mtxSRT(mtxBunny
 			, 5.0f, 5.0f, 5.0f
 			, 0.0f, float(M_PI) - timeAccumulatorScene, 0.0f
 			, 15.0f, 5.0f, 0.0f
 			);
 
 		float mtxHollowcube[16];
-		mtxSRT(mtxHollowcube
+		bx::mtxSRT(mtxHollowcube
 			, 2.5f, 2.5f, 2.5f
 			, 0.0f, 1.56f - timeAccumulatorScene, 0.0f
 			, 0.0f, 10.0f, 0.0f
 			);
 
 		float mtxCube[16];
-		mtxSRT(mtxCube
+		bx::mtxSRT(mtxCube
 			, 2.5f, 2.5f, 2.5f
 			, 0.0f, 1.56f - timeAccumulatorScene, 0.0f
 			, -15.0f, 5.0f, 0.0f
@@ -564,10 +566,10 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 			-lightPos[2],
 		};
 		const float at[3] = { 0.0f, 0.0f, 0.0f };
-		mtxLookAt(lightView, eye, at);
+		bx::mtxLookAt(lightView, eye, at);
 
 		const float area = 30.0f;
-		mtxOrtho(lightProj, -area, area, -area, area, -100.0f, 100.0f);
+		bx::mtxOrtho(lightProj, -area, area, -area, area, -100.0f, 100.0f);
 
 		bgfx::setViewRect(RENDER_SHADOW_PASS_ID, 0, 0, shadowMapSize, shadowMapSize);
 		bgfx::setViewFrameBuffer(RENDER_SHADOW_PASS_ID, s_shadowMapFB);
@@ -596,29 +598,29 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		};
 
 		float mtxTmp[16];
-		mtxMul(mtxTmp, lightProj, mtxCrop);
-		mtxMul(mtxShadow, lightView, mtxTmp);
+		bx::mtxMul(mtxTmp, lightProj, mtxCrop);
+		bx::mtxMul(mtxShadow, lightView, mtxTmp);
 
 		// Floor.
-		mtxMul(lightMtx, mtxFloor, mtxShadow);
+		bx::mtxMul(lightMtx, mtxFloor, mtxShadow);
 		bgfx::setUniform(u_lightMtx, lightMtx);
 		hplaneMesh.submit(RENDER_SCENE_PASS_ID, mtxFloor, progMesh);
 		hplaneMesh.submitShadow(RENDER_SHADOW_PASS_ID, mtxFloor, progShadow);
 
 		// Bunny.
-		mtxMul(lightMtx, mtxBunny, mtxShadow);
+		bx::mtxMul(lightMtx, mtxBunny, mtxShadow);
 		bgfx::setUniform(u_lightMtx, lightMtx);
 		bunnyMesh.submit(RENDER_SCENE_PASS_ID, mtxBunny, progMesh);
 		bunnyMesh.submitShadow(RENDER_SHADOW_PASS_ID, mtxBunny, progShadow);
 
 		// Hollow cube.
-		mtxMul(lightMtx, mtxHollowcube, mtxShadow);
+		bx::mtxMul(lightMtx, mtxHollowcube, mtxShadow);
 		bgfx::setUniform(u_lightMtx, lightMtx);
 		hollowcubeMesh.submit(RENDER_SCENE_PASS_ID, mtxHollowcube, progMesh);
 		hollowcubeMesh.submitShadow(RENDER_SHADOW_PASS_ID, mtxHollowcube, progShadow);
 
 		// Cube.
-		mtxMul(lightMtx, mtxCube, mtxShadow);
+		bx::mtxMul(lightMtx, mtxCube, mtxShadow);
 		bgfx::setUniform(u_lightMtx, lightMtx);
 		cubeMesh.submit(RENDER_SCENE_PASS_ID, mtxCube, progMesh);
 		cubeMesh.submitShadow(RENDER_SHADOW_PASS_ID, mtxCube, progShadow);
@@ -626,7 +628,6 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		// Advance to next frame. Rendering thread will be kicked to
 		// process submitted rendering primitives.
 		bgfx::frame();
-
 	}
 
 	bunnyMesh.unload();

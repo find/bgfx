@@ -20,7 +20,10 @@
 
 extern "C"
 {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 #include <android_native_app_glue.c>
+#pragma GCC diagnostic pop
 } // extern "C"
 
 namespace entry
@@ -205,6 +208,11 @@ namespace entry
 	void setWindowSize(uint32_t _width, uint32_t _height)
 	{
 		BX_UNUSED(_width, _height);
+	}
+
+	void setWindowTitle(const char* _title)
+	{
+		BX_UNUSED(_title);
 	}
 
 	void toggleWindowFrame()

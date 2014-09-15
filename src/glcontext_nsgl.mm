@@ -5,7 +5,7 @@
 
 #include "bgfx_p.h"
 
-#if BX_PLATFORM_OSX && (BGFX_CONFIG_RENDERER_OPENGLES2|BGFX_CONFIG_RENDERER_OPENGLES3|BGFX_CONFIG_RENDERER_OPENGL)
+#if BX_PLATFORM_OSX && (BGFX_CONFIG_RENDERER_OPENGLES || BGFX_CONFIG_RENDERER_OPENGL)
 #	include "renderer_gl.h"
 #	include <Cocoa/Cocoa.h>
 #	include <bx/os.h>
@@ -88,11 +88,27 @@ namespace bgfx
 		[glContext setValues:&interval forParameter:NSOpenGLCPSwapInterval];
 	}
 
-	void GlContext::swap()
+	SwapChainGL* GlContext::createSwapChain(void* /*_nwh*/)
 	{
+		BX_CHECK(false, "Shouldn't be called!");
+		return NULL;
+	}
+
+	void GlContext::destorySwapChain(SwapChainGL*  /*_swapChain*/)
+	{
+		BX_CHECK(false, "Shouldn't be called!");
+	}
+
+	void GlContext::swap(SwapChainGL* _swapChain)
+	{
+		BX_CHECK(NULL == _swapChain, "Shouldn't be called!"); BX_UNUSED(_swapChain);
 		NSOpenGLContext* glContext = (NSOpenGLContext*)m_context;
 		[glContext makeCurrentContext];
 		[glContext flushBuffer];
+	}
+
+	void GlContext::makeCurrent(SwapChainGL* /*_swapChain*/)
+	{
 	}
 
 	void GlContext::import()

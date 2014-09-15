@@ -99,7 +99,7 @@ bgfx::ProgramHandle program;
 bgfx::VertexBufferHandle vbh;
 bgfx::IndexBufferHandle ibh;
 
-bool mainloop()
+BX_NO_INLINE bool mainloop()
 {
 	if (!entry::processEvents(width, height, debug, reset, &mouseState) )
 	{
@@ -115,7 +115,7 @@ bool mainloop()
 
 		if (deltaTimeNs > 1000000)
 		{
-			deltaTimeAvgNs = deltaTimeNs / numFrames;
+			deltaTimeAvgNs = deltaTimeNs / bx::int64_max(1, numFrames);
 
 			if (autoAdjust)
 			{
@@ -162,7 +162,7 @@ bool mainloop()
 			autoAdjust ^= true;
 		}
 
-		imguiSlider("Dim", &dim, 5, 40);
+		imguiSlider("Dim", dim, 5, 40);
 		imguiLabel("Draw calls: %d", dim*dim*dim);
 		imguiLabel("Avg Delta Time (1 second) [ms]: %0.4f", deltaTimeAvgNs/1000.0f);
 
@@ -174,8 +174,8 @@ bool mainloop()
 
 		float view[16];
 		float proj[16];
-		mtxLookAt(view, eye, at);
-		mtxProj(proj, 60.0f, float(width)/float(height), 0.1f, 100.0f);
+		bx::mtxLookAt(view, eye, at);
+		bx::mtxProj(proj, 60.0f, float(width)/float(height), 0.1f, 100.0f);
 
 		// Set view and projection matrix for view 0.
 		bgfx::setViewTransform(0, view, proj);
@@ -195,7 +195,7 @@ bool mainloop()
 
 		float mtxS[16];
 		const float scale = 0 == transform ? 0.25f : 0.0f;
-		mtxScale(mtxS, scale, scale, scale);
+		bx::mtxScale(mtxS, scale, scale, scale);
 
 		const float step = 0.6f;
 		float pos[3];
@@ -210,10 +210,10 @@ bool mainloop()
 				for (uint32_t xx = 0; xx < uint32_t(dim); ++xx)
 				{
 					float mtxR[16];
-					mtxRotateXYZ(mtxR, time + xx*0.21f, time + yy*0.37f, time + yy*0.13f);
+					bx::mtxRotateXYZ(mtxR, time + xx*0.21f, time + yy*0.37f, time + yy*0.13f);
 
 					float mtx[16];
-					mtxMul(mtx, mtxS, mtxR);
+					bx::mtxMul(mtx, mtxS, mtxR);
 
 					mtx[12] = pos[0] + float(xx)*step;
 					mtx[13] = pos[1] + float(yy)*step;
@@ -293,11 +293,12 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 			break;
 	}
 
-	bgfx::ShaderHandle vsh = bgfx::createShader(vs_drawstress);
-	bgfx::ShaderHandle fsh = bgfx::createShader(fs_drawstress);
-
 	// Create program from shaders.
-	program = bgfx::createProgram(vsh, fsh);
+	program = bgfx::createProgram(
+		  bgfx::createShader(vs_drawstress)
+		, bgfx::createShader(fs_drawstress)
+		, true /* destroy shaders when program is destroyed */
+		);
 
 	const bgfx::Memory* mem;
 
@@ -308,13 +309,6 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 	// Create static index buffer.
 	mem = bgfx::makeRef(s_cubeIndices, sizeof(s_cubeIndices) );
 	ibh = bgfx::createIndexBuffer(mem);
-
-	// We can destroy vertex and fragment shader here since
-	// their reference is kept inside bgfx after calling createProgram.
-	// Vertex and fragment shader will be destroyed once program is
-	// destroyed.
-	bgfx::destroyShader(vsh);
-	bgfx::destroyShader(fsh);
 
 	imguiCreate(s_droidSansTtf);
 

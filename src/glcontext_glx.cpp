@@ -5,7 +5,7 @@
 
 #include "bgfx_p.h"
 
-#if BX_PLATFORM_LINUX & (BGFX_CONFIG_RENDERER_OPENGLES|BGFX_CONFIG_RENDERER_OPENGL)
+#if (BX_PLATFORM_FREEBSD || BX_PLATFORM_LINUX) && (BGFX_CONFIG_RENDERER_OPENGLES || BGFX_CONFIG_RENDERER_OPENGL)
 #	include "renderer_gl.h"
 #	define GLX_GLXEXT_PROTOTYPES
 #	include <glx/glxext.h>
@@ -212,9 +212,25 @@ namespace bgfx
 		}
 	}
 
-	void GlContext::swap()
+	SwapChainGL* GlContext::createSwapChain(void* /*_nwh*/)
 	{
+		BX_CHECK(false, "Shouldn't be called!");
+		return NULL;
+	}
+
+	void GlContext::destorySwapChain(SwapChainGL*  /*_swapChain*/)
+	{
+		BX_CHECK(false, "Shouldn't be called!");
+	}
+
+	void GlContext::swap(SwapChainGL* _swapChain)
+	{
+		BX_CHECK(NULL == _swapChain, "Shouldn't be called!"); BX_UNUSED(_swapChain);
 		glXSwapBuffers(s_display, s_window);
+	}
+
+	void GlContext::makeCurrent(SwapChainGL* /*_swapChain*/)
+	{
 	}
 
 	void GlContext::import()
@@ -233,4 +249,4 @@ namespace bgfx
 
 } // namespace bgfx
 
-#endif // BX_PLATFORM_LINUX & (BGFX_CONFIG_RENDERER_OPENGLES|BGFX_CONFIG_RENDERER_OPENGL)
+#endif // (BX_PLATFORM_FREEBSD || BX_PLATFORM_LINUX) && (BGFX_CONFIG_RENDERER_OPENGLES || BGFX_CONFIG_RENDERER_OPENGL)
