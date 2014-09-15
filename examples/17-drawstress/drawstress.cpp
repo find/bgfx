@@ -71,7 +71,7 @@ static const uint16_t s_cubeIndices[36] =
 
 uint32_t width = 1280;
 uint32_t height = 720;
-uint32_t debug = BGFX_DEBUG_TEXT;
+uint32_t debug = BGFX_DEBUG_TEXT | BGFX_DEBUG_STATS;
 uint32_t reset = BGFX_RESET_NONE;
 
 bool autoAdjust = true;
