@@ -9,12 +9,12 @@ void* loadfile(char const* filename)
 {
     FILE* _file = fopen(filename, "rb");
     assert(_file);
-	long int pos = ftell(_file);
-	fseek(_file, 0L, SEEK_END);
-	long int size = ftell(_file);
-	fseek(_file, pos, SEEK_SET);
+    long int pos = ftell(_file);
+    fseek(_file, 0L, SEEK_END);
+    long int size = ftell(_file);
+    fseek(_file, pos, SEEK_SET);
 
-	void* data = malloc(size);
+    void* data = malloc(size);
     assert(fread(data, 1, size, _file) == size);
     fclose(_file);
 
@@ -32,16 +32,22 @@ int _main_(int, char**)
 
     bgfx::setDebug(debug);
 
-    bgfx::setViewClear(0,
-            BGFX_CLEAR_COLOR_BIT | BGFX_CLEAR_DEPTH_BIT,
-            0x111111ff, 1.0f, 0);
-
-    void* fontdata = loadfile("assets/font/roboto-regular.ttf");
+    void* fontdata = loadfile("assets/font/visitor1.ttf");
     imguiCreate(fontdata);
     free(fontdata);
 
     entry::MouseState mouseState;
+    float rgb[3] = {0.3f, 0.3f, 0.3f};
+    bool colorwheelActivated = true;
+    int32_t scrollArea = 0;
     while(!entry::processEvents(width, height, debug, reset, &mouseState)) {
+        auto encodeColor = [&rgb]()->uint32_t{
+            return uint32_t(rgb[0]*255)<<24|uint32_t(rgb[1]*255)<<16|uint32_t(rgb[2]*255)<<8|0xff;
+        };
+        bgfx::setViewClear(0,
+                BGFX_CLEAR_COLOR_BIT | BGFX_CLEAR_DEPTH_BIT,
+                encodeColor(), 1.0f, 0);
+
         bgfx::setViewRect(0, 0, 0, width, height);
         
         bgfx::submit(0);
@@ -50,14 +56,19 @@ int _main_(int, char**)
 
         imguiBeginFrame(mouseState.m_mx, mouseState.m_my,
               (mouseState.m_buttons[entry::MouseButton::Left  ] ? IMGUI_MBUT_LEFT  : 0)
-			| (mouseState.m_buttons[entry::MouseButton::Right ] ? IMGUI_MBUT_RIGHT : 0)
-			, 0
-			, width
-			, height);
-        int32_t scrollArea = 0;
-        imguiBeginScrollArea("Test", width-210, 100, 200, 400, &scrollArea);
+            | (mouseState.m_buttons[entry::MouseButton::Right ] ? IMGUI_MBUT_RIGHT : 0)
+            , 0
+            , width
+            , height);
+        imguiBeginScrollArea("Test", width-350, 50, 330, 400, &scrollArea);
         imguiSeparatorLine();
         imguiLabel("foobar");
+        if(imguiButton("say hi"))
+            fprintf(stdout, "hi there\n");
+        imguiColorWheel("bg color", rgb, colorwheelActivated);
+        imguiSeparatorLine();
+        if(imguiButton("quit"))
+            break;
         imguiEndScrollArea();
         imguiEndFrame();
 
