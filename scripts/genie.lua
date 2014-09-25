@@ -27,6 +27,7 @@ solution "bgfx"
 	}
 
 	language "C++"
+	startproject "example-00-helloworld"
 
 BGFX_DIR = (path.getabsolute("..") .. "/")
 local BGFX_BUILD_DIR = (BGFX_DIR .. ".build/")
@@ -209,6 +210,7 @@ exampleProject("18-ibl")
 exampleProject("19-oit")
 exampleProject("20-nanovg")
 exampleProject("21-deferred")
+exampleProject("22-windows")
 
 if _OPTIONS["with-shared-lib"] then
 	bgfxProject("-shared-lib", "SharedLib", {})

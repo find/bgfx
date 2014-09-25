@@ -532,7 +532,7 @@ namespace bgfx
 
 				for (uint32_t ii = 0, num = g_caps.maxFBAttachments; ii < num; ++ii)
 				{
-					fragMem[ii] = makeRef(mem[ii].data, mem[ii].size);
+					fragMem[ii] = makeRef(mem[ii].data, uint32_t(mem[ii].size) );
 				}
 			}
 			else if (RendererType::Direct3D11 == g_caps.rendererType)
@@ -553,7 +553,7 @@ namespace bgfx
 
 				for (uint32_t ii = 0, num = g_caps.maxFBAttachments; ii < num; ++ii)
 				{
-					fragMem[ii] = makeRef(mem[ii].data, mem[ii].size);
+					fragMem[ii] = makeRef(mem[ii].data, uint32_t(mem[ii].size) );
 				}
 			}
 			else if (RendererType::OpenGLES == g_caps.rendererType
@@ -575,7 +575,7 @@ namespace bgfx
 
 				for (uint32_t ii = 0, num = g_caps.maxFBAttachments; ii < num; ++ii)
 				{
-					fragMem[ii] = makeRef(mem[ii].data, mem[ii].size);
+					fragMem[ii] = makeRef(mem[ii].data, uint32_t(mem[ii].size) );
 				}
 			}
 
@@ -1400,7 +1400,7 @@ again:
 			{
 				RendererType::Enum first  = RendererType::Direct3D9;
 				RendererType::Enum second = RendererType::Direct3D11;
-				if (0x602 == getWindowsVersion() )
+				if (0x601 == getWindowsVersion() )
 				{
 					first  = RendererType::Direct3D11;
 					second = RendererType::Direct3D9;

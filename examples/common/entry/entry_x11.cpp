@@ -160,7 +160,12 @@ namespace entry
 									, &windowAttrs
 									);
 
-			const char *wmDeleteWindowName = "WM_DELETE_WINDOW";
+			// Clear window to black.
+			XSetWindowAttributes attr;
+			memset(&attr, 0, sizeof(attr) );
+			XChangeWindowAttributes(m_display, m_window, CWBackPixel, &attr);
+
+			const char* wmDeleteWindowName = "WM_DELETE_WINDOW";
 			Atom wmDeleteWindow;
 			XInternAtoms(m_display, (char **)&wmDeleteWindowName, 1, False, &wmDeleteWindow);
 			XSetWMProtocols(m_display, m_window, &wmDeleteWindow, 1);
@@ -168,6 +173,7 @@ namespace entry
 			XMapWindow(m_display, m_window);
 			XStoreName(m_display, m_window, "BGFX");
 
+			//
 			bgfx::x11SetDisplayWindow(m_display, m_window);
 
 			MainThreadEntry mte;
@@ -176,6 +182,9 @@ namespace entry
 
 			bx::Thread thread;
 			thread.init(mte.threadFunc, &mte);
+
+			WindowHandle defaultWindow = { 0 };
+			m_eventQueue.postSizeEvent(defaultWindow, ENTRY_DEFAULT_WIDTH, ENTRY_DEFAULT_HEIGHT);
 
 			while (!m_exit)
 			{
@@ -193,7 +202,7 @@ namespace entry
 							break;
 
 						case ClientMessage:
-							if((Atom)event.xclient.data.l[0] == wmDeleteWindow)
+							if ( (Atom)event.xclient.data.l[0] == wmDeleteWindow)
 							{
 								m_eventQueue.postExitEvent();
 							}
@@ -214,7 +223,8 @@ namespace entry
 
 								if (MouseButton::None != mb)
 								{
-									m_eventQueue.postMouseEvent(xbutton.x
+									m_eventQueue.postMouseEvent(defaultWindow
+										, xbutton.x
 										, xbutton.y
 										, 0
 										, mb
@@ -227,7 +237,8 @@ namespace entry
 						case MotionNotify:
 							{
 								const XMotionEvent& xmotion = event.xmotion;
-								m_eventQueue.postMouseEvent(xmotion.x
+								m_eventQueue.postMouseEvent(defaultWindow
+										, xmotion.x
 										, xmotion.y
 										, 0
 										);
@@ -255,7 +266,7 @@ namespace entry
 										Key::Enum key = fromXk(keysym);
 										if (Key::None != key)
 										{
-											m_eventQueue.postKeyEvent(key, m_modifiers, KeyPress == event.type);
+											m_eventQueue.postKeyEvent(defaultWindow, key, m_modifiers, KeyPress == event.type);
 										}
 									}
 									break;
@@ -267,6 +278,7 @@ namespace entry
 							{
 								const XResizeRequestEvent& xresize = event.xresizerequest;
 								XResizeWindow(m_display, m_window, xresize.width, xresize.height);
+								m_eventQueue.postSizeEvent(defaultWindow, xresize.width, xresize.height);
 							}
 							break;
 					}
@@ -310,13 +322,36 @@ namespace entry
 		return s_ctx.m_eventQueue.poll();
 	}
 
+	const Event* poll(WindowHandle _handle)
+	{
+		return s_ctx.m_eventQueue.poll(_handle);
+	}
+
 	void release(const Event* _event)
 	{
 		s_ctx.m_eventQueue.release(_event);
 	}
 
-	void setWindowSize(uint32_t _width, uint32_t _height)
+	WindowHandle createWindow(int32_t _x, int32_t _y, uint32_t _width, uint32_t _height, uint32_t _flags, const char* _title)
 	{
+		BX_UNUSED(_x, _y, _width, _height, _flags, _title);
+		WindowHandle handle = { UINT16_MAX };
+		return handle;
+	}
+
+	void destroyWindow(WindowHandle _handle)
+	{
+		BX_UNUSED(_handle);
+	}
+
+	void setWindowPos(WindowHandle _handle, int32_t _x, int32_t _y)
+	{
+		BX_UNUSED(_handle, _x, _y);
+	}
+
+	void setWindowSize(WindowHandle _handle, uint32_t _width, uint32_t _height)
+	{
+		BX_UNUSED(_handle);
 		XResizeRequestEvent ev;
 		ev.type = ResizeRequest;
 		ev.serial = 0;
@@ -328,18 +363,20 @@ namespace entry
 		XSendEvent(s_ctx.m_display, s_ctx.m_window, false, ResizeRedirectMask, (XEvent*)&ev);
 	}
 
-	void setWindowTitle(const char* _title)
+	void setWindowTitle(WindowHandle _handle, const char* _title)
 	{
-		BX_UNUSED(_title);
+		BX_UNUSED(_handle);
+		XStoreName(s_ctx.m_display, s_ctx.m_window, _title);
 	}
 
-	void toggleWindowFrame()
+	void toggleWindowFrame(WindowHandle _handle)
 	{
+		BX_UNUSED(_handle);
 	}
 
-	void setMouseLock(bool _lock)
+	void setMouseLock(WindowHandle _handle, bool _lock)
 	{
-		BX_UNUSED(_lock);
+		BX_UNUSED(_handle, _lock);
 	}
 
 } // namespace entry
