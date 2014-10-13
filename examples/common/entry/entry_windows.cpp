@@ -13,22 +13,24 @@
 #include <bx/thread.h>
 #include <bx/mutex.h>
 #include <bx/handlealloc.h>
+#include <tinystl/allocator.h>
+#include <tinystl/string.h>
 
 #include <windowsx.h>
 
-enum
-{
-	WM_USER_WINDOW_CREATE = WM_USER,
-	WM_USER_WINDOW_DESTROY,
-	WM_USER_WINDOW_SET_TITLE,
-	WM_USER_WINDOW_SET_POS,
-	WM_USER_WINDOW_SET_SIZE,
-	WM_USER_WINDOW_TOGGLE_FRAME,
-	WM_USER_WINDOW_MOUSE_LOCK,
-};
-
 namespace entry
 {
+	enum
+	{
+		WM_USER_WINDOW_CREATE = WM_USER,
+		WM_USER_WINDOW_DESTROY,
+		WM_USER_WINDOW_SET_TITLE,
+		WM_USER_WINDOW_SET_POS,
+		WM_USER_WINDOW_SET_SIZE,
+		WM_USER_WINDOW_TOGGLE_FRAME,
+		WM_USER_WINDOW_MOUSE_LOCK,
+	};
+
 	struct TranslateKeyModifiers
 	{
 		int m_vk;
@@ -89,7 +91,7 @@ namespace entry
 		uint32_t m_width;
 		uint32_t m_height;
 		uint32_t m_flags;
-		std::string m_title;
+		tinystl::string m_title;
 	};
 
 	struct Context
@@ -210,7 +212,10 @@ namespace entry
 				, 0
 				);
 
-			m_flags[0] = ENTRY_WINDOW_FLAG_ASPECT_RATIO;
+			m_flags[0] = 0
+				| ENTRY_WINDOW_FLAG_ASPECT_RATIO
+				| ENTRY_WINDOW_FLAG_FRAME
+				;
 
 			bgfx::winSetHwnd(m_hwnd[0]);
 
@@ -291,6 +296,7 @@ namespace entry
 						WindowHandle handle = { (uint16_t)_wparam };
 						PostMessageA(m_hwnd[_wparam], WM_CLOSE, 0, 0);
 						m_eventQueue.postWindowEvent(handle);
+						DestroyWindow(m_hwnd[_wparam]);
 						m_hwnd[_wparam] = 0;
 					}
 					break;
@@ -352,7 +358,8 @@ namespace entry
 					{
 						destroyWindow(findHandle(_hwnd) );
 					}
-					break;
+					// Don't process message. Window will be destroyed later.
+					return 0;
 
 				case WM_SIZING:
 					{

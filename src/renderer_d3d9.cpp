@@ -254,6 +254,10 @@ namespace bgfx
 	static const GUID IID_IDirect3D9         = { 0x81bdcbca, 0x64d4, 0x426d, { 0xae, 0x8d, 0xad, 0x1, 0x47, 0xf4, 0x27, 0x5c } };
 	static const GUID IID_IDirect3DDevice9Ex = { 0xb18b10ce, 0x2649, 0x405a, { 0x87, 0xf, 0x95, 0xf7, 0x77, 0xd4, 0x31, 0x3a } };
 
+	static PFN_D3DPERF_SET_MARKER  D3DPERF_SetMarker;
+	static PFN_D3DPERF_BEGIN_EVENT D3DPERF_BeginEvent;
+	static PFN_D3DPERF_END_EVENT   D3DPERF_EndEvent;
+
 	struct RendererContextD3D9 : public RendererContextI
 	{
 		RendererContextD3D9()
@@ -301,18 +305,18 @@ namespace bgfx
 			m_d3d9dll = bx::dlopen("d3d9.dll");
 			BGFX_FATAL(NULL != m_d3d9dll, Fatal::UnableToInitialize, "Failed to load d3d9.dll.");
 
-#if BGFX_CONFIG_DEBUG_PIX
-			m_D3DPERF_SetMarker  = (D3DPERF_SetMarkerFunc )bx::dlsym(m_d3d9dll, "D3DPERF_SetMarker");
-			m_D3DPERF_BeginEvent = (D3DPERF_BeginEventFunc)bx::dlsym(m_d3d9dll, "D3DPERF_BeginEvent");
-			m_D3DPERF_EndEvent   = (D3DPERF_EndEventFunc  )bx::dlsym(m_d3d9dll, "D3DPERF_EndEvent");
+			if (BX_ENABLED(BGFX_CONFIG_DEBUG_PIX) )
+			{
+				D3DPERF_SetMarker  = (PFN_D3DPERF_SET_MARKER )bx::dlsym(m_d3d9dll, "D3DPERF_SetMarker");
+				D3DPERF_BeginEvent = (PFN_D3DPERF_BEGIN_EVENT)bx::dlsym(m_d3d9dll, "D3DPERF_BeginEvent");
+				D3DPERF_EndEvent   = (PFN_D3DPERF_END_EVENT  )bx::dlsym(m_d3d9dll, "D3DPERF_EndEvent");
 
-			BX_CHECK(NULL != m_D3DPERF_SetMarker
-				  && NULL != m_D3DPERF_BeginEvent
-				  && NULL != m_D3DPERF_EndEvent
-				  , "Failed to initialize PIX events."
-				  );
-#endif // BGFX_CONFIG_DEBUG_PIX
-
+				BX_CHECK(NULL != D3DPERF_SetMarker
+					  && NULL != D3DPERF_BeginEvent
+					  && NULL != D3DPERF_EndEvent
+					  , "Failed to initialize PIX events."
+					  );
+			}
 #if BGFX_CONFIG_RENDERER_DIRECT3D9EX
 			m_d3d9ex = NULL;
 
@@ -1042,7 +1046,7 @@ namespace bgfx
 			postReset();
 		}
 
-		bool isLost(HRESULT _hr) const
+		static bool isLost(HRESULT _hr)
 		{
 			return D3DERR_DEVICELOST == _hr
 				|| D3DERR_DRIVERINTERNALERROR == _hr
@@ -1595,12 +1599,6 @@ namespace bgfx
 
 #if BX_PLATFORM_WINDOWS
 		D3DCAPS9 m_caps;
-
-#	if BGFX_CONFIG_DEBUG_PIX
-		D3DPERF_SetMarkerFunc m_D3DPERF_SetMarker;
-		D3DPERF_BeginEventFunc m_D3DPERF_BeginEvent;
-		D3DPERF_EndEventFunc m_D3DPERF_EndEvent;
-#	endif // BGFX_CONFIG_DEBUG_PIX
 #endif // BX_PLATFORM_WINDOWS
 
 #if BGFX_CONFIG_RENDERER_DIRECT3D9EX
@@ -1801,7 +1799,7 @@ namespace bgfx
 	};
 	BX_STATIC_ASSERT(Attrib::Count == BX_COUNTOF(s_attrib)-1);
 
-	static const D3DDECLTYPE s_attribType[AttribType::Count][4][2] =
+	static const D3DDECLTYPE s_attribType[][4][2] =
 	{
 		{
 			{ D3DDECLTYPE_UBYTE4,    D3DDECLTYPE_UBYTE4N   },
@@ -1828,6 +1826,7 @@ namespace bgfx
 			{ D3DDECLTYPE_FLOAT4,    D3DDECLTYPE_FLOAT4    },
 		},
 	};
+	BX_STATIC_ASSERT(AttribType::Count == BX_COUNTOF(s_attribType) );
 
 	static D3DVERTEXELEMENT9* fillVertexDecl(D3DVERTEXELEMENT9* _out, const VertexDecl& _decl)
 	{
@@ -1917,8 +1916,6 @@ namespace bgfx
 
 		if (0 < count)
 		{
-			m_constantBuffer = ConstantBuffer::create(1024);
-
 			for (uint32_t ii = 0; ii < count; ++ii)
 			{
 				uint8_t nameSize;
@@ -1957,6 +1954,11 @@ namespace bgfx
 					BX_CHECK(NULL != info, "User defined uniform '%s' is not found, it won't be set.", name);
 					if (NULL != info)
 					{
+						if (NULL == m_constantBuffer)
+						{
+							m_constantBuffer = ConstantBuffer::create(1024);
+						}
+
 						kind = "user";
 						m_constantBuffer->writeUniformHandle( (UniformType::Enum)(type|fragmentBit), regIndex, info->m_handle, regCount);
 					}
@@ -1973,7 +1975,10 @@ namespace bgfx
 				BX_UNUSED(kind);
 			}
 
-			m_constantBuffer->finish();
+			if (NULL != m_constantBuffer)
+			{
+				m_constantBuffer->finish();
+			}
 		}
 
 		uint16_t shaderSize;

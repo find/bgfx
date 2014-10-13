@@ -408,14 +408,15 @@ Certain platforms have only single choice, for example the Native Client works
 only with OpenGL ES 2.0 renderer, using anything other than that will result in
 build errors.
 
-Debugging
----------
+Debugging and Profiling
+-----------------------
 
 ### RenderDoc
 
-When using DX11 renderer, you can drop in `renderdoc.dll` into working
-directory, and it will be automatically loaded during bgfx initialization. This
-allows frame capture at any time by pressing **F11**.
+Loading of RenderDoc is integrated in bgfx when using DX11 renderer. You can
+drop in `renderdoc.dll` from RenderDoc distribution into working directory,
+and it will be automatically loaded during bgfx initialization. This allows
+frame capture at any time by pressing **F11**.
 
 Download: [RenderDoc](https://renderdoc.org/builds)
 
@@ -434,11 +435,17 @@ Other debuggers:
 | APITrace  | Linux/OSX/Win |   x  |  x   |  x   |   x  |    x   |
 | CodeXL    | Linux/Win     |      |      |  x   |      |        |
 | IntelGPA  | Linux/OSX/Win |   x  |  x   |      |   x  |        |
+| Nsight    | Win           |   x  |  x   |  x   |      |        |
+| PerfHUD   | Win           |   x  |  x   |      |      |        |
 | RenderDoc | Win           |      |  x   |      |      |    x   |
+| vogl      | Linux         |      |      |  x   |      |    x   |
 
 Download:  
 [APITrace](https://apitrace.github.io/)  
 [CodeXL](http://developer.amd.com/tools-and-sdks/opencl-zone/codexl/)  
+[Nsight](https://developer.nvidia.com/nvidia-nsight-visual-studio-edition)  
+[PerfHUD](https://developer.nvidia.com/nvidia-perfhud)  
+[vogl](https://github.com/ValveSoftware/vogl)  
 
 SDL, GLFW, etc.
 ---------------
@@ -527,7 +534,7 @@ directory.
 
 Blendish - Blender 2.5 UI based theming functions for NanoVG.
 
-https://bitbucket.org/duangle/blendish
+https://bitbucket.org/duangle/oui-blendish
 
 ### edtaa3 (MIT)
 

@@ -19,7 +19,7 @@ typedef enum bgfx_renderer_type
     BGFX_RENDERER_TYPE_NULL,
     BGFX_RENDERER_TYPE_DIRECT3D9,
     BGFX_RENDERER_TYPE_DIRECT3D11,
-    BGFX_RENDERER_TYPE_OPENGLES,
+    BGFX_RENDERER_TYPE_OPENGLES = 4,
     BGFX_RENDERER_TYPE_OPENGL,
 
     BGFX_RENDERER_TYPE_COUNT
@@ -173,6 +173,15 @@ typedef struct bgfx_memory
 } bgfx_memory_t;
 
 /**
+ */
+typedef struct bgfx_transform
+{
+    float* data;  //< Pointer to first matrix.
+    uint16_t num; //< Number of matrices.
+
+} bgfx_transform_t;
+
+/**
  * Vertex declaration.
  */
 typedef struct bgfx_vertex_decl
@@ -252,13 +261,6 @@ typedef struct bgfx_caps
      */
     uint64_t supported;
 
-    /**
-     *  Emulated functionality. For example some texture compression
-     *  modes are not natively supported by all renderers. The library
-     *  internally decompresses texture into supported format.
-     */
-    uint64_t emulated;
-
     uint16_t maxTextureSize;    /* < Maximum texture size.             */
     uint16_t maxDrawCalls;      /* < Maximum draw calls.               */
     uint8_t  maxFBAttachments;  /* < Maximum frame buffer attachments. */
@@ -282,6 +284,9 @@ typedef enum bgfx_fatal
     BGFX_FATAL_INVALID_SHADER,
     BGFX_FATAL_UNABLE_TO_INITIALIZE,
     BGFX_FATAL_UNABLE_TO_CREATE_TEXTURE,
+    BGFX_FATAL_DEVICE_LOST,
+
+    BGFX_FATAL_COUNT
 
 } bgfx_fatal_t;
 
@@ -1191,6 +1196,16 @@ BGFX_C_API void bgfx_set_scissor_cached(uint16_t _cache);
  *    to be used for other draw primitive call.
  */
 BGFX_C_API uint32_t bgfx_set_transform(const void* _mtx, uint16_t _num);
+
+/**
+ *  Reserve `_num` matrices in internal matrix cache. Pointer returned
+ *  can be modifed until `bgfx::frame` is called.
+ *
+ *  @param _transform Pointer to `Transform` structure.
+ *  @param _num Number of matrices.
+ *  @returns index into matrix cache.
+ */
+BGFX_C_API uint32_t bgfx_alloc_transform(bgfx_transform_t* _transform, uint16_t _num);
 
 /**
  *  Set model matrix from matrix cache for draw primitive.

@@ -32,11 +32,6 @@ struct Uniforms
 		u_rgbSpec = bgfx::createUniform("u_rgbSpec",  bgfx::UniformType::Uniform3fv);
 	}
 
-	// Call this once at initialization.
-	void submitConstUniforms()
-	{
-	}
-
 	// Call this once per frame.
 	void submitPerFrameUniforms()
 	{
@@ -491,6 +486,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		bool m_specularIbl;
 		bool m_showDiffColorWheel;
 		bool m_showSpecColorWheel;
+		bool m_crossCubemapPreview;
 	};
 
 	Settings settings;
@@ -510,10 +506,9 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 	settings.m_specularIbl = true;
 	settings.m_showDiffColorWheel = false;
 	settings.m_showSpecColorWheel = false;
+	settings.m_crossCubemapPreview = false;
 
 	float time = 0.0f;
-
-	s_uniforms.submitConstUniforms();
 
 	int32_t leftScrollArea = 0;
 
@@ -530,7 +525,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 			);
 
 		static int32_t rightScrollArea = 0;
-		imguiBeginScrollArea("Settings", width - 256 - 10, 10, 256, 426, &rightScrollArea);
+		imguiBeginScrollArea("Settings", width - 256 - 10, 10, 256, 590, &rightScrollArea);
 
 		imguiLabel("Shade:");
 		imguiSeparator();
@@ -541,8 +536,12 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 		imguiSeparatorLine();
 		imguiSlider("Speed", settings.m_speed, 0.0f, 1.0f, 0.01f);
-
 		imguiSeparatorLine();
+
+		imguiSeparator();
+		imguiSlider("Exposure", settings.m_exposure, -8.0f, 8.0f, 0.01f);
+		imguiSeparator();
+
 		imguiLabel("Environment:");
 		currentLightProbe = LightProbe::Enum(imguiChoose(currentLightProbe
 													   , "Wells"
@@ -551,9 +550,13 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 													   , "Ennis"
 													   , "Grace"
 													   ) );
+		static float lod = 0.0f;
+		if (imguiCube(lightProbes[currentLightProbe].m_tex, lod, settings.m_crossCubemapPreview))
+		{
+			settings.m_crossCubemapPreview = !settings.m_crossCubemapPreview;
+		}
+		imguiSlider("Texture LOD", lod, float(0.0f), 10.1f, 0.1f);
 
-		imguiSeparator();
-		imguiSlider("Exposure", settings.m_exposure, -8.0f, 8.0f, 0.01f);
 		imguiEndScrollArea();
 
 		imguiBeginScrollArea("Settings", 10, 70, 256, 576, &leftScrollArea);

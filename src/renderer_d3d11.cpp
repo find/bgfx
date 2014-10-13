@@ -7,7 +7,11 @@
 
 #if BGFX_CONFIG_RENDERER_DIRECT3D11
 #	include "renderer_d3d11.h"
-#	include <renderdoc/renderdoc_app.h>
+
+#	if BGFX_CONFIG_DEBUG_PIX
+#		include <psapi.h>
+#		include <renderdoc/renderdoc_app.h>
+#	endif // BGFX_CONFIG_DEBUG_PIX
 
 namespace bgfx
 {
@@ -27,7 +31,7 @@ namespace bgfx
 		{ D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP, 3, 1, 2 },
 		{ D3D11_PRIMITIVE_TOPOLOGY_LINELIST,      2, 2, 0 },
 		{ D3D11_PRIMITIVE_TOPOLOGY_POINTLIST,     1, 1, 0 },
-		{ D3D10_PRIMITIVE_TOPOLOGY_UNDEFINED,     0, 0, 0 },
+		{ D3D11_PRIMITIVE_TOPOLOGY_UNDEFINED,     0, 0, 0 },
 	};
 
 	static const char* s_primName[] =
@@ -263,7 +267,7 @@ namespace bgfx
 	};
 	BX_STATIC_ASSERT(Attrib::Count == BX_COUNTOF(s_attrib) );
 
-	static const DXGI_FORMAT s_attribType[AttribType::Count][4][2] =
+	static const DXGI_FORMAT s_attribType[][4][2] =
 	{
 		{
 			{ DXGI_FORMAT_R8_UINT,            DXGI_FORMAT_R8_UNORM           },
@@ -290,6 +294,7 @@ namespace bgfx
 			{ DXGI_FORMAT_R32G32B32A32_FLOAT, DXGI_FORMAT_R32G32B32A32_FLOAT },
 		},
 	};
+	BX_STATIC_ASSERT(AttribType::Count == BX_COUNTOF(s_attribType) );
 
 	static D3D11_INPUT_ELEMENT_DESC* fillVertexDecl(D3D11_INPUT_ELEMENT_DESC* _out, const VertexDecl& _decl)
 	{
@@ -403,6 +408,47 @@ namespace bgfx
 		return false;
 	};
 
+#if BGFX_CONFIG_DEBUG_PIX && BX_PLATFORM_WINDOWS
+	bool findModule(const char* _name)
+	{
+		HANDLE process = GetCurrentProcess();
+		DWORD size;
+		BOOL result = EnumProcessModules(process
+						, NULL
+						, 0
+						, &size
+						);
+		if (0 != result)
+		{
+			HMODULE* modules = (HMODULE*)alloca(size);
+			result = EnumProcessModules(process
+				, modules
+				, size
+				, &size
+				);
+
+			if (0 != result)
+			{
+				char moduleName[MAX_PATH];
+				for (uint32_t ii = 0, num = uint32_t(size/sizeof(HMODULE) ); ii < num; ++ii)
+				{
+					result = GetModuleBaseNameA(process
+								, modules[ii]
+								, moduleName
+								, BX_COUNTOF(moduleName)
+								);
+					if (0 != result
+					&&  0 == bx::stricmp(_name, moduleName) )
+					{
+						return true;
+					}
+				}
+			}
+		}
+
+		return false;
+	}
+
 #define RENDERDOC_IMPORT \
 			RENDERDOC_IMPORT_FUNC(RENDERDOC_SetLogFile); \
 			RENDERDOC_IMPORT_FUNC(RENDERDOC_GetCapture); \
@@ -418,13 +464,19 @@ namespace bgfx
 			RENDERDOC_IMPORT_FUNC(RENDERDOC_InitRemoteAccess);
 
 #define RENDERDOC_IMPORT_FUNC(_func) p##_func _func
-RENDERDOC_IMPORT
+	RENDERDOC_IMPORT
 #undef RENDERDOC_IMPORT_FUNC
 
 	pRENDERDOC_GetAPIVersion RENDERDOC_GetAPIVersion;
 
 	void* loadRenderDoc()
 	{
+		// Skip loading RenderDoc when IntelGPA is present to avoid RenderDoc crash.
+		if (findModule(BX_ARCH_32BIT ? "shimloader32.dll" : "shimloader64.dll") )
+		{
+			return NULL;
+		}
+
 		void* renderdocdll = bx::dlopen("renderdoc.dll");
 
 		if (NULL != renderdocdll)
@@ -474,11 +526,30 @@ RENDERDOC_IMPORT
 			bx::dlclose(_renderdocdll);
 		}
 	}
+#else
+	void* loadRenderDoc()
+	{
+		return NULL;
+	}
+
+	void unloadRenderDoc(void*)
+	{
+	}
+#endif // BGFX_CONFIG_DEBUG_PIX
+
+#if USE_D3D11_DYNAMIC_LIB
+	static PFN_D3D11_CREATE_DEVICE D3D11CreateDevice;
+	static PFN_CREATE_DXGI_FACTORY CreateDXGIFactory;
+	static PFN_D3DPERF_SET_MARKER  D3DPERF_SetMarker;
+	static PFN_D3DPERF_BEGIN_EVENT D3DPERF_BeginEvent;
+	static PFN_D3DPERF_END_EVENT   D3DPERF_EndEvent;
+#endif // USE_D3D11_DYNAMIC_LIB
 
 	struct RendererContextD3D11 : public RendererContextI
 	{
 		RendererContextD3D11()
-			: m_captureTexture(NULL)
+			: m_lost(0)
+			, m_captureTexture(NULL)
 			, m_captureResolve(NULL)
 			, m_wireframe(false)
 			, m_flags(BGFX_RESET_NONE)
@@ -496,6 +567,8 @@ RENDERDOC_IMPORT
 			m_d3d11dll = bx::dlopen("d3d11.dll");
 			BGFX_FATAL(NULL != m_d3d11dll, Fatal::UnableToInitialize, "Failed to load d3d11.dll.");
 
+			m_d3d9dll = NULL;
+
 			if (BX_ENABLED(BGFX_CONFIG_DEBUG_PIX) )
 			{
 				// D3D11_1.h has ID3DUserDefinedAnnotation
@@ -503,33 +576,30 @@ RENDERDOC_IMPORT
 				m_d3d9dll = bx::dlopen("d3d9.dll");
 				BGFX_FATAL(NULL != m_d3d9dll, Fatal::UnableToInitialize, "Failed to load d3d9.dll.");
 
-				m_D3DPERF_SetMarker  = (D3DPERF_SetMarkerFunc )bx::dlsym(m_d3d9dll, "D3DPERF_SetMarker" );
-				m_D3DPERF_BeginEvent = (D3DPERF_BeginEventFunc)bx::dlsym(m_d3d9dll, "D3DPERF_BeginEvent");
-				m_D3DPERF_EndEvent   = (D3DPERF_EndEventFunc  )bx::dlsym(m_d3d9dll, "D3DPERF_EndEvent"  );
-				BX_CHECK(NULL != m_D3DPERF_SetMarker
-					  && NULL != m_D3DPERF_BeginEvent
-					  && NULL != m_D3DPERF_EndEvent
+				D3DPERF_SetMarker  = (PFN_D3DPERF_SET_MARKER )bx::dlsym(m_d3d9dll, "D3DPERF_SetMarker" );
+				D3DPERF_BeginEvent = (PFN_D3DPERF_BEGIN_EVENT)bx::dlsym(m_d3d9dll, "D3DPERF_BeginEvent");
+				D3DPERF_EndEvent   = (PFN_D3DPERF_END_EVENT  )bx::dlsym(m_d3d9dll, "D3DPERF_EndEvent"  );
+				BX_CHECK(NULL != D3DPERF_SetMarker
+					  && NULL != D3DPERF_BeginEvent
+					  && NULL != D3DPERF_EndEvent
 					  , "Failed to initialize PIX events."
 					  );
 			}
 
-			PFN_D3D11_CREATE_DEVICE d3D11CreateDevice = (PFN_D3D11_CREATE_DEVICE)bx::dlsym(m_d3d11dll, "D3D11CreateDevice");
-			BGFX_FATAL(NULL != d3D11CreateDevice, Fatal::UnableToInitialize, "Function D3D11CreateDevice not found.");
+			D3D11CreateDevice = (PFN_D3D11_CREATE_DEVICE)bx::dlsym(m_d3d11dll, "D3D11CreateDevice");
+			BGFX_FATAL(NULL != D3D11CreateDevice, Fatal::UnableToInitialize, "Function D3D11CreateDevice not found.");
 
 			m_dxgidll = bx::dlopen("dxgi.dll");
 			BGFX_FATAL(NULL != m_dxgidll, Fatal::UnableToInitialize, "Failed to load dxgi.dll.");
 
-			PFN_CREATEDXGIFACTORY dxgiCreateDXGIFactory = (PFN_CREATEDXGIFACTORY)bx::dlsym(m_dxgidll, "CreateDXGIFactory");
-			BGFX_FATAL(NULL != dxgiCreateDXGIFactory, Fatal::UnableToInitialize, "Function CreateDXGIFactory not found.");
-#else
-			PFN_D3D11_CREATE_DEVICE d3D11CreateDevice     = D3D11CreateDevice;
-			PFN_CREATEDXGIFACTORY   dxgiCreateDXGIFactory = CreateDXGIFactory;
+			CreateDXGIFactory = (PFN_CREATE_DXGI_FACTORY)bx::dlsym(m_dxgidll, "CreateDXGIFactory");
+			BGFX_FATAL(NULL != CreateDXGIFactory, Fatal::UnableToInitialize, "Function CreateDXGIFactory not found.");
 #endif // USE_D3D11_DYNAMIC_LIB
 
 			HRESULT hr;
 
 			IDXGIFactory* factory;
-			hr = dxgiCreateDXGIFactory(__uuidof(IDXGIFactory), (void**)&factory);
+			hr = CreateDXGIFactory(__uuidof(IDXGIFactory), (void**)&factory);
 			BGFX_FATAL(SUCCEEDED(hr), Fatal::UnableToInitialize, "Unable to create DXGI factory.");
 
 			m_adapter = NULL;
@@ -578,28 +648,13 @@ RENDERDOC_IMPORT
 				D3D_FEATURE_LEVEL_10_0,
 			};
 
-			memset(&m_scd, 0, sizeof(m_scd) );
-			m_scd.BufferDesc.Width  = BGFX_DEFAULT_WIDTH;
-			m_scd.BufferDesc.Height = BGFX_DEFAULT_HEIGHT;
-			m_scd.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-			m_scd.BufferDesc.RefreshRate.Numerator = 60;
-			m_scd.BufferDesc.RefreshRate.Denominator = 1;
-			m_scd.SampleDesc.Count = 1;
-			m_scd.SampleDesc.Quality = 0;
-			m_scd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-			m_scd.BufferCount = 1;
-			m_scd.OutputWindow = g_bgfxHwnd;
-			m_scd.Windowed = true;
-
 			uint32_t flags = D3D11_CREATE_DEVICE_SINGLETHREADED
-#if BGFX_CONFIG_DEBUG
-				| D3D11_CREATE_DEVICE_DEBUG
-#endif // BGFX_CONFIG_DEBUG
+				| BX_ENABLED(BGFX_CONFIG_DEBUG) ? D3D11_CREATE_DEVICE_DEBUG : 0
 				;
 
 			D3D_FEATURE_LEVEL featureLevel;
 
-			hr = d3D11CreateDevice(m_adapter
+			hr = D3D11CreateDevice(m_adapter
 				, m_driverType
 				, NULL
 				, flags
@@ -633,6 +688,19 @@ RENDERDOC_IMPORT
 			hr = adapter->GetParent(__uuidof(IDXGIFactory), (void**)&m_factory);
 			BGFX_FATAL(SUCCEEDED(hr), Fatal::UnableToInitialize, "Unable to create Direct3D11 device.");
 			DX_RELEASE(adapter, 2);
+
+			memset(&m_scd, 0, sizeof(m_scd) );
+			m_scd.BufferDesc.Width  = BGFX_DEFAULT_WIDTH;
+			m_scd.BufferDesc.Height = BGFX_DEFAULT_HEIGHT;
+			m_scd.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+			m_scd.BufferDesc.RefreshRate.Numerator = 60;
+			m_scd.BufferDesc.RefreshRate.Denominator = 1;
+			m_scd.SampleDesc.Count = 1;
+			m_scd.SampleDesc.Quality = 0;
+			m_scd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+			m_scd.BufferCount = 1;
+			m_scd.OutputWindow = g_bgfxHwnd;
+			m_scd.Windowed = true;
 
 			hr = m_factory->CreateSwapChain(m_device
 										, &m_scd
@@ -740,6 +808,7 @@ RENDERDOC_IMPORT
 
 #if USE_D3D11_DYNAMIC_LIB
 			bx::dlclose(m_dxgidll);
+			bx::dlclose(m_d3d9dll);
 			bx::dlclose(m_d3d11dll);
 #endif // USE_D3D11_DYNAMIC_LIB
 		}
@@ -998,8 +1067,8 @@ RENDERDOC_IMPORT
 			D3D11_VIEWPORT vp;
 			vp.TopLeftX = 0;
 			vp.TopLeftY = 0;
-			vp.Width = (float)width;
-			vp.Height = (float)height;
+			vp.Width    = (float)width;
+			vp.Height   = (float)height;
 			vp.MinDepth = 0.0f;
 			vp.MaxDepth = 1.0f;
 			deviceCtx->RSSetViewports(1, &vp);
@@ -1097,16 +1166,42 @@ RENDERDOC_IMPORT
 			capturePostReset();
 		}
 
+		static bool isLost(HRESULT _hr)
+		{
+			return DXGI_ERROR_DEVICE_REMOVED == _hr
+				|| DXGI_ERROR_DEVICE_HUNG == _hr
+				|| DXGI_ERROR_DEVICE_RESET == _hr
+				|| DXGI_ERROR_DRIVER_INTERNAL_ERROR == _hr
+				|| DXGI_ERROR_NOT_CURRENTLY_AVAILABLE == _hr
+				;
+		}
+
 		void flip() BX_OVERRIDE
 		{
 			if (NULL != m_swapChain)
 			{
+				HRESULT hr = 0;
 				uint32_t syncInterval = !!(m_flags & BGFX_RESET_VSYNC);
-				for (uint32_t ii = 1, num = m_numWindows; ii < num; ++ii)
+				for (uint32_t ii = 1, num = m_numWindows; ii < num && SUCCEEDED(hr); ++ii)
 				{
-					DX_CHECK(m_frameBuffers[m_windows[ii].idx].m_swapChain->Present(syncInterval, 0) );
+					hr = m_frameBuffers[m_windows[ii].idx].m_swapChain->Present(syncInterval, 0);
 				}
-				DX_CHECK(m_swapChain->Present(syncInterval, 0) );
+
+				if (SUCCEEDED(hr) )
+				{
+					hr = m_swapChain->Present(syncInterval, 0);
+				}
+
+				if (FAILED(hr)
+				&&  isLost(hr) )
+				{
+					++m_lost;
+					BGFX_FATAL(10 > m_lost, bgfx::Fatal::DeviceLost, "Device is lost. FAILED 0x%08x", hr);
+				}
+				else
+				{
+					m_lost = 0;
+				}
 			}
 		}
 
@@ -1337,7 +1432,7 @@ RENDERDOC_IMPORT
 					{
 						curr = &vertexElements[jj];
 						if (0 == strcmp(curr->SemanticName, "TEXCOORD")
-							&&  curr->SemanticIndex == index)
+						&&  curr->SemanticIndex == index)
 						{
 							break;
 						}
@@ -1899,12 +1994,8 @@ RENDERDOC_IMPORT
 			}
 		}
 
-		void* m_d3d9dll;
-		D3DPERF_SetMarkerFunc m_D3DPERF_SetMarker;
-		D3DPERF_BeginEventFunc m_D3DPERF_BeginEvent;
-		D3DPERF_EndEventFunc m_D3DPERF_EndEvent;
-
 #if USE_D3D11_DYNAMIC_LIB
+		void* m_d3d9dll;
 		void* m_d3d11dll;
 		void* m_dxgidll;
 #endif // USE_D3D11_DYNAMIC_LIB
@@ -1917,6 +2008,7 @@ RENDERDOC_IMPORT
 		IDXGIFactory* m_factory;
 
 		IDXGISwapChain* m_swapChain;
+		uint16_t m_lost;
 		uint16_t m_numWindows;
 		FrameBufferHandle m_windows[BGFX_CONFIG_MAX_FRAME_BUFFERS];
 
@@ -2124,8 +2216,6 @@ RENDERDOC_IMPORT
 
 		if (0 < count)
 		{
-			m_constantBuffer = ConstantBuffer::create(1024);
-
 			for (uint32_t ii = 0; ii < count; ++ii)
 			{
 				uint8_t nameSize;
@@ -2164,6 +2254,11 @@ RENDERDOC_IMPORT
 
 					if (NULL != info)
 					{
+						if (NULL == m_constantBuffer)
+						{
+							m_constantBuffer = ConstantBuffer::create(1024);
+						}
+
 						kind = "user";
 						m_constantBuffer->writeUniformHandle( (UniformType::Enum)(type|fragmentBit), regIndex, info->m_handle, regCount);
 					}
@@ -2180,7 +2275,10 @@ RENDERDOC_IMPORT
 				BX_UNUSED(kind);
 			}
 
-			m_constantBuffer->finish();
+			if (NULL != m_constantBuffer)
+			{
+				m_constantBuffer->finish();
+			}
 		}
 
 		uint16_t shaderSize;
@@ -2197,8 +2295,7 @@ RENDERDOC_IMPORT
 		else if (BGFX_CHUNK_MAGIC_VSH == magic)
 		{
 			m_hash = bx::hashMurmur2A(code, shaderSize);
-			m_code = alloc(shaderSize);
-			memcpy(m_code->data, code, shaderSize);
+			m_code = copy(code, shaderSize);
 
 			DX_CHECK(s_renderD3D11->m_device->CreateVertexShader(code, shaderSize, NULL, &m_vertexShader) );
 			BGFX_FATAL(NULL != m_ptr, bgfx::Fatal::InvalidShader, "Failed to create vertex shader.");
@@ -2772,8 +2869,8 @@ RENDERDOC_IMPORT
 					D3D11_VIEWPORT vp;
 					vp.TopLeftX = rect.m_x;
 					vp.TopLeftY = rect.m_y;
-					vp.Width = rect.m_width;
-					vp.Height = rect.m_height;
+					vp.Width    = rect.m_width;
+					vp.Height   = rect.m_height;
 					vp.MinDepth = 0.0f;
 					vp.MaxDepth = 1.0f;
 					deviceCtx->RSSetViewports(1, &vp);
@@ -2948,9 +3045,9 @@ RENDERDOC_IMPORT
 						if (viewHasScissor)
 						{
 							D3D11_RECT rc;
-							rc.left = viewScissorRect.m_x;
-							rc.top = viewScissorRect.m_y;
-							rc.right = viewScissorRect.m_x + viewScissorRect.m_width;
+							rc.left   = viewScissorRect.m_x;
+							rc.top    = viewScissorRect.m_y;
+							rc.right  = viewScissorRect.m_x + viewScissorRect.m_width;
 							rc.bottom = viewScissorRect.m_y + viewScissorRect.m_height;
 							deviceCtx->RSSetScissorRects(1, &rc);
 						}
@@ -2961,9 +3058,9 @@ RENDERDOC_IMPORT
 						scissorRect.intersect(viewScissorRect, _render->m_rectCache.m_cache[scissor]);
 						scissorEnabled = true;
 						D3D11_RECT rc;
-						rc.left = scissorRect.m_x;
-						rc.top = scissorRect.m_y;
-						rc.right = scissorRect.m_x + scissorRect.m_width;
+						rc.left   = scissorRect.m_x;
+						rc.top    = scissorRect.m_y;
+						rc.right  = scissorRect.m_x + scissorRect.m_width;
 						rc.bottom = scissorRect.m_y + scissorRect.m_height;
 						deviceCtx->RSSetScissorRects(1, &rc);
 					}
@@ -3455,6 +3552,18 @@ RENDERDOC_IMPORT
 				tvm.printf(10, pos++, 0x8e, "     Indices: %7d", statsNumIndices);
 				tvm.printf(10, pos++, 0x8e, "    DVB size: %7d", _render->m_vboffset);
 				tvm.printf(10, pos++, 0x8e, "    DIB size: %7d", _render->m_iboffset);
+
+				pos++;
+				tvm.printf(10, pos++, 0x8e, " State cache:                                ");
+				tvm.printf(10, pos++, 0x8e, " Blend  | DepthS | Input  | Raster | Sampler ");
+				tvm.printf(10, pos++, 0x8e, " %6d | %6d | %6d | %6d | %6d  "
+					, m_blendStateCache.getCount()
+					, m_depthStencilStateCache.getCount()
+					, m_inputLayoutCache.getCount()
+					, m_rasterizerStateCache.getCount()
+					, m_samplerStateCache.getCount()
+					);
+				pos++;
 
 				double captureMs = double(captureElapsed)*toMs;
 				tvm.printf(10, pos++, 0x8e, "     Capture: %3.4f [ms]", captureMs);
