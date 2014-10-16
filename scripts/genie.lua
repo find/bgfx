@@ -49,6 +49,14 @@ toolchain(BGFX_BUILD_DIR, BGFX_THIRD_PARTY_DIR)
 function copyLib()
 end
 
+if _OPTIONS["with-sdl"] then
+	if os.is("windows") then
+		if not os.getenv("SDL2_DIR") then
+			print("Set SDL2_DIR enviroment variable.")
+		end
+	end
+end
+
 function exampleProject(_name)
 
 	project ("example-" .. _name)
@@ -101,6 +109,12 @@ function exampleProject(_name)
 		linkoptions { -- this is needed only for testing with GLES2/3 on Windows with VS201x
 			"/DELAYLOAD:\"libEGL.dll\"",
 			"/DELAYLOAD:\"libGLESv2.dll\"",
+		}
+
+	configuration { "windows" }
+		links {
+			"gdi32",
+			"psapi",
 		}
 
 	configuration { "android*" }
