@@ -24,6 +24,15 @@ function bgfxProject(_name, _kind, _defines)
 			_defines,
 		}
 
+		if _OPTIONS["with-ovr"] then
+			defines {
+				"BGFX_CONFIG_USE_OVR=1",
+			}
+			includedirs {
+				"$(OVR_DIR)/LibOVR/Include",
+			}
+		end
+
 		configuration { "Debug" }
 			defines {
 				"BGFX_CONFIG_DEBUG=1",
@@ -35,7 +44,7 @@ function bgfxProject(_name, _kind, _defines)
 				"GLESv2",
 			}
 
-		configuration { "windows", "not vs201*" }
+		configuration { "mingw*", "not vs201*" }
 			includedirs {
 				"$(DXSDK_DIR)/include",
 			}
@@ -50,13 +59,13 @@ function bgfxProject(_name, _kind, _defines)
 				"Cocoa.framework",
 			}
 
-		configuration { "vs* or linux or mingw or xcode4 or osx or ios* or rpi" }
+		configuration { "not nacl" }
 			includedirs {
 				--nacl has GLES2 headers modified...
 				BGFX_DIR .. "3rdparty/khronos",
 			}
 
-		configuration { "x64", "vs* or mingw" }
+		configuration { "x64", "vs* or mingw*" }
 			defines {
 				"_WIN32_WINNT=0x601",
 			}
