@@ -25,6 +25,7 @@ Supported platforms:
  * OSX (10.9)
  * RaspberryPi
  * Windows (XP, Vista, 7, 8, 10)
+ * WinRT (WinPhone 8.0+)
 
 Supported compilers:
 
@@ -273,6 +274,12 @@ MRT rendering and deferred shading.
 ### [22-windows](https://github.com/bkaradzic/bgfx/tree/master/examples/22-windows)
 
 Rendering into multiple windows.
+
+### [23-vectordisplay](https://github.com/bkaradzic/bgfx/tree/master/examples/23-vectordisplay)
+
+Rendering lines as oldschool vectors.
+
+![example-23-vectordisplay](https://github.com/bkaradzic/bgfx/raw/master/examples/23-vectordisplay/screenshot.png)
 
 Dependencies
 ------------
@@ -662,7 +669,8 @@ Dario Manesku ([@dariomanesku](https://github.com/dariomanesku)) - 13-stencil,
 James Gray ([@james4k](https://github.com/james4k)) - Go language API bindings.  
 p0nce ([@p0nce](https://github.com/p0nce)) - D language API bindings.  
 Mike Popoloski ([@MikePopoloski](https://github.com/MikePopoloski)) - C#/VB/F# 
-language API bindings  
+language API bindings, WinRT/WinPhone support.  
+Kai Jourdan ([@questor](https://github.com/questor)) - 23-vectordisplay example  
 
 [License (BSD 2-clause)](https://github.com/bkaradzic/bgfx/blob/master/LICENSE)
 -------------------------------------------------------------------------------

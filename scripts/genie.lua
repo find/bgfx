@@ -49,7 +49,9 @@ defines {
 }
 
 dofile (BX_DIR .. "scripts/toolchain.lua")
-toolchain(BGFX_BUILD_DIR, BGFX_THIRD_PARTY_DIR)
+if not toolchain(BGFX_BUILD_DIR, BGFX_THIRD_PARTY_DIR) then
+	return -- no action specified
+end
 
 function copyLib()
 end
@@ -70,7 +72,10 @@ function exampleProject(_name)
 
 	configuration {}
 
-	debugdir (BGFX_DIR .. "examples/runtime/")
+	-- don't output debugdir for winphone builds
+	if "winphone81" ~= _OPTIONS["vs"] then
+		debugdir (BGFX_DIR .. "examples/runtime/")
+	end
 
 	includedirs {
 		BX_DIR .. "include",
@@ -148,6 +153,23 @@ function exampleProject(_name)
 			"gdi32",
 			"psapi",
 		}
+
+	configuration { "winphone8*"}
+		removelinks {
+			"DelayImp",
+			"gdi32",
+			"psapi"
+		}
+		links {
+			"d3d11",
+			"dxgi"
+		}
+		linkoptions {
+			"/ignore:4264" -- LNK4264: archiving object file compiled with /ZW into a static library; note that when authoring Windows Runtime types it is not recommended to link with a static library that contains Windows Runtime metadata
+		}
+		-- WinRT targets need their own output directories are build files stomp over each other
+		targetdir (BGFX_BUILD_DIR .. "arm_" .. _ACTION .. "/bin/" .. _name)
+		objdir (BGFX_BUILD_DIR .. "arm_" .. _ACTION .. "/obj/" .. _name)
 
 	configuration { "mingw*" }
 		links {
@@ -282,6 +304,7 @@ exampleProject("19-oit")
 exampleProject("20-nanovg")
 exampleProject("21-deferred")
 exampleProject("22-windows")
+exampleProject("23-vectordisplay")
 
 if _OPTIONS["with-shared-lib"] then
 	bgfxProject("-shared-lib", "SharedLib", {})
