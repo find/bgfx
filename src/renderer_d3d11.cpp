@@ -175,13 +175,6 @@ namespace bgfx
 		DXGI_FORMAT m_fmtDsv;
 	};
 
-#ifndef DXGI_FORMAT_B4G4R4A4_UNORM
-// Win8 only BS
-// https://blogs.msdn.com/b/chuckw/archive/2012/11/14/directx-11-1-and-windows-7.aspx?Redirected=true
-// http://msdn.microsoft.com/en-us/library/windows/desktop/bb173059%28v=vs.85%29.aspx
-#	define DXGI_FORMAT_B4G4R4A4_UNORM DXGI_FORMAT(115)
-#endif // DXGI_FORMAT_B4G4R4A4_UNORM
-
 	static const TextureFormatInfo s_textureFormat[] =
 	{
 		{ DXGI_FORMAT_BC1_UNORM,          DXGI_FORMAT_BC1_UNORM,             DXGI_FORMAT_UNKNOWN           }, // BC1 
@@ -663,9 +656,14 @@ RENDERDOC_IMPORT
 
 			D3D_FEATURE_LEVEL features[] =
 			{
+				D3D_FEATURE_LEVEL_11_2,
+				D3D_FEATURE_LEVEL_11_1,
 				D3D_FEATURE_LEVEL_11_0,
 				D3D_FEATURE_LEVEL_10_1,
 				D3D_FEATURE_LEVEL_10_0,
+				D3D_FEATURE_LEVEL_9_3,
+				D3D_FEATURE_LEVEL_9_2,
+				D3D_FEATURE_LEVEL_9_1
 			};
 
 			uint32_t flags = D3D11_CREATE_DEVICE_SINGLETHREADED
@@ -674,17 +672,21 @@ RENDERDOC_IMPORT
 
 			D3D_FEATURE_LEVEL featureLevel;
 
-			hr = D3D11CreateDevice(m_adapter
-				, m_driverType
-				, NULL
-				, flags
-				, features
-				, 1
-				, D3D11_SDK_VERSION
-				, &m_device
-				, &featureLevel
-				, &m_deviceCtx
-				);
+			hr = -1;
+			for (uint32_t ii = 0; ii < 3 && FAILED(hr); ++ii)
+			{
+				hr = D3D11CreateDevice(m_adapter
+					, m_driverType
+					, NULL
+					, flags
+					, &features[ii]
+					, BX_COUNTOF(features)-ii
+					, D3D11_SDK_VERSION
+					, &m_device
+					, &featureLevel
+					, &m_deviceCtx
+					);
+			}
 			BGFX_FATAL(SUCCEEDED(hr), Fatal::UnableToInitialize, "Unable to create Direct3D11 device.");
 
 			IDXGIDevice* device;
@@ -706,29 +708,29 @@ RENDERDOC_IMPORT
 			BGFX_FATAL(SUCCEEDED(hr), Fatal::UnableToInitialize, "Unable to create Direct3D11 device.");
 
 #if BX_PLATFORM_WINRT
-            hr = adapter->GetParent(__uuidof(IDXGIFactory2), (void**)&m_factory);
+			hr = adapter->GetParent(__uuidof(IDXGIFactory2), (void**)&m_factory);
 			BGFX_FATAL(SUCCEEDED(hr), Fatal::UnableToInitialize, "Unable to create Direct3D11 device.");
 			DX_RELEASE(adapter, 2);
-            
+
 			memset(&m_scd, 0, sizeof(m_scd) );
 			m_scd.Width  = BGFX_DEFAULT_WIDTH;
 			m_scd.Height = BGFX_DEFAULT_HEIGHT;
 			m_scd.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-            m_scd.Stereo = false;
+			m_scd.Stereo = false;
 			m_scd.SampleDesc.Count = 1;
 			m_scd.SampleDesc.Quality = 0;
 			m_scd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 			m_scd.BufferCount = 2;
-            m_scd.Scaling = DXGI_SCALING_NONE;
-            m_scd.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
-            m_scd.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
+			m_scd.Scaling = DXGI_SCALING_NONE;
+			m_scd.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
+			m_scd.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
 
-            hr = m_factory->CreateSwapChainForCoreWindow(m_device
-                                                        , g_bgfxCoreWindow
-                                                        , &m_scd
-                                                        , NULL
-                                                        , &m_swapChain
-                                                        );
+			hr = m_factory->CreateSwapChainForCoreWindow(m_device
+				, g_bgfxCoreWindow
+				, &m_scd
+				, NULL
+				, &m_swapChain
+				);
 #else
 			hr = adapter->GetParent(__uuidof(IDXGIFactory), (void**)&m_factory);
 			BGFX_FATAL(SUCCEEDED(hr), Fatal::UnableToInitialize, "Unable to create Direct3D11 device.");
@@ -1253,6 +1255,10 @@ RENDERDOC_IMPORT
 			{
 				HRESULT hr = S_OK;
 				uint32_t syncInterval = !!(m_flags & BGFX_RESET_VSYNC);
+#if BX_PLATFORM_WINRT
+				syncInterval = 1;   // sync interval of 0 is not supported on WinRT
+#endif
+
 				for (uint32_t ii = 1, num = m_numWindows; ii < num && SUCCEEDED(hr); ++ii)
 				{
 					hr = m_frameBuffers[m_windows[ii].idx].m_swapChain->Present(syncInterval, 0);
