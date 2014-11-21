@@ -30,6 +30,8 @@
 
 #include <bgfx.h>
 
+#include <bx/bx.h>
+
 namespace
 {
 #include "vs_nanovg_fill.bin.h"
@@ -182,7 +184,7 @@ namespace
 			}
 			tex = &gl->textures[gl->ntextures++];
 		}
-		
+
 		memset(tex, 0, sizeof(*tex));
 
 		return tex;
@@ -494,7 +496,7 @@ namespace
 		bgfx::setUniform(gl->u_params,          &frag->feather);
 
 		bgfx::TextureHandle handle = BGFX_INVALID_HANDLE;
- 
+
 		if (image != 0)
 		{
 			struct GLNVGtexture* tex = glnvg__findTexture(gl, image);
@@ -620,6 +622,7 @@ namespace
 
 		for (i = 0; i < npaths; i++)
 		{
+			if (paths[i].fillCount == 0) continue;
 			bgfx::setProgram(gl->prog);
 			bgfx::setState(gl->state);
 			bgfx::setVertexBuffer(&gl->tvb);
@@ -686,6 +689,14 @@ namespace
 		if (gl->ncalls > 0)
 		{
 			bgfx::allocTransientVertexBuffer(&gl->tvb, gl->nverts, s_nvgDecl);
+
+			int allocated = gl->tvb.size/gl->tvb.stride;
+
+			if (allocated < gl->nverts) {
+				gl->nverts = allocated;
+				BX_WARN(true, "Vertex number truncated due to transient vertex buffer overflow");
+			}
+
 
 			memcpy(gl->tvb.data, gl->verts, gl->nverts * sizeof(struct NVGvertex) );
 
@@ -985,7 +996,7 @@ namespace
 		for (uint32_t ii = 0, num = gl->ntextures; ii < num; ++ii)
 		{
 			if (bgfx::isValid(gl->textures[ii].id)
-			&& (gl->textures[ii].flags & NVG_IMAGE_NODELETE) == 0) 
+			&& (gl->textures[ii].flags & NVG_IMAGE_NODELETE) == 0)
 			{
 				bgfx::destroyTexture(gl->textures[ii].id);
 			}
