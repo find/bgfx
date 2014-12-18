@@ -204,7 +204,7 @@ namespace bgfx
 		{ GL_COMPRESSED_RGBA_PVRTC_4BPPV2_IMG,         GL_COMPRESSED_RGBA_PVRTC_4BPPV2_IMG,         GL_ZERO,                         false }, // PTC24
 		{ GL_ZERO,                                     GL_ZERO,                                     GL_ZERO,                         true  }, // Unknown
 		{ GL_ZERO,                                     GL_ZERO,                                     GL_ZERO,                         true  }, // R1
-		{ GL_LUMINANCE,                                GL_LUMINANCE,                                GL_UNSIGNED_BYTE,                true  }, // R8
+		{ GL_R8,                                       GL_RED,                                      GL_UNSIGNED_BYTE,                true  }, // R8
 		{ GL_R16,                                      GL_RED,                                      GL_UNSIGNED_SHORT,               true  }, // R16
 		{ GL_R16F,                                     GL_RED,                                      GL_HALF_FLOAT,                   true  }, // R16F
 		{ GL_R32UI,                                    GL_RED,                                      GL_UNSIGNED_INT,                 true  }, // R32
@@ -808,11 +808,15 @@ namespace bgfx
 
 	bool isTextureFormatValid(TextureFormat::Enum _format)
 	{
+		const TextureFormatInfo& tfi = s_textureFormat[_format];
+		if (GL_ZERO == tfi.m_internalFmt)
+		{
+			return false;
+		}
+
 		GLuint id;
 		GL_CHECK(glGenTextures(1, &id) );
 		GL_CHECK(glBindTexture(GL_TEXTURE_2D, id) );
-
-		const TextureFormatInfo& tfi = s_textureFormat[_format];
 
 		GLsizei size = (16*16*getBitsPerPixel(_format) )/8;
 		void* data = alloca(size);
@@ -865,6 +869,8 @@ namespace bgfx
 
 		void init()
 		{
+			m_renderdocdll = loadRenderDoc();
+
 			m_fbh.idx = invalidHandle;
 			memset(m_uniforms, 0, sizeof(m_uniforms) );
 			memset(&m_resolution, 0, sizeof(m_resolution) );
@@ -1397,6 +1403,8 @@ namespace bgfx
 			m_glctx.destroy();
 
 			m_flip = false;
+
+			unloadRenderDoc(m_renderdocdll);
 		}
 
 		RendererType::Enum getRendererType() const BX_OVERRIDE
@@ -1451,7 +1459,7 @@ namespace bgfx
 		{
 		}
 
-		void createVertexBuffer(VertexBufferHandle _handle, Memory* _mem, VertexDeclHandle _declHandle) BX_OVERRIDE
+		void createVertexBuffer(VertexBufferHandle _handle, Memory* _mem, VertexDeclHandle _declHandle, uint8_t /*_flags*/) BX_OVERRIDE
 		{
 			m_vertexBuffers[_handle.idx].create(_mem->size, _mem->data, _declHandle);
 		}
@@ -1476,7 +1484,7 @@ namespace bgfx
 			m_indexBuffers[_handle.idx].destroy();
 		}
 
-		void createDynamicVertexBuffer(VertexBufferHandle _handle, uint32_t _size) BX_OVERRIDE
+		void createDynamicVertexBuffer(VertexBufferHandle _handle, uint32_t _size, uint8_t /*_flags*/) BX_OVERRIDE
 		{
 			VertexDeclHandle decl = BGFX_INVALID_HANDLE;
 			m_vertexBuffers[_handle.idx].create(_size, NULL, decl);
@@ -2379,6 +2387,8 @@ namespace bgfx
 					) );
 			}
 		}
+
+		void* m_renderdocdll;
 
 		uint16_t m_numWindows;
 		FrameBufferHandle m_windows[BGFX_CONFIG_MAX_FRAME_BUFFERS];
@@ -4337,9 +4347,9 @@ namespace bgfx
 
 								case ComputeBinding::Buffer:
 									{
-// 										const VertexBufferGL& vertexBuffer = m_vertexBuffers[bind.m_idx];
-// 										GL_CHECK(glBindBufferBase(GL_SHADER_STORAGE_BUFFER, ii, vertexBuffer.m_id) ); 
-// 										barrier |= GL_SHADER_STORAGE_BARRIER_BIT;
+										const VertexBufferGL& vertexBuffer = m_vertexBuffers[bind.m_idx];
+										GL_CHECK(glBindBufferBase(GL_SHADER_STORAGE_BUFFER, ii, vertexBuffer.m_id) ); 
+										barrier |= GL_SHADER_STORAGE_BARRIER_BIT;
 									}
 									break;
 								}
@@ -5176,6 +5186,11 @@ namespace bgfx
 						, statsNumInstances[ii]
 						, statsNumPrimsSubmitted[ii]
 						);
+				}
+
+				if (NULL != m_renderdocdll)
+				{
+					tvm.printf(tvm.m_width-27, 0, 0x1f, " [F11 - RenderDoc capture] ");
 				}
 
 				tvm.printf(10, pos++, 0x8e, "    Indices: %7d", statsNumIndices);

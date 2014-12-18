@@ -17,7 +17,6 @@ extern "C" int _main_(int _argc, char** _argv);
 
 namespace entry
 {
-	const uint16_t WindowHandle::invalidHandle = UINT16_MAX;
 	static uint32_t s_debug = BGFX_DEBUG_NONE;
 	static uint32_t s_reset = BGFX_RESET_NONE;
 	static bool s_exit = false;
@@ -112,16 +111,17 @@ namespace entry
 
 	static const InputBinding s_bindings[] = 
 	{
-		{ entry::Key::KeyQ,  entry::Modifier::LeftCtrl,  1, cmd, "exit"                              },
-		{ entry::Key::F1,    entry::Modifier::None,      1, cmd, "graphics stats"                    },
-		{ entry::Key::F1,    entry::Modifier::LeftShift, 1, cmd, "graphics stats 0\ngraphics text 0" },
-		{ entry::Key::F3,    entry::Modifier::None,      1, cmd, "graphics wireframe"                },
-		{ entry::Key::F4,    entry::Modifier::None,      1, cmd, "graphics hmd"                      },
-		{ entry::Key::F4,    entry::Modifier::LeftShift, 1, cmd, "graphics hmdrecenter"              },
-		{ entry::Key::F4,    entry::Modifier::LeftCtrl,  1, cmd, "graphics hmddbg"                   },
-		{ entry::Key::F7,    entry::Modifier::None,      1, cmd, "graphics vsync"                    },
-		{ entry::Key::F8,    entry::Modifier::None,      1, cmd, "graphics msaa"                     },
-		{ entry::Key::Print, entry::Modifier::None,      1, cmd, "graphics screenshot"               },
+		{ entry::Key::KeyQ,         entry::Modifier::LeftCtrl,  1, cmd, "exit"                              },
+		{ entry::Key::F1,           entry::Modifier::None,      1, cmd, "graphics stats"                    },
+		{ entry::Key::GamepadStart, entry::Modifier::None,      1, cmd, "graphics stats"                    },
+		{ entry::Key::F1,           entry::Modifier::LeftShift, 1, cmd, "graphics stats 0\ngraphics text 0" },
+		{ entry::Key::F3,           entry::Modifier::None,      1, cmd, "graphics wireframe"                },
+		{ entry::Key::F4,           entry::Modifier::None,      1, cmd, "graphics hmd"                      },
+		{ entry::Key::F4,           entry::Modifier::LeftShift, 1, cmd, "graphics hmdrecenter"              },
+		{ entry::Key::F4,           entry::Modifier::LeftCtrl,  1, cmd, "graphics hmddbg"                   },
+		{ entry::Key::F7,           entry::Modifier::None,      1, cmd, "graphics vsync"                    },
+		{ entry::Key::F8,           entry::Modifier::None,      1, cmd, "graphics msaa"                     },
+		{ entry::Key::Print,        entry::Modifier::None,      1, cmd, "graphics screenshot"               },
 
 		INPUT_BINDING_END
 	};
@@ -176,8 +176,29 @@ namespace entry
 			{
 				switch (ev->m_type)
 				{
+				case Event::Axis:
+					{
+						const AxisEvent* axis = static_cast<const AxisEvent*>(ev);
+						inputSetGamepadAxis(axis->m_gamepad, axis->m_axis, axis->m_value);
+					}
+					break;
+
+				case Event::Char:
+					{
+						const CharEvent* chev = static_cast<const CharEvent*>(ev);
+						inputChar(chev->m_len, chev->m_char);
+					}
+					break;
+
 				case Event::Exit:
 					return true;
+
+				case Event::Gamepad:
+					{
+						const GamepadEvent* gev = static_cast<const GamepadEvent*>(ev);
+						DBG("gamepad %d, %d", gev->m_gamepad.idx, gev->m_connected);
+					}
+					break;
 
 				case Event::Mouse:
 					{
@@ -216,13 +237,6 @@ namespace entry
 						handle = key->m_handle;
 
 						inputSetKeyState(key->m_key, key->m_modifiers, key->m_down);
-					}
-					break;
-
-				case Event::Char:
-					{
-						const CharEvent* chev = static_cast<const CharEvent*>(ev);
-						inputChar(chev->m_len, chev->m_char);
 					}
 					break;
 
@@ -302,8 +316,30 @@ namespace entry
 
 				switch (ev->m_type)
 				{
+				case Event::Axis:
+					{
+						const AxisEvent* axis = static_cast<const AxisEvent*>(ev);
+						inputSetGamepadAxis(axis->m_gamepad, axis->m_axis, axis->m_value);
+					}
+					break;
+
+				case Event::Char:
+					{
+						const CharEvent* chev = static_cast<const CharEvent*>(ev);
+						win.m_handle = chev->m_handle;
+						inputChar(chev->m_len, chev->m_char);
+					}
+					break;
+
 				case Event::Exit:
 					return true;
+
+				case Event::Gamepad:
+					{
+						const GamepadEvent* gev = static_cast<const GamepadEvent*>(ev);
+						DBG("gamepad %d, %d", gev->m_gamepad.idx, gev->m_connected);
+					}
+					break;
 
 				case Event::Mouse:
 					{
@@ -341,14 +377,6 @@ namespace entry
 						win.m_handle = key->m_handle;
 
 						inputSetKeyState(key->m_key, key->m_modifiers, key->m_down);
-					}
-					break;
-
-				case Event::Char:
-					{
-						const CharEvent* chev = static_cast<const CharEvent*>(ev);
-						win.m_handle = chev->m_handle;
-						inputChar(chev->m_len, chev->m_char);
 					}
 					break;
 
