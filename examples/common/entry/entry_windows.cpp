@@ -19,6 +19,10 @@
 #include <windowsx.h>
 #include <xinput.h>
 
+#ifndef XINPUT_GAMEPAD_GUIDE
+#	define XINPUT_GAMEPAD_GUIDE 0x400
+#endif // XINPUT_GAMEPAD_GUIDE
+
 namespace entry
 {
 	typedef DWORD (WINAPI* PFN_XINPUT_GET_STATE)(DWORD dwUserIndex, XINPUT_STATE* pState);
@@ -45,6 +49,7 @@ namespace entry
 		{ XINPUT_GAMEPAD_RIGHT_THUMB,    Key::GamepadThumbR    },
 		{ XINPUT_GAMEPAD_LEFT_SHOULDER,  Key::GamepadShoulderL },
 		{ XINPUT_GAMEPAD_RIGHT_SHOULDER, Key::GamepadShoulderR },
+		{ XINPUT_GAMEPAD_GUIDE,          Key::GamepadGuide     },
 		{ XINPUT_GAMEPAD_A,              Key::GamepadA         },
 		{ XINPUT_GAMEPAD_B,              Key::GamepadB         },
 		{ XINPUT_GAMEPAD_X,              Key::GamepadX         },
@@ -71,7 +76,7 @@ namespace entry
 			m_flip[GamepadAxis::RightY] = -1;
 		}
 
-		BX_NO_INLINE void init()
+		void init()
 		{
 			m_xinputdll = bx::dlopen(XINPUT_DLL_A);
 
@@ -79,12 +84,21 @@ namespace entry
 			{
 				XInputGetState = (PFN_XINPUT_GET_STATE)bx::dlsym(m_xinputdll, "XInputGetState");
 //				XInputEnable   = (PFN_XINPUT_ENABLE   )bx::dlsym(m_xinputdll, "XInputEnable"  );
+
+				if (NULL == XInputGetState)
+				{
+					shutdown();
+				}
 			}
 		}
 
 		void shutdown()
 		{
-			bx::dlclose(m_xinputdll);
+			if (NULL != m_xinputdll)
+			{
+				bx::dlclose(m_xinputdll);
+				m_xinputdll = NULL;
+			}
 		}
 
 		bool filter(GamepadAxis::Enum _axis, int32_t _old, int32_t* _value)
@@ -98,6 +112,11 @@ namespace entry
 
 		void update(EventQueue& _eventQueue)
 		{
+			if (NULL == m_xinputdll)
+			{
+				return;
+			}
+
 			WindowHandle defaultWindow = { 0 };
 			GamepadHandle handle = { 0 };
 
@@ -286,6 +305,18 @@ namespace entry
 		uint32_t m_flags;
 		tinystl::string m_title;
 	};
+
+	static void mouseCapture(HWND _hwnd, bool _capture)
+	{
+		if (_capture)
+		{
+			SetCapture(_hwnd);
+		}
+		else
+		{
+			ReleaseCapture();
+		}
+	}
 
 	struct Context
 	{
@@ -680,6 +711,7 @@ namespace entry
 				case WM_LBUTTONUP:
 				case WM_LBUTTONDBLCLK:
 					{
+						mouseCapture(_hwnd, _id == WM_LBUTTONDOWN);
 						int32_t mx = GET_X_LPARAM(_lparam);
 						int32_t my = GET_Y_LPARAM(_lparam);
 						m_eventQueue.postMouseEvent(findHandle(_hwnd), mx, my, m_mz, MouseButton::Left, _id == WM_LBUTTONDOWN);
@@ -690,16 +722,18 @@ namespace entry
 				case WM_MBUTTONUP:
 				case WM_MBUTTONDBLCLK:
 					{
+						mouseCapture(_hwnd, _id == WM_MBUTTONDOWN);
 						int32_t mx = GET_X_LPARAM(_lparam);
 						int32_t my = GET_Y_LPARAM(_lparam);
 						m_eventQueue.postMouseEvent(findHandle(_hwnd), mx, my, m_mz, MouseButton::Middle, _id == WM_MBUTTONDOWN);
 					}
 					break;
 
-				case WM_RBUTTONUP:
 				case WM_RBUTTONDOWN:
+				case WM_RBUTTONUP:
 				case WM_RBUTTONDBLCLK:
 					{
+						mouseCapture(_hwnd, _id == WM_RBUTTONDOWN);
 						int32_t mx = GET_X_LPARAM(_lparam);
 						int32_t my = GET_Y_LPARAM(_lparam);
 						m_eventQueue.postMouseEvent(findHandle(_hwnd), mx, my, m_mz, MouseButton::Right, _id == WM_RBUTTONDOWN);

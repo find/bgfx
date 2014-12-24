@@ -40,6 +40,17 @@ namespace bgfx
 	};
 	BX_STATIC_ASSERT(BX_COUNTOF(s_primInfo) == BX_COUNTOF(s_primName)+1);
 
+	union Zero
+	{
+		ID3D11Buffer*              m_buffer[D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT];
+		ID3D11UnorderedAccessView* m_uav[D3D11_PS_CS_UAV_REGISTER_COUNT];
+		ID3D11ShaderResourceView*  m_srv[D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT];
+		ID3D11SamplerState*        m_sampler[D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT];
+		uint32_t                   m_zero[D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT];
+	};
+
+	static Zero s_zero;
+
 	static const uint32_t s_checkMsaa[] =
 	{
 		0,
@@ -470,7 +481,6 @@ namespace bgfx
 #endif // USE_D3D11_DYNAMIC_LIB
 
 			HRESULT hr;
-
 			IDXGIFactory* factory;
 #if BX_PLATFORM_WINRT
 			// WinRT requires the IDXGIFactory2 interface, which isn't supported on older platforms
@@ -528,10 +538,12 @@ namespace bgfx
 				D3D_FEATURE_LEVEL_10_0,
 				D3D_FEATURE_LEVEL_9_3,
 				D3D_FEATURE_LEVEL_9_2,
-				D3D_FEATURE_LEVEL_9_1
+				D3D_FEATURE_LEVEL_9_1,
 			};
 
-			uint32_t flags = D3D11_CREATE_DEVICE_SINGLETHREADED
+			uint32_t flags = 0
+				| D3D11_CREATE_DEVICE_SINGLETHREADED
+				| D3D11_CREATE_DEVICE_BGRA_SUPPORT
 				| (BX_ENABLED(BGFX_CONFIG_DEBUG) ? D3D11_CREATE_DEVICE_DEBUG : 0)
 				;
 
@@ -582,13 +594,13 @@ namespace bgfx
 			m_scd.Height = BGFX_DEFAULT_HEIGHT;
 			m_scd.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 			m_scd.Stereo = false;
-			m_scd.SampleDesc.Count = 1;
+			m_scd.SampleDesc.Count   = 1;
 			m_scd.SampleDesc.Quality = 0;
 			m_scd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 			m_scd.BufferCount = 2;
-			m_scd.Scaling = DXGI_SCALING_NONE;
-			m_scd.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
-			m_scd.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
+			m_scd.Scaling     = DXGI_SCALING_NONE;
+			m_scd.SwapEffect  = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
+			m_scd.AlphaMode   = DXGI_ALPHA_MODE_IGNORE;
 
 			hr = m_factory->CreateSwapChainForCoreWindow(m_device
 				, g_bgfxCoreWindow
@@ -604,20 +616,20 @@ namespace bgfx
 			memset(&m_scd, 0, sizeof(m_scd) );
 			m_scd.BufferDesc.Width  = BGFX_DEFAULT_WIDTH;
 			m_scd.BufferDesc.Height = BGFX_DEFAULT_HEIGHT;
-			m_scd.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-			m_scd.BufferDesc.RefreshRate.Numerator = 60;
+			m_scd.BufferDesc.RefreshRate.Numerator   = 60;
 			m_scd.BufferDesc.RefreshRate.Denominator = 1;
-			m_scd.SampleDesc.Count = 1;
+			m_scd.BufferDesc.Format  = DXGI_FORMAT_R8G8B8A8_UNORM;
+			m_scd.SampleDesc.Count   = 1;
 			m_scd.SampleDesc.Quality = 0;
-			m_scd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-			m_scd.BufferCount = 1;
+			m_scd.BufferUsage  = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+			m_scd.BufferCount  = 1;
 			m_scd.OutputWindow = g_bgfxHwnd;
-			m_scd.Windowed = true;
+			m_scd.Windowed     = true;
 
 			hr = m_factory->CreateSwapChain(m_device
-										, &m_scd
-										, &m_swapChain
-										);
+				, &m_scd
+				, &m_swapChain
+				);
 #endif // BX_PLATFORM_WINRT
 			BGFX_FATAL(SUCCEEDED(hr), Fatal::UnableToInitialize, "Failed to create swap chain.");
 
@@ -1079,23 +1091,23 @@ namespace bgfx
 			DX_CHECK(m_device->CreateRenderTargetView(color, NULL, &m_backBufferColor) );
 			DX_RELEASE(color, 0);
 
-			D3D11_TEXTURE2D_DESC dsd;
-			dsd.Width  = getBufferWidth();
-			dsd.Height = getBufferHeight();
-			dsd.MipLevels = 1;
-			dsd.ArraySize = 1;
-			dsd.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
-			dsd.SampleDesc = m_scd.SampleDesc;
-			dsd.Usage = D3D11_USAGE_DEFAULT;
-			dsd.BindFlags = D3D11_BIND_DEPTH_STENCIL;
-			dsd.CPUAccessFlags = 0;
-			dsd.MiscFlags = 0;
-
 			ovrPostReset();
 
 			// If OVR doesn't create separate depth stencil view, create default one.
 			if (NULL == m_backBufferDepthStencil)
 			{
+				D3D11_TEXTURE2D_DESC dsd;
+				dsd.Width  = getBufferWidth();
+				dsd.Height = getBufferHeight();
+				dsd.MipLevels  = 1;
+				dsd.ArraySize  = 1;
+				dsd.Format     = DXGI_FORMAT_D24_UNORM_S8_UINT;
+				dsd.SampleDesc = m_scd.SampleDesc;
+				dsd.Usage      = D3D11_USAGE_DEFAULT;
+				dsd.BindFlags  = D3D11_BIND_DEPTH_STENCIL;
+				dsd.CPUAccessFlags = 0;
+				dsd.MiscFlags      = 0;
+
 				ID3D11Texture2D* depthStencil;
 				DX_CHECK(m_device->CreateTexture2D(&dsd, NULL, &depthStencil) );
 				DX_CHECK(m_device->CreateDepthStencilView(depthStencil, NULL, &m_backBufferDepthStencil) );
@@ -1710,10 +1722,10 @@ namespace bgfx
 		void setBufferSize(uint32_t _width, uint32_t _height)
 		{
 #if BX_PLATFORM_WINRT
-			m_scd.Width = _width;
+			m_scd.Width  = _width;
 			m_scd.Height = _height;
 #else
-			m_scd.BufferDesc.Width = _width;
+			m_scd.BufferDesc.Width  = _width;
 			m_scd.BufferDesc.Height = _height;
 #endif
 		}
@@ -1737,10 +1749,16 @@ namespace bgfx
 			{
 				ovrD3D11Config config;
 				config.D3D11.Header.API = ovrRenderAPI_D3D11;
+#	if OVR_VERSION > OVR_VERSION_043
 				config.D3D11.Header.BackBufferSize.w = m_scd.BufferDesc.Width;
 				config.D3D11.Header.BackBufferSize.h = m_scd.BufferDesc.Height;
+				config.D3D11.pBackBufferUAV = NULL;
+#	else
+				config.D3D11.Header.RTSize.w = m_scd.BufferDesc.Width;
+				config.D3D11.Header.RTSize.h = m_scd.BufferDesc.Height;
+#	endif // OVR_VERSION > OVR_VERSION_042
 				config.D3D11.Header.Multisample = 0;
-				config.D3D11.pDevice = m_device;
+				config.D3D11.pDevice        = m_device;
 				config.D3D11.pDeviceContext = m_deviceCtx;
 				config.D3D11.pBackBufferRT  = m_backBufferColor;
 				config.D3D11.pSwapChain     = m_swapChain;
@@ -1794,10 +1812,10 @@ namespace bgfx
 					texture.D3D11.pSRView            = m_ovrRT.m_srv;
 					m_ovr.postReset(texture.Texture);
 
-					std::swap(m_ovrRtv, m_backBufferColor);
+					bx::swap(m_ovrRtv, m_backBufferColor);
 
 					BX_CHECK(NULL == m_backBufferDepthStencil, "");
-					std::swap(m_ovrDsv, m_backBufferDepthStencil);
+					bx::swap(m_ovrDsv, m_backBufferDepthStencil);
 				}
 			}
 #endif // BGFX_CONFIG_USE_OVR
@@ -1809,8 +1827,8 @@ namespace bgfx
 			m_ovr.preReset();
 			if (NULL != m_ovrRtv)
 			{
-				std::swap(m_ovrRtv, m_backBufferColor);
-				std::swap(m_ovrDsv, m_backBufferDepthStencil);
+				bx::swap(m_ovrRtv, m_backBufferColor);
+				bx::swap(m_ovrDsv, m_backBufferDepthStencil);
 				BX_CHECK(NULL == m_backBufferDepthStencil, "");
 
 				DX_RELEASE(m_ovrRtv, 0);
@@ -1832,7 +1850,7 @@ namespace bgfx
 
 				D3D11_TEXTURE2D_DESC desc;
 				memcpy(&desc, &backBufferDesc, sizeof(desc) );
-				desc.SampleDesc.Count = 1;
+				desc.SampleDesc.Count   = 1;
 				desc.SampleDesc.Quality = 0;
 				desc.Usage = D3D11_USAGE_STAGING;
 				desc.BindFlags = 0;
@@ -2652,13 +2670,13 @@ namespace bgfx
 			case TextureCube:
 				{
 					D3D11_TEXTURE2D_DESC desc;
-					desc.Width = textureWidth;
+					desc.Width  = textureWidth;
 					desc.Height = textureHeight;
-					desc.MipLevels = numMips;
-					desc.Format = format;
+					desc.MipLevels  = numMips;
+					desc.Format     = format;
 					desc.SampleDesc = msaa;
-					desc.Usage = kk == 0 ? D3D11_USAGE_DEFAULT : D3D11_USAGE_IMMUTABLE;
-					desc.BindFlags = bufferOnly ? 0 : D3D11_BIND_SHADER_RESOURCE;
+					desc.Usage      = kk == 0 ? D3D11_USAGE_DEFAULT : D3D11_USAGE_IMMUTABLE;
+					desc.BindFlags  = bufferOnly ? 0 : D3D11_BIND_SHADER_RESOURCE;
 					desc.CPUAccessFlags = 0;
 
 					if (isDepth( (TextureFormat::Enum)m_textureFormat) )
@@ -2700,15 +2718,15 @@ namespace bgfx
 			case Texture3D:
 				{
 					D3D11_TEXTURE3D_DESC desc;
-					desc.Width = textureWidth;
+					desc.Width  = textureWidth;
 					desc.Height = textureHeight;
-					desc.Depth = imageContainer.m_depth;
+					desc.Depth  = imageContainer.m_depth;
 					desc.MipLevels = imageContainer.m_numMips;
-					desc.Format = format;
-					desc.Usage = kk == 0 ? D3D11_USAGE_DEFAULT : D3D11_USAGE_IMMUTABLE;
+					desc.Format    = format;
+					desc.Usage     = kk == 0 ? D3D11_USAGE_DEFAULT : D3D11_USAGE_IMMUTABLE;
 					desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
 					desc.CPUAccessFlags = 0;
-					desc.MiscFlags = 0;
+					desc.MiscFlags      = 0;
 
 					if (computeWrite)
 					{
@@ -3161,13 +3179,14 @@ namespace bgfx
 					{
 						wasCompute = true;
 
-						ID3D11ShaderResourceView* srv[BGFX_CONFIG_MAX_TEXTURE_SAMPLERS] = {};
-						deviceCtx->VSSetShaderResources(0, BGFX_CONFIG_MAX_TEXTURE_SAMPLERS, srv);
-						deviceCtx->PSSetShaderResources(0, BGFX_CONFIG_MAX_TEXTURE_SAMPLERS, srv);
+						deviceCtx->IASetVertexBuffers(0, 2, s_zero.m_buffer, s_zero.m_zero, s_zero.m_zero);
+						deviceCtx->IASetIndexBuffer(NULL, DXGI_FORMAT_R16_UINT, 0);
 
-						ID3D11SamplerState* sampler[BGFX_CONFIG_MAX_TEXTURE_SAMPLERS] = {};
-						deviceCtx->VSSetSamplers(0, BGFX_CONFIG_MAX_TEXTURE_SAMPLERS, sampler);
-						deviceCtx->PSSetSamplers(0, BGFX_CONFIG_MAX_TEXTURE_SAMPLERS, sampler);
+						deviceCtx->VSSetShaderResources(0, BGFX_CONFIG_MAX_TEXTURE_SAMPLERS, s_zero.m_srv);
+						deviceCtx->PSSetShaderResources(0, BGFX_CONFIG_MAX_TEXTURE_SAMPLERS, s_zero.m_srv);
+
+						deviceCtx->VSSetSamplers(0, BGFX_CONFIG_MAX_TEXTURE_SAMPLERS, s_zero.m_sampler);
+						deviceCtx->PSSetSamplers(0, BGFX_CONFIG_MAX_TEXTURE_SAMPLERS, s_zero.m_sampler);
 					}
 
 					const RenderCompute& compute = renderItem.compute;
@@ -3296,11 +3315,12 @@ namespace bgfx
 
 					const uint64_t pt = newFlags&BGFX_STATE_PT_MASK;
 					primIndex = uint8_t(pt>>BGFX_STATE_PT_SHIFT);
-					if (prim.m_type != s_primInfo[primIndex].m_type)
-					{
-						prim = s_primInfo[primIndex];
-						deviceCtx->IASetPrimitiveTopology(prim.m_type);
-					}
+				}
+
+				if (prim.m_type != s_primInfo[primIndex].m_type)
+				{
+					prim = s_primInfo[primIndex];
+					deviceCtx->IASetPrimitiveTopology(prim.m_type);
 				}
 
 				uint16_t scissor = draw.m_scissor;
