@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2014 Branimir Karadzic. All rights reserved.
+ * Copyright 2011-2015 Branimir Karadzic. All rights reserved.
  * License: http://www.opensource.org/licenses/BSD-2-Clause
  */
 
@@ -12,7 +12,7 @@
 
 namespace bgfx
 {
-	static char s_viewName[BGFX_CONFIG_MAX_VIEWS][256];
+	static char s_viewName[BGFX_CONFIG_MAX_VIEWS][BGFX_CONFIG_MAX_VIEW_NAME];
 
 	struct PrimInfo
 	{
@@ -27,6 +27,7 @@ namespace bgfx
 		{ GL_TRIANGLES,      3, 3, 0 },
 		{ GL_TRIANGLE_STRIP, 3, 1, 2 },
 		{ GL_LINES,          2, 2, 0 },
+		{ GL_LINE_STRIP,     2, 1, 1 },
 		{ GL_POINTS,         1, 1, 0 },
 	};
 
@@ -35,6 +36,7 @@ namespace bgfx
 		"TriList",
 		"TriStrip",
 		"Line",
+		"LineStrip",
 		"Point",
 	};
 
@@ -59,7 +61,7 @@ namespace bgfx
 	};
 	BX_STATIC_ASSERT(Attrib::Count == BX_COUNTOF(s_attribName) );
 
-	static const char* s_instanceDataName[BGFX_CONFIG_MAX_INSTANCE_DATA_COUNT] =
+	static const char* s_instanceDataName[] =
 	{
 		"i_data0",
 		"i_data1",
@@ -67,21 +69,24 @@ namespace bgfx
 		"i_data3",
 		"i_data4",
 	};
+	BX_STATIC_ASSERT(BGFX_CONFIG_MAX_INSTANCE_DATA_COUNT == BX_COUNTOF(s_instanceDataName) );
 
-	static const GLenum s_access[Access::Count] =
+	static const GLenum s_access[] =
 	{
 		GL_READ_ONLY,
 		GL_WRITE_ONLY,
 		GL_READ_WRITE,
 	};
+	BX_STATIC_ASSERT(Access::Count == BX_COUNTOF(s_access) );
 
-	static const GLenum s_attribType[AttribType::Count] =
+	static const GLenum s_attribType[] =
 	{
 		GL_UNSIGNED_BYTE,
 		GL_SHORT,
 		GL_HALF_FLOAT,
 		GL_FLOAT,
 	};
+	BX_STATIC_ASSERT(AttribType::Count == BX_COUNTOF(s_attribType) );
 
 	struct Blend
 	{
@@ -199,7 +204,7 @@ namespace bgfx
 		{ GL_COMPRESSED_RGBA_PVRTC_4BPPV2_IMG,         GL_COMPRESSED_RGBA_PVRTC_4BPPV2_IMG,         GL_ZERO,                         false }, // PTC24
 		{ GL_ZERO,                                     GL_ZERO,                                     GL_ZERO,                         true  }, // Unknown
 		{ GL_ZERO,                                     GL_ZERO,                                     GL_ZERO,                         true  }, // R1
-		{ GL_LUMINANCE,                                GL_LUMINANCE,                                GL_UNSIGNED_BYTE,                true  }, // R8
+		{ GL_R8,                                       GL_RED,                                      GL_UNSIGNED_BYTE,                true  }, // R8
 		{ GL_R16,                                      GL_RED,                                      GL_UNSIGNED_SHORT,               true  }, // R16
 		{ GL_R16F,                                     GL_RED,                                      GL_HALF_FLOAT,                   true  }, // R16F
 		{ GL_R32UI,                                    GL_RED,                                      GL_UNSIGNED_INT,                 true  }, // R32
@@ -803,11 +808,15 @@ namespace bgfx
 
 	bool isTextureFormatValid(TextureFormat::Enum _format)
 	{
+		const TextureFormatInfo& tfi = s_textureFormat[_format];
+		if (GL_ZERO == tfi.m_internalFmt)
+		{
+			return false;
+		}
+
 		GLuint id;
 		GL_CHECK(glGenTextures(1, &id) );
 		GL_CHECK(glBindTexture(GL_TEXTURE_2D, id) );
-
-		const TextureFormatInfo& tfi = s_textureFormat[_format];
 
 		GLsizei size = (16*16*getBitsPerPixel(_format) )/8;
 		void* data = alloca(size);
@@ -849,12 +858,27 @@ namespace bgfx
 			, m_hash( (BX_PLATFORM_WINDOWS<<1) | BX_ARCH_64BIT)
 			, m_backBufferFbo(0)
 			, m_msaaBackBufferFbo(0)
+			, m_ovrFbo(0)
 		{
+			memset(m_msaaBackBufferRbos, 0, sizeof(m_msaaBackBufferRbos) );
+		}
+
+		~RendererContextGL()
+		{
+		}
+
+		void init()
+		{
+			m_renderdocdll = loadRenderDoc();
+
 			m_fbh.idx = invalidHandle;
 			memset(m_uniforms, 0, sizeof(m_uniforms) );
 			memset(&m_resolution, 0, sizeof(m_resolution) );
 
 			setRenderContextSize(BGFX_DEFAULT_WIDTH, BGFX_DEFAULT_HEIGHT);
+
+			// Must be after context is initialized?!
+			m_ovr.init();
 
 			m_vendor = getGLString(GL_VENDOR);
 			m_renderer = getGLString(GL_RENDERER);
@@ -1131,6 +1155,13 @@ namespace bgfx
 				}
 			}
 
+			if (!isTextureFormatValid(TextureFormat::R8) )
+			{
+				// GL core has to use GL_R8 Issue#208, GLES2 has to use GL_LUMINANCE issue#226
+				s_textureFormat[TextureFormat::R8].m_internalFmt = GL_LUMINANCE;
+				s_textureFormat[TextureFormat::R8].m_fmt         = GL_LUMINANCE;
+			}
+
 			if (!BX_ENABLED(BX_PLATFORM_EMSCRIPTEN) )
 			{
 				for (uint32_t ii = 0; ii < TextureFormat::Count; ++ii)
@@ -1229,7 +1260,7 @@ namespace bgfx
 				|| s_extension[Extension::WEBKIT_WEBGL_depth_texture].m_supported
 				;
 
-			g_caps.supported |= m_depthTextureSupport 
+			g_caps.supported |= m_depthTextureSupport
 				? BGFX_CAPS_TEXTURE_COMPARE_LEQUAL
 				: 0
 				;
@@ -1237,6 +1268,11 @@ namespace bgfx
 			g_caps.supported |= !!(BGFX_CONFIG_RENDERER_OPENGLES >= 31)
 				|| s_extension[Extension::ARB_compute_shader].m_supported
 				? BGFX_CAPS_COMPUTE
+				: 0
+				;
+
+			g_caps.supported |= GlContext::isSwapChainSupported()
+				? BGFX_CAPS_SWAP_CHAIN
 				: 0
 				;
 
@@ -1289,13 +1325,6 @@ namespace bgfx
 				}
 			}
 
-			if (BX_ENABLED(BGFX_CONFIG_RENDERER_OPENGL >= 31)
-			||  BX_ENABLED(BGFX_CONFIG_RENDERER_OPENGLES >= 30) )
-			{
-				s_textureFormat[TextureFormat::R8].m_internalFmt = GL_R8;
-				s_textureFormat[TextureFormat::R8].m_fmt         = GL_RED;
-			}
-
 #if BGFX_CONFIG_RENDERER_OPENGL
 			if (s_extension[Extension::ARB_debug_output].m_supported
 			||  s_extension[Extension::KHR_debug].m_supported)
@@ -1339,10 +1368,21 @@ namespace bgfx
 			{
 				m_queries.create();
 			}
+
+			// Init reserved part of view name.
+			for (uint8_t ii = 0; ii < BGFX_CONFIG_MAX_VIEWS; ++ii)
+			{
+				bx::snprintf(s_viewName[ii], BGFX_CONFIG_MAX_VIEW_NAME_RESERVED+1, "%3d  ", ii);
+			}
+
+			ovrPostReset();
 		}
 
-		~RendererContextGL()
+		void shutdown()
 		{
+			ovrPreReset();
+			m_ovr.shutdown();
+
 			if (m_vaoSupport)
 			{
 				GL_CHECK(glBindVertexArray(0) );
@@ -1363,6 +1403,8 @@ namespace bgfx
 			m_glctx.destroy();
 
 			m_flip = false;
+
+			unloadRenderDoc(m_renderdocdll);
 		}
 
 		RendererType::Enum getRendererType() const BX_OVERRIDE
@@ -1388,7 +1430,11 @@ namespace bgfx
 				{
 					m_glctx.swap(m_frameBuffers[m_windows[ii].idx].m_swapChain);
 				}
-				m_glctx.swap();
+
+				if (!m_ovr.swap() )
+				{
+					m_glctx.swap();
+				}
 			}
 		}
 
@@ -1413,7 +1459,7 @@ namespace bgfx
 		{
 		}
 
-		void createVertexBuffer(VertexBufferHandle _handle, Memory* _mem, VertexDeclHandle _declHandle) BX_OVERRIDE
+		void createVertexBuffer(VertexBufferHandle _handle, Memory* _mem, VertexDeclHandle _declHandle, uint8_t /*_flags*/) BX_OVERRIDE
 		{
 			m_vertexBuffers[_handle.idx].create(_mem->size, _mem->data, _declHandle);
 		}
@@ -1438,7 +1484,7 @@ namespace bgfx
 			m_indexBuffers[_handle.idx].destroy();
 		}
 
-		void createDynamicVertexBuffer(VertexBufferHandle _handle, uint32_t _size) BX_OVERRIDE
+		void createDynamicVertexBuffer(VertexBufferHandle _handle, uint32_t _size, uint8_t /*_flags*/) BX_OVERRIDE
 		{
 			VertexDeclHandle decl = BGFX_INVALID_HANDLE;
 			m_vertexBuffers[_handle.idx].create(_size, NULL, decl);
@@ -1550,7 +1596,7 @@ namespace bgfx
 			uint32_t length = m_resolution.m_width*m_resolution.m_height*4;
 			uint8_t* data = (uint8_t*)BX_ALLOC(g_allocator, length);
 
-			uint32_t width = m_resolution.m_width;
+			uint32_t width  = m_resolution.m_width;
 			uint32_t height = m_resolution.m_height;
 
 			GL_CHECK(glReadPixels(0
@@ -1580,7 +1626,10 @@ namespace bgfx
 
 		void updateViewName(uint8_t _id, const char* _name) BX_OVERRIDE
 		{
-			bx::strlcpy(&s_viewName[_id][0], _name, BX_COUNTOF(s_viewName[0]) );
+			bx::strlcpy(&s_viewName[_id][BGFX_CONFIG_MAX_VIEW_NAME_RESERVED]
+				, _name
+				, BX_COUNTOF(s_viewName[0])-BGFX_CONFIG_MAX_VIEW_NAME_RESERVED
+				);
 		}
 
 		void updateUniform(uint16_t _loc, const void* _data, uint32_t _size) BX_OVERRIDE
@@ -1602,8 +1651,12 @@ namespace bgfx
 				GL_CHECK(glBindVertexArray(m_vao) );
 			}
 
-			uint32_t width = m_resolution.m_width;
+			uint32_t width  = m_resolution.m_width;
 			uint32_t height = m_resolution.m_height;
+			if (m_ovr.isEnabled() )
+			{
+				m_ovr.getSize(width, height);
+			}
 
 			GL_CHECK(glBindFramebuffer(GL_FRAMEBUFFER, m_backBufferFbo) );
 			GL_CHECK(glViewport(0, 0, width, height) );
@@ -1657,21 +1710,50 @@ namespace bgfx
 
 		void updateResolution(const Resolution& _resolution)
 		{
-			if (m_resolution.m_width != _resolution.m_width
+			bool recenter  = !!(_resolution.m_flags & BGFX_RESET_HMD_RECENTER);
+			uint32_t flags = _resolution.m_flags & ~BGFX_RESET_HMD_RECENTER;
+
+			if (m_resolution.m_width  != _resolution.m_width
 			||  m_resolution.m_height != _resolution.m_height
-			||  m_resolution.m_flags != _resolution.m_flags)
+			||  m_resolution.m_flags  != flags)
 			{
 				m_textVideoMem.resize(false, _resolution.m_width, _resolution.m_height);
 				m_textVideoMem.clear();
 
 				m_resolution = _resolution;
+				m_resolution.m_flags = flags;
 
 				uint32_t msaa = (m_resolution.m_flags&BGFX_RESET_MSAA_MASK)>>BGFX_RESET_MSAA_SHIFT;
 				msaa = bx::uint32_min(m_maxMsaa, msaa == 0 ? 0 : 1<<msaa);
 				bool vsync = !!(m_resolution.m_flags&BGFX_RESET_VSYNC);
 				setRenderContextSize(_resolution.m_width, _resolution.m_height, msaa, vsync);
 				updateCapture();
+
+				ovrPreReset();
+				ovrPostReset();
 			}
+
+			if (recenter)
+			{
+				m_ovr.recenter();
+			}
+		}
+
+		void setShaderUniform4f(uint8_t /*_flags*/, uint16_t _regIndex, const void* _val, uint16_t _numRegs)
+		{
+			GL_CHECK(glUniform4fv(_regIndex
+				, _numRegs
+				, (const GLfloat*)_val
+				) );
+		}
+
+		void setShaderUniform4x4f(uint8_t /*_flags*/, uint16_t _regIndex, const void* _val, uint16_t _numRegs)
+		{
+			GL_CHECK(glUniformMatrix4fv(_regIndex
+				, _numRegs
+				, GL_FALSE
+				, (const GLfloat*)_val
+				) );
 		}
 
 		uint32_t setFrameBuffer(FrameBufferHandle _fbh, uint32_t _height, bool _msaa = true)
@@ -1693,6 +1775,7 @@ namespace bgfx
 			else
 			{
 				FrameBufferGL& frameBuffer = m_frameBuffers[_fbh.idx];
+				_height = frameBuffer.m_height;
 				if (UINT16_MAX != frameBuffer.m_denseIdx)
 				{
 					m_glctx.makeCurrent(frameBuffer.m_swapChain);
@@ -1702,7 +1785,6 @@ namespace bgfx
 				{
 					m_glctx.makeCurrent(NULL);
 					GL_CHECK(glBindFramebuffer(GL_FRAMEBUFFER, frameBuffer.m_fbo[0]) );
-					_height = frameBuffer.m_height;
 				}
 			}
 
@@ -1737,9 +1819,9 @@ namespace bgfx
 				GL_CHECK(glRenderbufferStorageMultisample(GL_RENDERBUFFER, _msaa, GL_DEPTH24_STENCIL8, _width, _height) );
 				GL_CHECK(glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, m_msaaBackBufferRbos[0]) );
 
-				GLenum attachment = BX_ENABLED(BGFX_CONFIG_RENDERER_OPENGL) || BX_ENABLED(BGFX_CONFIG_RENDERER_OPENGLES >= 30) 
+				GLenum attachment = BX_ENABLED(BGFX_CONFIG_RENDERER_OPENGL) || BX_ENABLED(BGFX_CONFIG_RENDERER_OPENGLES >= 30)
 					? GL_DEPTH_STENCIL_ATTACHMENT
-					: GL_DEPTH_ATTACHMENT 
+					: GL_DEPTH_ATTACHMENT
 					;
 				GL_CHECK(glFramebufferRenderbuffer(GL_FRAMEBUFFER, attachment, GL_RENDERBUFFER, m_msaaBackBufferRbos[1]) );
 
@@ -1758,8 +1840,14 @@ namespace bgfx
 			&&  0 != m_msaaBackBufferFbo)
 			{
 				GL_CHECK(glDeleteFramebuffers(1, &m_msaaBackBufferFbo) );
-				GL_CHECK(glDeleteRenderbuffers(BX_COUNTOF(m_msaaBackBufferRbos), m_msaaBackBufferRbos) );
 				m_msaaBackBufferFbo = 0;
+
+				if (0 != m_msaaBackBufferRbos[0])
+				{
+					GL_CHECK(glDeleteRenderbuffers(BX_COUNTOF(m_msaaBackBufferRbos), m_msaaBackBufferRbos) );
+					m_msaaBackBufferRbos[0] = 0;
+					m_msaaBackBufferRbos[1] = 0;
+				}
 			}
 		}
 
@@ -1772,10 +1860,10 @@ namespace bgfx
 				GL_CHECK(glBindFramebuffer(GL_FRAMEBUFFER, m_backBufferFbo) );
 				GL_CHECK(glBindFramebuffer(GL_READ_FRAMEBUFFER, m_msaaBackBufferFbo) );
 				GL_CHECK(glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0) );
-				uint32_t width = m_resolution.m_width;
+				uint32_t width  = m_resolution.m_width;
 				uint32_t height = m_resolution.m_height;
-				GLenum filter = BX_ENABLED(BGFX_CONFIG_RENDERER_OPENGL) || BX_ENABLED(BGFX_CONFIG_RENDERER_OPENGLES < 30) 
-					? GL_NEAREST 
+				GLenum filter = BX_ENABLED(BGFX_CONFIG_RENDERER_OPENGL) || BX_ENABLED(BGFX_CONFIG_RENDERER_OPENGLES < 30)
+					? GL_NEAREST
 					: GL_LINEAR
 					;
 				GL_CHECK(glBlitFramebuffer(0
@@ -1795,7 +1883,7 @@ namespace bgfx
 
 		void setRenderContextSize(uint32_t _width, uint32_t _height, uint32_t _msaa = 0, bool _vsync = false)
 		{
-			if (_width != 0
+			if (_width  != 0
 			||  _height != 0)
 			{
 				if (!m_glctx.isValid() )
@@ -1889,6 +1977,86 @@ namespace bgfx
 					GL_CHECK(glBindSampler(_stage, 0) );
 				}
 			}
+		}
+
+		void ovrPostReset()
+		{
+#if BGFX_CONFIG_USE_OVR
+			if (m_resolution.m_flags & (BGFX_RESET_HMD|BGFX_RESET_HMD_DEBUG) )
+			{
+				ovrGLConfig config;
+				config.OGL.Header.API = ovrRenderAPI_OpenGL;
+#	if OVR_VERSION > OVR_VERSION_043
+				config.OGL.Header.BackBufferSize.w = m_resolution.m_width;
+				config.OGL.Header.BackBufferSize.h = m_resolution.m_height;
+#	else
+				config.OGL.Header.RTSize.w = m_resolution.m_width;
+				config.OGL.Header.RTSize.h = m_resolution.m_height;
+#	endif // OVR_VERSION > OVR_VERSION_043
+				config.OGL.Header.Multisample = 0;
+				config.OGL.Window = g_bgfxHwnd;
+				config.OGL.DC = GetDC(g_bgfxHwnd);
+				if (m_ovr.postReset(g_bgfxHwnd, &config.Config, !!(m_resolution.m_flags & BGFX_RESET_HMD_DEBUG) ) )
+				{
+					uint32_t size = sizeof(uint32_t) + sizeof(TextureCreate);
+					const Memory* mem = alloc(size);
+
+					bx::StaticMemoryBlockWriter writer(mem->data, mem->size);
+					uint32_t magic = BGFX_CHUNK_MAGIC_TEX;
+					bx::write(&writer, magic);
+
+					TextureCreate tc;
+					tc.m_flags   = BGFX_TEXTURE_RT;
+					tc.m_width   = m_ovr.m_rtSize.w;
+					tc.m_height  = m_ovr.m_rtSize.h;
+					tc.m_sides   = 0;
+					tc.m_depth   = 0;
+					tc.m_numMips = 1;
+					tc.m_format  = uint8_t(bgfx::TextureFormat::BGRA8);
+					tc.m_cubeMap = false;
+					tc.m_mem = NULL;
+					bx::write(&writer, tc);
+
+					m_ovrRT.create(mem, tc.m_flags, 0);
+					release(mem);
+
+					m_ovrFbo = m_msaaBackBufferFbo;
+
+					GL_CHECK(glGenFramebuffers(1, &m_msaaBackBufferFbo) );
+					GL_CHECK(glBindFramebuffer(GL_FRAMEBUFFER, m_msaaBackBufferFbo) );
+
+					GL_CHECK(glFramebufferTexture2D(GL_FRAMEBUFFER
+						, GL_COLOR_ATTACHMENT0
+						, GL_TEXTURE_2D
+						, m_ovrRT.m_id
+						, 0
+						) );
+
+					GL_CHECK(glBindFramebuffer(GL_FRAMEBUFFER, m_ovrFbo) );
+
+					ovrGLTexture texture;
+					texture.OGL.Header.API         = ovrRenderAPI_OpenGL;
+					texture.OGL.Header.TextureSize = m_ovr.m_rtSize;
+					texture.OGL.TexId              = m_ovrRT.m_id;
+					m_ovr.postReset(texture.Texture);
+				}
+			}
+#endif // BGFX_CONFIG_USE_OVR
+		}
+
+		void ovrPreReset()
+		{
+#if BGFX_CONFIG_USE_OVR
+			m_ovr.preReset();
+			if (m_ovr.isEnabled() )
+			{
+				GL_CHECK(glBindFramebuffer(GL_FRAMEBUFFER, 0) );
+				GL_CHECK(glDeleteFramebuffers(1, &m_msaaBackBufferFbo) );
+				m_msaaBackBufferFbo = m_ovrFbo;
+				m_ovrFbo = 0;
+				m_ovrRT.destroy();
+			}
+#endif // BGFX_CONFIG_USE_OVR
 		}
 
 		void updateCapture()
@@ -2181,7 +2349,7 @@ namespace bgfx
 						float m_y;
 						float m_z;
 					};
-					
+
 					Vertex* vertex = (Vertex*)_clearQuad.m_vb->data;
 					BX_CHECK(vertexDecl.m_stride == sizeof(Vertex), "Stride/Vertex mismatch (stride %d, sizeof(Vertex) %d)", vertexDecl.m_stride, sizeof(Vertex) );
 
@@ -2242,6 +2410,8 @@ namespace bgfx
 			}
 		}
 
+		void* m_renderdocdll;
+
 		uint16_t m_numWindows;
 		FrameBufferHandle m_windows[BGFX_CONFIG_MAX_FRAME_BUFFERS];
 
@@ -2290,6 +2460,10 @@ namespace bgfx
 		const char* m_renderer;
 		const char* m_version;
 		const char* m_glslVersion;
+
+		OVR m_ovr;
+		TextureGL m_ovrRT;
+		GLint m_ovrFbo;
 	};
 
 	RendererContextGL* s_renderGL;
@@ -2297,11 +2471,13 @@ namespace bgfx
 	RendererContextI* rendererCreateGL()
 	{
 		s_renderGL = BX_NEW(g_allocator, RendererContextGL);
+		s_renderGL->init();
 		return s_renderGL;
 	}
 
 	void rendererDestroyGL()
 	{
+		s_renderGL->shutdown();
 		BX_DELETE(g_allocator, s_renderGL);
 		s_renderGL = NULL;
 	}
@@ -2315,7 +2491,7 @@ namespace bgfx
 			GLSL_TYPE(GL_INT);
 			GLSL_TYPE(GL_INT_VEC2);
 			GLSL_TYPE(GL_INT_VEC3);
-			GLSL_TYPE(GL_INT_VEC4);		
+			GLSL_TYPE(GL_INT_VEC4);
 			GLSL_TYPE(GL_UNSIGNED_INT);
 			GLSL_TYPE(GL_UNSIGNED_INT_VEC2);
 			GLSL_TYPE(GL_UNSIGNED_INT_VEC3);
@@ -2547,7 +2723,6 @@ namespace bgfx
 		}
 
 		m_numPredefined = 0;
-		m_constantBuffer = ConstantBuffer::create(1024);
  		m_numSamplers = 0;
 
 		struct VariableInfo
@@ -2645,6 +2820,11 @@ namespace bgfx
 				const UniformInfo* info = s_renderGL->m_uniformReg.find(name);
 				if (NULL != info)
 				{
+					if (NULL == m_constantBuffer)
+					{
+						m_constantBuffer = ConstantBuffer::create(1024);
+					}
+
 					UniformType::Enum type = convertGlType(gltype);
 					m_constantBuffer->writeUniformHandle(type, 0, info->m_handle, num);
 					m_constantBuffer->write(loc);
@@ -2661,6 +2841,11 @@ namespace bgfx
 				, offset
 				);
 			BX_UNUSED(offset);
+		}
+
+		if (NULL != m_constantBuffer)
+		{
+			m_constantBuffer->finish();
 		}
 
 		if (s_extension[Extension::ARB_program_interface_query].m_supported
@@ -2701,8 +2886,6 @@ namespace bgfx
 					);
 			}
 		}
-
-		m_constantBuffer->finish();
 
 		memset(m_attributes, 0xff, sizeof(m_attributes) );
 		uint32_t used = 0;
@@ -2983,7 +3166,7 @@ namespace bgfx
 			const bool compressed = isCompressed(TextureFormat::Enum(m_textureFormat) );
 			uint32_t blockWidth  = 1;
 			uint32_t blockHeight = 1;
-			
+
 			if (convert && compressed)
 			{
 				blockWidth  = blockInfo.blockWidth;
@@ -3404,6 +3587,9 @@ namespace bgfx
 		bx::read(&reader, shaderSize);
 
 		m_id = glCreateShader(m_type);
+		BX_WARN(0 != m_id, "Failed to create %s shader."
+				, BGFX_CHUNK_MAGIC_FSH == magic ? "fragment" : BGFX_CHUNK_MAGIC_VSH == magic ? "vertex" : "compute"
+				);
 
 		const char* code = (const char*)reader.getDataPtr();
 
@@ -3425,7 +3611,7 @@ namespace bgfx
 						  "#define noperspective\n"
 						);
 
-					bool usesDerivatives = s_extension[Extension::OES_standard_derivatives].m_supported 
+					bool usesDerivatives = s_extension[Extension::OES_standard_derivatives].m_supported
 						&& bx::findIdentifierMatch(code, s_OES_standard_derivatives)
 						;
 
@@ -3799,7 +3985,7 @@ namespace bgfx
 						, 0
 						) );
 				}
-				
+
 				needResolve |= (0 != texture.m_rbo) && (0 != texture.m_id);
 			}
 		}
@@ -3871,19 +4057,22 @@ namespace bgfx
 
 	uint16_t FrameBufferGL::destroy()
 	{
-		GL_CHECK(glDeleteFramebuffers(0 == m_fbo[1] ? 1 : 2, m_fbo) );
-		memset(m_fbo, 0, sizeof(m_fbo) );
-		m_num = 0;
+		if (0 != m_num)
+		{
+			GL_CHECK(glDeleteFramebuffers(0 == m_fbo[1] ? 1 : 2, m_fbo) );
+			memset(m_fbo, 0, sizeof(m_fbo) );
+			m_num = 0;
+		}
 
 		if (NULL != m_swapChain)
 		{
-			s_renderGL->m_glctx.destorySwapChain(m_swapChain);
+			s_renderGL->m_glctx.destroySwapChain(m_swapChain);
 			m_swapChain = NULL;
 		}
 
 		uint16_t denseIdx = m_denseIdx;
 		m_denseIdx = UINT16_MAX;
-		
+
 		return denseIdx;
 	}
 
@@ -3913,15 +4102,25 @@ namespace bgfx
 
 	void RendererContextGL::submit(Frame* _render, ClearQuad& _clearQuad, TextVideoMemBlitter& _textVideoMemBlitter)
 	{
+		if (1 < m_numWindows
+		&&  m_vaoSupport)
+		{
+			m_vaoSupport = false;
+			GL_CHECK(glBindVertexArray(0) );
+			GL_CHECK(glDeleteVertexArrays(1, &m_vao) );
+			m_vao = 0;
+			m_vaoStateCache.invalidate();
+		}
+
 		m_glctx.makeCurrent(NULL);
 
-		const GLuint defaultVao = s_renderGL->m_vao;
+		const GLuint defaultVao = m_vao;
 		if (0 != defaultVao)
 		{
 			GL_CHECK(glBindVertexArray(defaultVao) );
 		}
 
-		GL_CHECK(glBindFramebuffer(GL_FRAMEBUFFER, s_renderGL->m_backBufferFbo) );
+		GL_CHECK(glBindFramebuffer(GL_FRAMEBUFFER, m_backBufferFbo) );
 
 		updateResolution(_render->m_resolution);
 
@@ -3931,19 +4130,19 @@ namespace bgfx
 		if (BX_ENABLED(BGFX_CONFIG_RENDERER_OPENGL)
 		&& (_render->m_debug & (BGFX_DEBUG_IFH|BGFX_DEBUG_STATS) ) )
 		{
-			s_renderGL->m_queries.begin(0, GL_TIME_ELAPSED);
+			m_queries.begin(0, GL_TIME_ELAPSED);
 		}
 
 		if (0 < _render->m_iboffset)
 		{
 			TransientIndexBuffer* ib = _render->m_transientIb;
-			s_renderGL->m_indexBuffers[ib->handle.idx].update(0, _render->m_iboffset, ib->data);
+			m_indexBuffers[ib->handle.idx].update(0, _render->m_iboffset, ib->data);
 		}
 
 		if (0 < _render->m_vboffset)
 		{
 			TransientVertexBuffer* vb = _render->m_transientVb;
-			s_renderGL->m_vertexBuffers[vb->handle.idx].update(0, _render->m_vboffset, vb->data);
+			m_vertexBuffers[vb->handle.idx].update(0, _render->m_vboffset, vb->data);
 		}
 
 		_render->sort();
@@ -3953,25 +4152,25 @@ namespace bgfx
 		currentState.m_flags = BGFX_STATE_NONE;
 		currentState.m_stencil = packStencil(BGFX_STENCIL_NONE, BGFX_STENCIL_NONE);
 
-		Matrix4 viewProj[BGFX_CONFIG_MAX_VIEWS];
-		for (uint32_t ii = 0; ii < BGFX_CONFIG_MAX_VIEWS; ++ii)
+		const bool hmdEnabled = m_ovr.isEnabled() || m_ovr.isDebug();
+		_render->m_hmdEnabled = hmdEnabled;
+
+		if (hmdEnabled)
 		{
-			bx::float4x4_mul(&viewProj[ii].un.f4x4, &_render->m_view[ii].un.f4x4, &_render->m_proj[ii].un.f4x4);
+			HMD& hmd = _render->m_hmd;
+			m_ovr.getEyePose(hmd);
 		}
 
-		Matrix4 invView;
-		Matrix4 invProj;
-		Matrix4 invViewProj;
-		uint8_t invViewCached = 0xff;
-		uint8_t invProjCached = 0xff;
-		uint8_t invViewProjCached = 0xff;
+		ViewState viewState(_render, hmdEnabled);
 
 		uint16_t programIdx = invalidHandle;
 		SortKey key;
 		uint8_t view = 0xff;
 		FrameBufferHandle fbh = BGFX_INVALID_HANDLE;
-		int32_t height = _render->m_resolution.m_height;
-		float alphaRef = 0.0f;
+		int32_t height = hmdEnabled
+					? _render->m_hmd.height
+					: _render->m_resolution.m_height
+					;
 		uint32_t blendFactor = 0;
 
 		const uint64_t pt = _render->m_debug&BGFX_DEBUG_WIREFRAME ? BGFX_STATE_PT_LINES : 0;
@@ -3996,18 +4195,35 @@ namespace bgfx
 
 		if (0 == (_render->m_debug&BGFX_DEBUG_IFH) )
 		{
-			GL_CHECK(glBindFramebuffer(GL_FRAMEBUFFER, s_renderGL->m_msaaBackBufferFbo) );
+			GL_CHECK(glBindFramebuffer(GL_FRAMEBUFFER, m_msaaBackBufferFbo) );
 
-			for (uint32_t item = 0, numItems = _render->m_num; item < numItems; ++item)
+			bool viewRestart = false;
+			uint8_t eye = 0;
+			uint8_t restartState = 0;
+			viewState.m_rect = _render->m_rect[0];
+
+			int32_t numItems = _render->m_num;
+			for (int32_t item = 0, restartItem = numItems; item < numItems || restartItem < numItems;)
 			{
 				const bool isCompute   = key.decode(_render->m_sortKeys[item]);
-				const bool viewChanged = key.m_view != view;
+				const bool viewChanged = 0
+					|| key.m_view != view
+					|| item == numItems
+					;
 
 				const RenderItem& renderItem = _render->m_renderItem[_render->m_sortValues[item] ];
+				++item;
 
 				if (viewChanged)
 				{
-					GL_CHECK(glInsertEventMarker(0, s_viewName[key.m_view]) );
+					if (1 == restartState)
+					{
+						restartState = 2;
+						item = restartItem;
+						restartItem = numItems;
+						view = 0xff;
+						continue;
+					}
 
 					view = key.m_view;
 					programIdx = invalidHandle;
@@ -4015,21 +4231,63 @@ namespace bgfx
 					if (_render->m_fb[view].idx != fbh.idx)
 					{
 						fbh = _render->m_fb[view];
-						height = s_renderGL->setFrameBuffer(fbh, _render->m_resolution.m_height);
+						height = hmdEnabled
+							? _render->m_hmd.height
+							: _render->m_resolution.m_height
+							;
+						height = setFrameBuffer(fbh, height);
 					}
 
-					const Rect& rect = _render->m_rect[view];
+					viewRestart = ( (BGFX_VIEW_STEREO == (_render->m_viewFlags[view] & BGFX_VIEW_STEREO) ) );
+					viewRestart &= hmdEnabled;
+					if (viewRestart)
+					{
+						if (0 == restartState)
+						{
+							restartState = 1;
+							restartItem  = item - 1;
+						}
+
+						eye = (restartState - 1) & 1;
+						restartState &= 1;
+					}
+					else
+					{
+						eye = 0;
+					}
+
+					viewState.m_rect = _render->m_rect[view];
+					if (viewRestart)
+					{
+						char* viewName = s_viewName[view];
+						viewName[3] = eye ? 'R' : 'L';
+						GL_CHECK(glInsertEventMarker(0, viewName) );
+
+						viewState.m_rect.m_x = eye * (viewState.m_rect.m_width+1)/2;
+						viewState.m_rect.m_width /= 2;
+					}
+					else
+					{
+						char* viewName = s_viewName[view];
+						viewName[3] = ' ';
+						GL_CHECK(glInsertEventMarker(0, viewName) );
+					}
+
 					const Rect& scissorRect = _render->m_scissor[view];
 					viewHasScissor = !scissorRect.isZero();
-					viewScissorRect = viewHasScissor ? scissorRect : rect;
+					viewScissorRect = viewHasScissor ? scissorRect : viewState.m_rect;
 
-					GL_CHECK(glViewport(rect.m_x, height-rect.m_height-rect.m_y, rect.m_width, rect.m_height) );
+					GL_CHECK(glViewport(viewState.m_rect.m_x
+						, height-viewState.m_rect.m_height-viewState.m_rect.m_y
+						, viewState.m_rect.m_width
+						, viewState.m_rect.m_height
+						) );
 
 					Clear& clear = _render->m_clear[view];
 
 					if (BGFX_CLEAR_NONE != clear.m_flags)
 					{
-						clearQuad(_clearQuad, rect, clear, height, _render->m_clearColor);
+						clearQuad(_clearQuad, viewState.m_rect, clear, height, _render->m_clearColor);
 					}
 
 					GL_CHECK(glDisable(GL_STENCIL_TEST) );
@@ -4066,9 +4324,9 @@ namespace bgfx
 
 								case ComputeBinding::Buffer:
 									{
-// 										const VertexBufferGL& vertexBuffer = m_vertexBuffers[bind.m_idx];
-// 										GL_CHECK(glBindBufferBase(GL_SHADER_STORAGE_BUFFER, ii, vertexBuffer.m_id) ); 
-// 										barrier |= GL_SHADER_STORAGE_BARRIER_BIT;
+										const VertexBufferGL& vertexBuffer = m_vertexBuffers[bind.m_idx];
+										GL_CHECK(glBindBufferBase(GL_SHADER_STORAGE_BUFFER, ii, vertexBuffer.m_id) );
+										barrier |= GL_SHADER_STORAGE_BARRIER_BIT;
 									}
 									break;
 								}
@@ -4080,10 +4338,13 @@ namespace bgfx
 							bool constantsChanged = compute.m_constBegin < compute.m_constEnd;
 							rendererUpdateUniforms(this, _render->m_constantBuffer, compute.m_constBegin, compute.m_constEnd);
 
-							if (constantsChanged)
+							if (constantsChanged
+							&&  NULL != program.m_constantBuffer)
 							{
 								commit(*program.m_constantBuffer);
 							}
+
+							viewState.setPredefined<1>(this, view, eye, program, _render, compute);
 
 							GL_CHECK(glDispatchCompute(compute.m_numX, compute.m_numY, compute.m_numZ) );
 							GL_CHECK(glMemoryBarrier(barrier) );
@@ -4123,7 +4384,11 @@ namespace bgfx
 						if (viewHasScissor)
 						{
 							GL_CHECK(glEnable(GL_SCISSOR_TEST) );
-							GL_CHECK(glScissor(viewScissorRect.m_x, height-viewScissorRect.m_height-viewScissorRect.m_y, viewScissorRect.m_width, viewScissorRect.m_height) );
+							GL_CHECK(glScissor(viewScissorRect.m_x
+								, height-viewScissorRect.m_height-viewScissorRect.m_y
+								, viewScissorRect.m_width
+								, viewScissorRect.m_height
+								) );
 						}
 						else
 						{
@@ -4135,7 +4400,11 @@ namespace bgfx
 						Rect scissorRect;
 						scissorRect.intersect(viewScissorRect, _render->m_rectCache.m_cache[scissor]);
 						GL_CHECK(glEnable(GL_SCISSOR_TEST) );
-						GL_CHECK(glScissor(scissorRect.m_x, height-scissorRect.m_height-scissorRect.m_y, scissorRect.m_width, scissorRect.m_height) );
+						GL_CHECK(glScissor(scissorRect.m_x
+							, height-scissorRect.m_height-scissorRect.m_y
+							, scissorRect.m_width
+							, scissorRect.m_height
+							) );
 					}
 				}
 
@@ -4239,7 +4508,7 @@ namespace bgfx
 					if (BGFX_STATE_ALPHA_REF_MASK & changedFlags)
 					{
 						uint32_t ref = (newFlags&BGFX_STATE_ALPHA_REF_MASK)>>BGFX_STATE_ALPHA_REF_SHIFT;
-						alphaRef = ref/255.0f;
+						viewState.m_alphaRef = ref/255.0f;
 					}
 
 #if BGFX_CONFIG_RENDERER_OPENGL
@@ -4395,171 +4664,13 @@ namespace bgfx
 				{
 					ProgramGL& program = m_program[programIdx];
 
-					if (constantsChanged)
+					if (constantsChanged
+					&&  NULL != program.m_constantBuffer)
 					{
 						commit(*program.m_constantBuffer);
 					}
 
-					for (uint32_t ii = 0, num = program.m_numPredefined; ii < num; ++ii)
-					{
-						PredefinedUniform& predefined = program.m_predefined[ii];
-						switch (predefined.m_type)
-						{
-						case PredefinedUniform::ViewRect:
-							{
-								float rect[4];
-								rect[0] = _render->m_rect[view].m_x;
-								rect[1] = _render->m_rect[view].m_y;
-								rect[2] = _render->m_rect[view].m_width;
-								rect[3] = _render->m_rect[view].m_height;
-
-								GL_CHECK(glUniform4fv(predefined.m_loc
-									, 1
-									, &rect[0]
-								) );
-							}
-							break;
-
-						case PredefinedUniform::ViewTexel:
-							{
-								float rect[4];
-								rect[0] = 1.0f/float(_render->m_rect[view].m_width);
-								rect[1] = 1.0f/float(_render->m_rect[view].m_height);
-
-								GL_CHECK(glUniform4fv(predefined.m_loc
-									, 1
-									, &rect[0]
-								) );
-							}
-							break;
-
-						case PredefinedUniform::View:
-							{
-								GL_CHECK(glUniformMatrix4fv(predefined.m_loc
-									, 1
-									, GL_FALSE
-									, _render->m_view[view].un.val
-									) );
-							}
-							break;
-
-						case PredefinedUniform::InvView:
-							{
-								if (view != invViewCached)
-								{
-									invViewCached = view;
-									bx::float4x4_inverse(&invView.un.f4x4, &_render->m_view[view].un.f4x4);
-								}
-
-								GL_CHECK(glUniformMatrix4fv(predefined.m_loc
-									, 1
-									, GL_FALSE
-									, invView.un.val
-									) );
-							}
-							break;
-
-						case PredefinedUniform::Proj:
-							{
-								GL_CHECK(glUniformMatrix4fv(predefined.m_loc
-									, 1
-									, GL_FALSE
-									, _render->m_proj[view].un.val
-									) );
-							}
-							break;
-
-						case PredefinedUniform::InvProj:
-							{
-								if (view != invProjCached)
-								{
-									invProjCached = view;
-									bx::float4x4_inverse(&invProj.un.f4x4, &_render->m_proj[view].un.f4x4);
-								}
-
-								GL_CHECK(glUniformMatrix4fv(predefined.m_loc
-									, 1
-									, GL_FALSE
-									, invProj.un.val
-									) );
-							}
-							break;
-
-						case PredefinedUniform::ViewProj:
-							{
-								GL_CHECK(glUniformMatrix4fv(predefined.m_loc
-									, 1
-									, GL_FALSE
-									, viewProj[view].un.val
-									) );
-							}
-							break;
-
-						case PredefinedUniform::InvViewProj:
-							{
-								if (view != invViewProjCached)
-								{
-									invViewProjCached = view;
-									bx::float4x4_inverse(&invViewProj.un.f4x4, &viewProj[view].un.f4x4);
-								}
-
-								GL_CHECK(glUniformMatrix4fv(predefined.m_loc
-									, 1
-									, GL_FALSE
-									, invViewProj.un.val
-									) );
-							}
-							break;
-
-						case PredefinedUniform::Model:
-							{
-								const Matrix4& model = _render->m_matrixCache.m_cache[draw.m_matrix];
-								GL_CHECK(glUniformMatrix4fv(predefined.m_loc
-									, bx::uint32_min(predefined.m_count, draw.m_num)
-									, GL_FALSE
-									, model.un.val
-									) );
-							}
-							break;
-
-						case PredefinedUniform::ModelView:
-							{
-								Matrix4 modelView;
-								const Matrix4& model = _render->m_matrixCache.m_cache[draw.m_matrix];
-								bx::float4x4_mul(&modelView.un.f4x4, &model.un.f4x4, &_render->m_view[view].un.f4x4);
-
-								GL_CHECK(glUniformMatrix4fv(predefined.m_loc
-									, 1
-									, GL_FALSE
-									, modelView.un.val
-									) );
-							}
-							break;
-
-						case PredefinedUniform::ModelViewProj:
-							{
-								Matrix4 modelViewProj;
-								const Matrix4& model = _render->m_matrixCache.m_cache[draw.m_matrix];
-								bx::float4x4_mul(&modelViewProj.un.f4x4, &model.un.f4x4, &viewProj[view].un.f4x4);
-
-								GL_CHECK(glUniformMatrix4fv(predefined.m_loc
-									, 1
-									, GL_FALSE
-									, modelViewProj.un.val
-									) );
-							}
-							break;
-
-						case PredefinedUniform::AlphaRef:
-							{
-								GL_CHECK(glUniform1f(predefined.m_loc, alphaRef) );
-							}
-							break;
-
-						case PredefinedUniform::Count:
-							break;
-						}
-					}
+					viewState.setPredefined<1>(this, view, eye, program, _render, draw);
 
 					{
 						for (uint32_t stage = 0; stage < BGFX_CONFIG_MAX_TEXTURE_SAMPLERS; ++stage)
@@ -4595,6 +4706,14 @@ namespace bgfx
 							bx::HashMurmur2A murmur;
 							murmur.begin();
 							murmur.add(draw.m_vertexBuffer.idx);
+
+							if (isValid(draw.m_vertexBuffer) )
+							{
+								const VertexBufferGL& vb = m_vertexBuffers[draw.m_vertexBuffer.idx];
+								uint16_t decl = !isValid(vb.m_decl) ? draw.m_vertexDecl.idx : vb.m_decl.idx;
+								murmur.add(decl);
+							}
+
 							murmur.add(draw.m_indexBuffer.idx);
 							murmur.add(draw.m_instanceDataBuffer.idx);
 							murmur.add(draw.m_instanceDataOffset);
@@ -4858,11 +4977,15 @@ namespace bgfx
 					, freq/frameTime
 					);
 
+				char hmd[16];
+				bx::snprintf(hmd, BX_COUNTOF(hmd), ", [%c] HMD ", hmdEnabled ? '\xfe' : ' ');
+
 				const uint32_t msaa = (m_resolution.m_flags&BGFX_RESET_MSAA_MASK)>>BGFX_RESET_MSAA_SHIFT;
-				tvm.printf(10, pos++, 0x8e, "    Reset flags: [%c] vsync, [%c] MSAAx%d "
+				tvm.printf(10, pos++, 0x8e, "    Reset flags: [%c] vsync, [%c] MSAAx%d%s"
 					, !!(m_resolution.m_flags&BGFX_RESET_VSYNC) ? '\xfe' : ' '
 					, 0 != msaa ? '\xfe' : ' '
 					, 1<<msaa
+					, m_ovr.isInitialized() ? hmd : ", no-HMD "
 					);
 
 				double elapsedCpuMs = double(elapsed)*toMs;
@@ -4882,9 +5005,23 @@ namespace bgfx
 						);
 				}
 
+				if (NULL != m_renderdocdll)
+				{
+					tvm.printf(tvm.m_width-27, 0, 0x1f, " [F11 - RenderDoc capture] ");
+				}
+
 				tvm.printf(10, pos++, 0x8e, "    Indices: %7d", statsNumIndices);
 				tvm.printf(10, pos++, 0x8e, "   DVB size: %7d", _render->m_vboffset);
 				tvm.printf(10, pos++, 0x8e, "   DIB size: %7d", _render->m_iboffset);
+
+				pos++;
+				tvm.printf(10, pos++, 0x8e, " State cache:     ");
+				tvm.printf(10, pos++, 0x8e, " VAO    | Sampler ");
+				tvm.printf(10, pos++, 0x8e, " %6d | %6d  "
+					, m_vaoStateCache.getCount()
+					, m_samplerStateCache.getCount()
+					);
+				pos++;
 
 				double captureMs = double(captureElapsed)*toMs;
 				tvm.printf(10, pos++, 0x8e, "    Capture: %3.4f [ms]", captureMs);
@@ -4998,3 +5135,4 @@ namespace bgfx
 } // namespace bgfx
 
 #endif // (BGFX_CONFIG_RENDERER_OPENGLES || BGFX_CONFIG_RENDERER_OPENGL)
+

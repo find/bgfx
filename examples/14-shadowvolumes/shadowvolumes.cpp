@@ -111,6 +111,7 @@ static const uint16_t s_planeIndices[] =
 };
 
 static const char* s_shaderPath = NULL;
+static bool s_oglNdc = false;
 static float s_texelHalf = 0.0f;
 
 static uint32_t s_viewMask = 0;
@@ -118,11 +119,6 @@ static uint32_t s_viewMask = 0;
 static bgfx::UniformHandle u_texColor;
 static bgfx::UniformHandle u_texStencil;
 static bgfx::FrameBufferHandle s_stencilFb;
-
-inline uint32_t uint32_max(uint32_t _a, uint32_t _b)
-{
-	return _a > _b ? _a : _b;
-}
 
 static void shaderFilePath(char* _out, const char* _name)
 {
@@ -186,6 +182,39 @@ static bgfx::ProgramHandle loadProgram(const char* _vsName, const char* _fsName)
 
 	// Create program from shaders.
 	return bgfx::createProgram(vsh, fsh, true /* destroy shaders when program is destroyed */);
+}
+
+void setViewClearMask(uint32_t _viewMask, uint8_t _flags, uint32_t _rgba, float _depth, uint8_t _stencil)
+{
+	for (uint32_t view = 0, viewMask = _viewMask, ntz = bx::uint32_cnttz(_viewMask); 0 != viewMask; viewMask >>= 1, view += 1, ntz = bx::uint32_cnttz(viewMask) )
+	{
+		viewMask >>= ntz;
+		view += ntz;
+
+		bgfx::setViewClear( (uint8_t)view, _flags, _rgba, _depth, _stencil);
+	}
+}
+
+void setViewTransformMask(uint32_t _viewMask, const void* _view, const void* _proj)
+{
+	for (uint32_t view = 0, viewMask = _viewMask, ntz = bx::uint32_cnttz(_viewMask); 0 != viewMask; viewMask >>= 1, view += 1, ntz = bx::uint32_cnttz(viewMask) )
+	{
+		viewMask >>= ntz;
+		view += ntz;
+
+		bgfx::setViewTransform( (uint8_t)view, _view, _proj);
+	}
+}
+
+void setViewRectMask(uint32_t _viewMask, uint16_t _x, uint16_t _y, uint16_t _width, uint16_t _height)
+{
+	for (uint32_t view = 0, viewMask = _viewMask, ntz = bx::uint32_cnttz(_viewMask); 0 != viewMask; viewMask >>= 1, view += 1, ntz = bx::uint32_cnttz(viewMask) )
+	{
+		viewMask >>= ntz;
+		view += ntz;
+
+		bgfx::setViewRect( (uint8_t)view, _x, _y, _width, _height);
+	}
 }
 
 void mtxBillboard(float* __restrict _result
@@ -617,14 +646,6 @@ void submit(uint8_t _id, int32_t _depth = 0)
 
 	// Keep track of submited view ids.
 	s_viewMask |= 1 << _id;
-}
-
-void submitMask(uint32_t _viewMask, int32_t _depth = 0)
-{
-	bgfx::submitMask(_viewMask, _depth);
-
-	// Keep track of submited view ids.
-	s_viewMask |= _viewMask;
 }
 
 struct Aabb
@@ -1610,7 +1631,7 @@ void shadowVolumeCreate(ShadowVolume& _shadowVolume
 			const float4_t onei = float4_isplat(1);
 			const float4_t tmp4 = float4_isub(tmp3, onei);
 
-			BX_ALIGN_STRUCT_16(int32_t res[4]);
+			BX_ALIGN_DECL_16(int32_t res[4]);
 			float4_st(&res, tmp4);
 
 			for (uint16_t jj = 0; jj < 2; ++jj)
@@ -1787,7 +1808,7 @@ void createNearClipVolume(float* __restrict _outPlanes24f
 	// -1.0f - behind near plane
 	float lightSide = float( (d > delta) - (d < -delta) );
 
-	float t = tanf(_fovy*( (float)M_PI/180.0f)*0.5f) * _near;
+	float t = tanf(bx::toRad(_fovy)*0.5f) * _near;
 	float b = -t;
 	float r = t * _aspect;
 	float l = -r;
@@ -1926,10 +1947,12 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 	case bgfx::RendererType::OpenGL:
 		s_shaderPath = "shaders/glsl/";
+		s_oglNdc = true;
 		break;
 
 	case bgfx::RendererType::OpenGLES:
 		s_shaderPath = "shaders/gles/";
+		s_oglNdc = true;
 		break;
 	}
 
@@ -2138,7 +2161,6 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 	const float aspect = float(viewState.m_width)/float(viewState.m_height);
 	const float nearPlane = 1.0f;
 	const float farPlane = 1000.0f;
-	bx::mtxProj(viewState.m_proj, fov, aspect, nearPlane, farPlane);
 
 	float initialPos[3] = { 3.0f, 20.0f, -58.0f };
 	cameraCreate();
@@ -2150,10 +2172,10 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 	while (!entry::processEvents(viewState.m_width, viewState.m_height, debug, reset, &mouseState) )
 	{
 		// Respond properly on resize.
-		if (oldWidth != viewState.m_width
+		if (oldWidth  != viewState.m_width
 		||  oldHeight != viewState.m_height)
 		{
-			oldWidth = viewState.m_width;
+			oldWidth  = viewState.m_width;
 			oldHeight = viewState.m_height;
 
 			bgfx::destroyFrameBuffer(s_stencilFb);
@@ -2175,8 +2197,26 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		s_uniforms.m_time = time;
 
 		// Update camera.
-		cameraUpdate(deltaTime, mouseState.m_mx, mouseState.m_my, !!mouseState.m_buttons[entry::MouseButton::Right]);
-		cameraGetViewMtx(viewState.m_view);
+		cameraUpdate(deltaTime, mouseState);
+
+		// Set view and projection matrix for view 0.
+		const bgfx::HMD* hmd = bgfx::getHMD();
+		if (NULL != hmd)
+		{
+			float eye[3];
+			cameraGetPosition(eye);
+
+			bx::mtxQuatTranslationHMD(viewState.m_view, hmd->eye[0].rotation, eye);
+			bx::mtxProj(viewState.m_proj, hmd->eye[0].fov, nearPlane, farPlane, s_oglNdc);
+
+			viewState.m_width  = hmd->width;
+			viewState.m_height = hmd->height;
+		}
+		else
+		{
+			cameraGetViewMtx(viewState.m_view);
+			bx::mtxProj(viewState.m_proj, fov, aspect, nearPlane, farPlane, s_oglNdc);
+		}
 
 		imguiBeginFrame(mouseState.m_mx
 			, mouseState.m_my
@@ -2324,9 +2364,9 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		{
 			for (uint8_t ii = 0; ii < settings_numLights; ++ii)
 			{
-				lightPosRadius[ii][0] = cos(2.0f*float(M_PI)/settings_numLights * float(ii) + lightTimeAccumulator * 1.1f + 3.0f) * 20.0f;
+				lightPosRadius[ii][0] = cos(2.0f*bx::pi/settings_numLights * float(ii) + lightTimeAccumulator * 1.1f + 3.0f) * 20.0f;
 				lightPosRadius[ii][1] = 20.0f;
-				lightPosRadius[ii][2] = sin(2.0f*float(M_PI)/settings_numLights * float(ii) + lightTimeAccumulator * 1.1f + 3.0f) * 20.0f;
+				lightPosRadius[ii][2] = sin(2.0f*bx::pi/settings_numLights * float(ii) + lightTimeAccumulator * 1.1f + 3.0f) * 20.0f;
 				lightPosRadius[ii][3] = 20.0f;
 			}
 		}
@@ -2334,9 +2374,9 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		{
 			for (uint8_t ii = 0; ii < settings_numLights; ++ii)
 			{
-				lightPosRadius[ii][0] = cos(float(ii) * 2.0f/settings_numLights + lightTimeAccumulator * 1.3f + float(M_PI) ) * 40.0f;
+				lightPosRadius[ii][0] = cos(float(ii) * 2.0f/settings_numLights + lightTimeAccumulator * 1.3f + bx::pi) * 40.0f;
 				lightPosRadius[ii][1] = 20.0f;
-				lightPosRadius[ii][2] = sin(float(ii) * 2.0f/settings_numLights + lightTimeAccumulator * 1.3f + float(M_PI) ) * 40.0f;
+				lightPosRadius[ii][2] = sin(float(ii) * 2.0f/settings_numLights + lightTimeAccumulator * 1.3f + bx::pi) * 40.0f;
 				lightPosRadius[ii][3] = 20.0f;
 			}
 		}
@@ -2467,7 +2507,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 			inst.m_scale[0]    = 21.0f;
 			inst.m_scale[1]    = 21.0f;
 			inst.m_scale[2]    = 21.0f;
-			inst.m_rotation[0] = float(M_PI);
+			inst.m_rotation[0] = bx::pi;
 			inst.m_rotation[1] = 0.0f;
 			inst.m_rotation[2] = 0.0f;
 			inst.m_pos[0]      = 0.0f;
@@ -2534,7 +2574,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 				inst.m_scale[1]    = 5.0f;
 				inst.m_scale[2]    = 5.0f;
 				inst.m_rotation[0] = 0.0f;
-				inst.m_rotation[1] = float(M_PI);
+				inst.m_rotation[1] = bx::pi;
 				inst.m_rotation[2] = 0.0f;
 				inst.m_pos[0]      = currX;
 				inst.m_pos[1]      = 0.0f;
@@ -2866,8 +2906,8 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		}
 
 		// Setup view rect and transform for all used views.
-		bgfx::setViewRectMask(s_viewMask, 0, 0, viewState.m_width, viewState.m_height);
-		bgfx::setViewTransformMask(s_viewMask, viewState.m_view, viewState.m_proj);
+		setViewRectMask(s_viewMask, 0, 0, viewState.m_width, viewState.m_height);
+		setViewTransformMask(s_viewMask, viewState.m_view, viewState.m_proj);
 		s_viewMask = 0;
 
 		// Advance to next frame. Rendering thread will be kicked to
@@ -2878,7 +2918,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		s_svAllocator.swap();
 
 		// Reset clear values.
-		bgfx::setViewClearMask(UINT32_MAX
+		setViewClearMask(UINT32_MAX
 			, BGFX_CLEAR_NONE
 			, clearValues.m_clearRgba
 			, clearValues.m_clearDepth

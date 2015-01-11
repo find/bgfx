@@ -151,6 +151,11 @@ static uint32_t s_viewMask = 0;
 static uint32_t s_clearMask = 0;
 static bgfx::UniformHandle u_texColor;
 
+inline void mtxProj(float* _result, float _fovy, float _aspect, float _near, float _far)
+{
+	bx::mtxProj(_result, _fovy, _aspect, _near, _far, s_flipV);
+}
+
 static void shaderFilePath(char* _out, const char* _name)
 {
 	strcpy(_out, s_shaderPath);
@@ -213,6 +218,39 @@ static bgfx::ProgramHandle loadProgram(const char* _vsName, const char* _fsName)
 
 	// Create program from shaders.
 	return bgfx::createProgram(vsh, fsh, true /* destroy shaders when program is destroyed */);
+}
+
+void setViewClearMask(uint32_t _viewMask, uint8_t _flags, uint32_t _rgba, float _depth, uint8_t _stencil)
+{
+	for (uint32_t view = 0, viewMask = _viewMask, ntz = bx::uint32_cnttz(_viewMask); 0 != viewMask; viewMask >>= 1, view += 1, ntz = bx::uint32_cnttz(viewMask) )
+	{
+		viewMask >>= ntz;
+		view += ntz;
+
+		bgfx::setViewClear( (uint8_t)view, _flags, _rgba, _depth, _stencil);
+	}
+}
+
+void setViewTransformMask(uint32_t _viewMask, const void* _view, const void* _proj)
+{
+	for (uint32_t view = 0, viewMask = _viewMask, ntz = bx::uint32_cnttz(_viewMask); 0 != viewMask; viewMask >>= 1, view += 1, ntz = bx::uint32_cnttz(viewMask) )
+	{
+		viewMask >>= ntz;
+		view += ntz;
+
+		bgfx::setViewTransform( (uint8_t)view, _view, _proj);
+	}
+}
+
+void setViewRectMask(uint32_t _viewMask, uint16_t _x, uint16_t _y, uint16_t _width, uint16_t _height)
+{
+	for (uint32_t view = 0, viewMask = _viewMask, ntz = bx::uint32_cnttz(_viewMask); 0 != viewMask; viewMask >>= 1, view += 1, ntz = bx::uint32_cnttz(viewMask) )
+	{
+		viewMask >>= ntz;
+		view += ntz;
+
+		bgfx::setViewRect( (uint8_t)view, _x, _y, _width, _height);
+	}
 }
 
 void mtxReflected(float*__restrict _result
@@ -619,7 +657,7 @@ void clearView(uint8_t _id, uint8_t _flags, const ClearValues& _clearValues)
 
 void clearViewMask(uint32_t _viewMask, uint8_t _flags, const ClearValues& _clearValues)
 {
-	bgfx::setViewClearMask(_viewMask
+	setViewClearMask(_viewMask
 		, _flags
 		, _clearValues.m_clearRgba
 		, _clearValues.m_clearDepth
@@ -971,7 +1009,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 	// Set view and projection matrices.
 	const float aspect = float(viewState.m_width)/float(viewState.m_height);
-	bx::mtxProj(viewState.m_proj, 60.0f, aspect, 0.1f, 100.0f);
+	mtxProj(viewState.m_proj, 60.0f, aspect, 0.1f, 100.0f);
 
 	float initialPos[3] = { 0.0f, 18.0f, -40.0f };
 	cameraCreate();
@@ -1073,7 +1111,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		bgfx::dbgTextPrintf(0, 3, 0x0f, "Frame: % 7.3f[ms]", double(frameTime)*toMs);
 
 		// Update camera.
-		cameraUpdate(deltaTime, mouseState.m_mx, mouseState.m_my, !!mouseState.m_buttons[entry::MouseButton::Right]);
+		cameraUpdate(deltaTime, mouseState);
 		cameraGetViewMtx(viewState.m_view);
 
 		static float lightTimeAccumulator = 0.0f;
@@ -1092,9 +1130,9 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		const float radius = (scene == StencilReflectionScene) ? 15.0f : 25.0f;
 		for (uint8_t ii = 0; ii < numLights; ++ii)
 		{
-			lightPosRadius[ii][0] = sin( (lightTimeAccumulator*1.1f + ii*0.03f + float(ii*M_PI_2)*1.07f ) )*20.0f;
-			lightPosRadius[ii][1] = 8.0f + (1.0f - cos( (lightTimeAccumulator*1.5f + ii*0.29f + float(ii*M_PI_2)*1.49f ) ))*4.0f;
-			lightPosRadius[ii][2] = cos( (lightTimeAccumulator*1.3f + ii*0.13f + float(ii*M_PI_2)*1.79f ) )*20.0f;
+			lightPosRadius[ii][0] = sin( (lightTimeAccumulator*1.1f + ii*0.03f + ii*bx::piHalf*1.07f ) )*20.0f;
+			lightPosRadius[ii][1] = 8.0f + (1.0f - cos( (lightTimeAccumulator*1.5f + ii*0.29f + bx::piHalf*1.49f ) ))*4.0f;
+			lightPosRadius[ii][2] = cos( (lightTimeAccumulator*1.3f + ii*0.13f + ii*bx::piHalf*1.79f ) )*20.0f;
 			lightPosRadius[ii][3] = radius;
 		}
 		memcpy(s_uniforms.m_lightPosRadius, lightPosRadius, numLights * 4*sizeof(float));
@@ -1429,8 +1467,8 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 			);
 
 		// Setup view rect and transform for all used views.
-		bgfx::setViewRectMask(s_viewMask, 0, 0, viewState.m_width, viewState.m_height);
-		bgfx::setViewTransformMask(s_viewMask, viewState.m_view, viewState.m_proj);
+		setViewRectMask(s_viewMask, 0, 0, viewState.m_width, viewState.m_height);
+		setViewTransformMask(s_viewMask, viewState.m_view, viewState.m_proj);
 		s_viewMask = 0;
 
 		// Advance to next frame. Rendering thread will be kicked to

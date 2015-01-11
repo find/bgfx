@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2014 Branimir Karadzic. All rights reserved.
+ * Copyright 2011-2015 Branimir Karadzic. All rights reserved.
  * License: http://www.opensource.org/licenses/BSD-2-Clause
  */
 
@@ -84,12 +84,11 @@ typedef uint64_t GLuint64;
 #	if BX_PLATFORM_EMSCRIPTEN
 #		include <emscripten/emscripten.h>
 #	endif // BX_PLATFORM_EMSCRIPTEN
-
 #endif // BGFX_CONFIG_RENDERER_OPENGL
 
-#ifndef GL_LUMINANCE
-#	define GL_LUMINANCE 0x1909
-#endif // GL_LUMINANCE
+#include "renderer.h"
+#include "ovr.h"
+#include "renderdoc.h"
 
 #ifndef GL_BGRA
 #	define GL_BGRA 0x80E1
@@ -599,6 +598,11 @@ namespace bgfx
 			m_hashMap.clear();
 		}
 
+		uint32_t getCount() const
+		{
+			return uint32_t(m_hashMap.size() );
+		}
+
 	private:
 		typedef stl::unordered_map<uint32_t, GLuint> HashMap;
 		HashMap m_hashMap;
@@ -669,6 +673,11 @@ namespace bgfx
 				GL_CHECK(glDeleteSamplers(1, &it->second) );
 			}
 			m_hashMap.clear();
+		}
+
+		uint32_t getCount() const
+		{
+			return uint32_t(m_hashMap.size() );
 		}
 
 	private:

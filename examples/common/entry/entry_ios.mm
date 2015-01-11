@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2014 Branimir Karadzic. All rights reserved.
+ * Copyright 2011-2015 Branimir Karadzic. All rights reserved.
  * License: http://www.opensource.org/licenses/BSD-2-Clause
  */
 
@@ -26,15 +26,17 @@ namespace entry
 		static int32_t threadFunc(void* _userData);
 	};
 
+	static WindowHandle s_defaultWindow = { 0 };
+
 	struct Context
 	{
 		Context(uint32_t _width, uint32_t _height)
 		{
-			const char* argv[1] = { "ios" };
+			static const char* argv[1] = { "ios" };
 			m_mte.m_argc = 1;
 			m_mte.m_argv = const_cast<char**>(argv);
 
-			m_eventQueue.postSizeEvent(_width, _height);
+			m_eventQueue.postSizeEvent(s_defaultWindow, _width, _height);
 
 			// Prevent render thread creation.
 			bgfx::renderFrame();
@@ -76,28 +78,51 @@ namespace entry
 		return s_ctx->m_eventQueue.poll();
 	}
 
+	const Event* poll(WindowHandle _handle)
+	{
+		return s_ctx->m_eventQueue.poll(_handle);
+	}
+
 	void release(const Event* _event)
 	{
 		s_ctx->m_eventQueue.release(_event);
 	}
 
-	void setWindowSize(uint32_t _width, uint32_t _height)
+	WindowHandle createWindow(int32_t _x, int32_t _y, uint32_t _width, uint32_t _height, uint32_t _flags, const char* _title)
 	{
-		BX_UNUSED(_width, _height);
+		BX_UNUSED(_x, _y, _width, _height, _flags, _title);
+		WindowHandle handle = { UINT16_MAX };
+		return handle;
 	}
 
-	void setWindowTitle(const char* _title)
+	void destroyWindow(WindowHandle _handle)
 	{
-		BX_UNUSED(_title);
+		BX_UNUSED(_handle);
 	}
 
-	void toggleWindowFrame()
+	void setWindowPos(WindowHandle _handle, int32_t _x, int32_t _y)
 	{
+		BX_UNUSED(_handle, _x, _y);
 	}
 
-	void setMouseLock(bool _lock)
+	void setWindowSize(WindowHandle _handle, uint32_t _width, uint32_t _height)
 	{
-		BX_UNUSED(_lock);
+		BX_UNUSED(_handle, _width, _height);
+	}
+
+	void setWindowTitle(WindowHandle _handle, const char* _title)
+	{
+		BX_UNUSED(_handle, _title);
+	}
+
+	void toggleWindowFrame(WindowHandle _handle)
+	{
+		BX_UNUSED(_handle);
+	}
+
+	void setMouseLock(WindowHandle _handle, bool _lock)
+	{
+		BX_UNUSED(_handle, _lock);
 	}
 
 } // namespace entry
@@ -165,8 +190,8 @@ using namespace entry;
 	UITouch *touch = [[event allTouches] anyObject];
 	CGPoint touchLocation = [touch locationInView:self];
 
-	s_ctx->m_eventQueue.postMouseEvent(touchLocation.x, touchLocation.y, 0);
-	s_ctx->m_eventQueue.postMouseEvent(touchLocation.x, touchLocation.y, 0, MouseButton::Left, true);
+	s_ctx->m_eventQueue.postMouseEvent(s_defaultWindow, touchLocation.x, touchLocation.y, 0);
+	s_ctx->m_eventQueue.postMouseEvent(s_defaultWindow, touchLocation.x, touchLocation.y, 0, MouseButton::Left, true);
 }
 
 - (void)touchesEnded:(NSSet *)touches withEvent:(UIEvent *)event
@@ -174,7 +199,7 @@ using namespace entry;
 	BX_UNUSED(touches);
 	UITouch *touch = [[event allTouches] anyObject];
 	CGPoint touchLocation = [touch locationInView:self];
-	s_ctx->m_eventQueue.postMouseEvent(touchLocation.x, touchLocation.y, 0, MouseButton::Left, false);
+	s_ctx->m_eventQueue.postMouseEvent(s_defaultWindow, touchLocation.x, touchLocation.y, 0, MouseButton::Left, false);
 }
 
 - (void)touchesMoved:(NSSet *)touches withEvent:(UIEvent *)event
@@ -182,7 +207,7 @@ using namespace entry;
 	BX_UNUSED(touches);
 	UITouch *touch = [[event allTouches] anyObject];
 	CGPoint touchLocation = [touch locationInView:self];
-	s_ctx->m_eventQueue.postMouseEvent(touchLocation.x, touchLocation.y, 0);
+	s_ctx->m_eventQueue.postMouseEvent(s_defaultWindow, touchLocation.x, touchLocation.y, 0);
 }
 
 - (void)touchesCancelled:(NSSet *)touches withEvent:(UIEvent *)event
@@ -190,7 +215,7 @@ using namespace entry;
 	BX_UNUSED(touches);
 	UITouch *touch = [[event allTouches] anyObject];
 	CGPoint touchLocation = [touch locationInView:self];
-	s_ctx->m_eventQueue.postMouseEvent(touchLocation.x, touchLocation.y, 0, MouseButton::Left, false);
+	s_ctx->m_eventQueue.postMouseEvent(s_defaultWindow, touchLocation.x, touchLocation.y, 0, MouseButton::Left, false);
 }
 
 @end

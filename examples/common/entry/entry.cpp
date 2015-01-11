@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2014 Branimir Karadzic. All rights reserved.
+ * Copyright 2011-2015 Branimir Karadzic. All rights reserved.
  * License: http://www.opensource.org/licenses/BSD-2-Clause
  */
 
@@ -22,6 +22,7 @@ namespace entry
 	static bool s_exit = false;
 	static bx::FileReaderI* s_fileReader = NULL;
 	static bx::FileWriterI* s_fileWriter = NULL;
+	static bx::CrtAllocator s_allocator;
 
 	bool setOrToggle(uint32_t& _flags, const char* _name, uint32_t _bit, int _first, int _argc, char const* const* _argv)
 	{
@@ -64,8 +65,11 @@ namespace entry
 	{
 		if (_argc > 1)
 		{
-			if (setOrToggle(s_reset, "vsync", BGFX_RESET_VSYNC,    1, _argc, _argv)
-			||  setOrToggle(s_reset, "msaa",  BGFX_RESET_MSAA_X16, 1, _argc, _argv) )
+			if (setOrToggle(s_reset, "vsync",       BGFX_RESET_VSYNC,        1, _argc, _argv)
+			||  setOrToggle(s_reset, "hmd",         BGFX_RESET_HMD,          1, _argc, _argv)
+			||  setOrToggle(s_reset, "hmddbg",      BGFX_RESET_HMD_DEBUG,    1, _argc, _argv)
+			||  setOrToggle(s_reset, "hmdrecenter", BGFX_RESET_HMD_RECENTER, 1, _argc, _argv)
+			||  setOrToggle(s_reset, "msaa",        BGFX_RESET_MSAA_X16,     1, _argc, _argv) )
 			{
 				return 0;
 			}
@@ -106,15 +110,19 @@ namespace entry
 		return 0;
 	}
 
-	static const InputBinding s_bindings[] = 
+	static const InputBinding s_bindings[] =
 	{
-		{ entry::Key::KeyQ,  entry::Modifier::LeftCtrl,  1, cmd, "exit"                              },
-		{ entry::Key::F1,    entry::Modifier::None,      1, cmd, "graphics stats"                    },
-		{ entry::Key::F1,    entry::Modifier::LeftShift, 1, cmd, "graphics stats 0\ngraphics text 0" },
-		{ entry::Key::F3,    entry::Modifier::None,      1, cmd, "graphics wireframe"                },
-		{ entry::Key::F7,    entry::Modifier::None,      1, cmd, "graphics vsync"                    },
-		{ entry::Key::F8,    entry::Modifier::None,      1, cmd, "graphics msaa"                     },
-		{ entry::Key::Print, entry::Modifier::None,      1, cmd, "graphics screenshot"               },
+		{ entry::Key::KeyQ,         entry::Modifier::LeftCtrl,  1, cmd, "exit"                              },
+		{ entry::Key::F1,           entry::Modifier::None,      1, cmd, "graphics stats"                    },
+		{ entry::Key::GamepadStart, entry::Modifier::None,      1, cmd, "graphics stats"                    },
+		{ entry::Key::F1,           entry::Modifier::LeftShift, 1, cmd, "graphics stats 0\ngraphics text 0" },
+		{ entry::Key::F3,           entry::Modifier::None,      1, cmd, "graphics wireframe"                },
+		{ entry::Key::F4,           entry::Modifier::None,      1, cmd, "graphics hmd"                      },
+		{ entry::Key::F4,           entry::Modifier::LeftShift, 1, cmd, "graphics hmdrecenter"              },
+		{ entry::Key::F4,           entry::Modifier::LeftCtrl,  1, cmd, "graphics hmddbg"                   },
+		{ entry::Key::F7,           entry::Modifier::None,      1, cmd, "graphics vsync"                    },
+		{ entry::Key::F8,           entry::Modifier::None,      1, cmd, "graphics msaa"                     },
+		{ entry::Key::Print,        entry::Modifier::None,      1, cmd, "graphics screenshot"               },
 
 		INPUT_BINDING_END
 	};
@@ -134,7 +142,8 @@ namespace entry
 
 		inputAddBindings("bindings", s_bindings);
 
-		entry::setWindowTitle(bx::baseName(_argv[0]));
+		entry::WindowHandle defaultWindow = { 0 };
+		entry::setWindowTitle(defaultWindow, bx::baseName(_argv[0]));
 
 		int32_t result = ::_main_(_argc, _argv);
 
@@ -149,122 +158,14 @@ namespace entry
 		return result;
 	}
 
-	char keyToAscii(entry::Key::Enum _key, bool _shiftModifier)
-	{
-		static const char s_keyToAscii[entry::Key::Count] =
-		{
-			'\0', // None
-			0x1b, // Esc
-			0x0d, // Return
-			0x09, // Tab
-			0x20, // Space
-			0x08, // Backspace
-			'\0', // Up
-			'\0', // Down
-			'\0', // Left
-			'\0', // Right
-			'\0', // PageUp
-			'\0', // PageDown
-			'\0', // Home
-			'\0', // End
-			'\0', // Print
-			0x3d, // Equals
-			0x2d, // Minus
-			'\0', // F1
-			'\0', // F2
-			'\0', // F3
-			'\0', // F4
-			'\0', // F5
-			'\0', // F6
-			'\0', // F7
-			'\0', // F8
-			'\0', // F9
-			'\0', // F10
-			'\0', // F11
-			'\0', // F12
-			0x30, // NumPad0
-			0x31, // NumPad1
-			0x32, // NumPad2
-			0x33, // NumPad3
-			0x34, // NumPad4
-			0x35, // NumPad5
-			0x36, // NumPad6
-			0x37, // NumPad7
-			0x38, // NumPad8
-			0x39, // NumPad9
-			0x30, // Key0
-			0x31, // Key1
-			0x32, // Key2
-			0x33, // Key3
-			0x34, // Key4
-			0x35, // Key5
-			0x36, // Key6
-			0x37, // Key7
-			0x38, // Key8
-			0x39, // Key9
-			0x61, // KeyA
-			0x62, // KeyB
-			0x63, // KeyC
-			0x64, // KeyD
-			0x65, // KeyE
-			0x66, // KeyF
-			0x67, // KeyG
-			0x68, // KeyH
-			0x69, // KeyI
-			0x6a, // KeyJ
-			0x6b, // KeyK
-			0x6c, // KeyL
-			0x6d, // KeyM
-			0x6e, // KeyN
-			0x6f, // KeyO
-			0x70, // KeyP
-			0x71, // KeyQ
-			0x72, // KeyR
-			0x73, // KeyS
-			0x74, // KeyT
-			0x75, // KeyU
-			0x76, // KeyV
-			0x77, // KeyW
-			0x78, // KeyX
-			0x79, // KeyY
-			0x7a, // KeyZ
-		};
-
-		char ascii = s_keyToAscii[_key];
-
-		if (_shiftModifier)
-		{
-			// Big letters.
-			if(ascii >= 'a' && ascii <= 'z')
-			{
-				ascii += 'A' - 'a';
-			}
-			// Special cases.
-			else if('-' == ascii)
-			{
-				ascii = '_';
-			}
-			else if ('=' == ascii)
-			{
-				ascii = '+';
-			}
-		}
-
-		return ascii;
-	}
-
-	bool processEvents(uint32_t& _width, uint32_t& _height, uint32_t& _debug, uint32_t& _reset, MouseState* _mouse, KeyState* _keyboard)
+	bool processEvents(uint32_t& _width, uint32_t& _height, uint32_t& _debug, uint32_t& _reset, MouseState* _mouse)
 	{
 		s_debug = _debug;
 		s_reset = _reset;
 
-		bool mouseLock = inputIsMouseLocked();
+		WindowHandle handle = { UINT16_MAX };
 
-		if (NULL != _keyboard)
-		{
-			_keyboard->m_modifiers = 0;
-			memset(_keyboard->m_keysDown, 0, sizeof(_keyboard->m_keysDown) );
-		}
+		bool mouseLock = inputIsMouseLocked();
 
 		const Event* ev;
 		do
@@ -276,12 +177,34 @@ namespace entry
 			{
 				switch (ev->m_type)
 				{
+				case Event::Axis:
+					{
+						const AxisEvent* axis = static_cast<const AxisEvent*>(ev);
+						inputSetGamepadAxis(axis->m_gamepad, axis->m_axis, axis->m_value);
+					}
+					break;
+
+				case Event::Char:
+					{
+						const CharEvent* chev = static_cast<const CharEvent*>(ev);
+						inputChar(chev->m_len, chev->m_char);
+					}
+					break;
+
 				case Event::Exit:
 					return true;
+
+				case Event::Gamepad:
+					{
+						const GamepadEvent* gev = static_cast<const GamepadEvent*>(ev);
+						DBG("gamepad %d, %d", gev->m_gamepad.idx, gev->m_connected);
+					}
+					break;
 
 				case Event::Mouse:
 					{
 						const MouseEvent* mouse = static_cast<const MouseEvent*>(ev);
+						handle = mouse->m_handle;
 
 						if (mouse->m_move)
 						{
@@ -312,26 +235,171 @@ namespace entry
 				case Event::Key:
 					{
 						const KeyEvent* key = static_cast<const KeyEvent*>(ev);
+						handle = key->m_handle;
+
 						inputSetKeyState(key->m_key, key->m_modifiers, key->m_down);
-
-						if (NULL != _keyboard)
-						{
-							_keyboard->m_modifiers |= key->m_modifiers;
-
-							if (key->m_down)
-							{
-								_keyboard->m_keysDown[key->m_key] = true;
-							}
-						}
 					}
 					break;
 
 				case Event::Size:
 					{
 						const SizeEvent* size = static_cast<const SizeEvent*>(ev);
-						_width = size->m_width;
+						handle  = size->m_handle;
+						_width  = size->m_width;
 						_height = size->m_height;
-						_reset = !s_reset; // force reset
+						_reset  = !s_reset; // force reset
+					}
+					break;
+
+				case Event::Window:
+					break;
+
+				default:
+					break;
+				}
+			}
+
+			inputProcess();
+
+		} while (NULL != ev);
+
+		if (handle.idx == 0
+		&&  _reset != s_reset)
+		{
+			_reset = s_reset;
+			bgfx::reset(_width, _height, _reset);
+			inputSetMouseResolution(_width, _height);
+		}
+
+		_debug = s_debug;
+
+		return s_exit;
+	}
+
+	WindowState s_window[ENTRY_CONFIG_MAX_WINDOWS];
+
+	bool processWindowEvents(WindowState& _state, uint32_t& _debug, uint32_t& _reset)
+	{
+		s_debug = _debug;
+		s_reset = _reset;
+
+		WindowHandle handle = { UINT16_MAX };
+
+		bool mouseLock = inputIsMouseLocked();
+
+		const Event* ev;
+		do
+		{
+			struct SE
+			{
+				SE(WindowHandle _handle)
+					: m_ev(poll(_handle) )
+				{
+				}
+
+				~SE()
+				{
+					if (NULL != m_ev)
+					{
+						release(m_ev);
+					}
+				}
+
+				const Event* m_ev;
+
+			} scopeEvent(handle);
+			ev = scopeEvent.m_ev;
+
+			if (NULL != ev)
+			{
+				handle = ev->m_handle;
+				WindowState& win = s_window[handle.idx];
+
+				switch (ev->m_type)
+				{
+				case Event::Axis:
+					{
+						const AxisEvent* axis = static_cast<const AxisEvent*>(ev);
+						inputSetGamepadAxis(axis->m_gamepad, axis->m_axis, axis->m_value);
+					}
+					break;
+
+				case Event::Char:
+					{
+						const CharEvent* chev = static_cast<const CharEvent*>(ev);
+						win.m_handle = chev->m_handle;
+						inputChar(chev->m_len, chev->m_char);
+					}
+					break;
+
+				case Event::Exit:
+					return true;
+
+				case Event::Gamepad:
+					{
+						const GamepadEvent* gev = static_cast<const GamepadEvent*>(ev);
+						DBG("gamepad %d, %d", gev->m_gamepad.idx, gev->m_connected);
+					}
+					break;
+
+				case Event::Mouse:
+					{
+						const MouseEvent* mouse = static_cast<const MouseEvent*>(ev);
+						win.m_handle = mouse->m_handle;
+
+						if (mouse->m_move)
+						{
+							inputSetMousePos(mouse->m_mx, mouse->m_my, mouse->m_mz);
+						}
+						else
+						{
+							inputSetMouseButtonState(mouse->m_button, mouse->m_down);
+						}
+
+						if (!mouseLock)
+						{
+							if (mouse->m_move)
+							{
+								win.m_mouse.m_mx = mouse->m_mx;
+								win.m_mouse.m_my = mouse->m_my;
+								win.m_mouse.m_mz = mouse->m_mz;
+							}
+							else
+							{
+								win.m_mouse.m_buttons[mouse->m_button] = mouse->m_down;
+							}
+						}
+					}
+					break;
+
+				case Event::Key:
+					{
+						const KeyEvent* key = static_cast<const KeyEvent*>(ev);
+						win.m_handle = key->m_handle;
+
+						inputSetKeyState(key->m_key, key->m_modifiers, key->m_down);
+					}
+					break;
+
+				case Event::Size:
+					{
+						const SizeEvent* size = static_cast<const SizeEvent*>(ev);
+						win.m_handle = size->m_handle;
+						win.m_width  = size->m_width;
+						win.m_height = size->m_height;
+						_reset  = win.m_handle.idx == 0
+								? !s_reset
+								: _reset
+								; // force reset
+					}
+					break;
+
+				case Event::Window:
+					{
+						const WindowEvent* window = static_cast<const WindowEvent*>(ev);
+						win.m_handle = window->m_handle;
+						win.m_nwh    = window->m_nwh;
+						ev = NULL;
 					}
 					break;
 
@@ -344,11 +412,22 @@ namespace entry
 
 		} while (NULL != ev);
 
+		if (isValid(handle) )
+		{
+			const WindowState& win = s_window[handle.idx];
+			_state = win;
+
+			if (handle.idx == 0)
+			{
+				inputSetMouseResolution(win.m_width, win.m_height);
+			}
+		}
+
 		if (_reset != s_reset)
 		{
 			_reset = s_reset;
-			bgfx::reset(_width, _height, _reset);
-			inputSetMouseResolution(_width, _height);
+			bgfx::reset(s_window[0].m_width, s_window[0].m_height, _reset);
+			inputSetMouseResolution(s_window[0].m_width, s_window[0].m_height);
 		}
 
 		_debug = s_debug;
@@ -364,6 +443,11 @@ namespace entry
 	bx::FileWriterI* getFileWriter()
 	{
 		return s_fileWriter;
+	}
+
+	bx::ReallocatorI* getAllocator()
+	{
+		return &s_allocator;
 	}
 
 } // namespace entry

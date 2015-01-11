@@ -1,5 +1,5 @@
 --
--- Copyright 2010-2014 Branimir Karadzic. All rights reserved.
+-- Copyright 2010-2015 Branimir Karadzic. All rights reserved.
 -- License: http://www.opensource.org/licenses/BSD-2-Clause
 --
 
@@ -9,6 +9,10 @@ project "shaderc"
 
 	local GLSL_OPTIMIZER = (BGFX_DIR .. "3rdparty/glsl-optimizer/")
 	local FCPP_DIR = (BGFX_DIR .. "3rdparty/fcpp/")
+
+	includedirs {
+		GLSL_OPTIMIZER .. "src",
+	}
 
 	configuration { "vs*" }
 		includedirs {
@@ -27,7 +31,7 @@ project "shaderc"
 			"/wd4996" -- warning C4996: 'strdup': The POSIX name for this item is deprecated. Instead, use the ISO C++ conformant name: _strdup.
 		}
 
-	configuration { "mingw or linux or osx" }
+	configuration { "mingw* or linux or osx" }
 		buildoptions {
 			"-fno-strict-aliasing" -- glsl-optimizer has bugs if strict aliasing is used.
 		}
@@ -94,6 +98,8 @@ project "shaderc"
 		GLSL_OPTIMIZER .. "src/glsl/**.c",
 		GLSL_OPTIMIZER .. "src/glsl/**.cpp",
 		GLSL_OPTIMIZER .. "src/glsl/**.h",
+		GLSL_OPTIMIZER .. "src/util/**.c",
+		GLSL_OPTIMIZER .. "src/util/**.h",
 	}
 
 	excludes {

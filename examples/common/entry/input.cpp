@@ -1,14 +1,14 @@
 /*
- * Copyright 2010-2014 Branimir Karadzic. All rights reserved.
+ * Copyright 2010-2015 Branimir Karadzic. All rights reserved.
  * License: http://www.opensource.org/licenses/BSD-2-Clause
  */
 
 #include <memory.h>
-#include <string>
 
 #include "entry_p.h"
 #include "input.h"
 
+#include <bx/ringbuffer.h>
 #include <tinystl/allocator.h>
 #include <tinystl/unordered_map.h>
 namespace stl = tinystl;
@@ -69,6 +69,7 @@ struct Mouse
 struct Keyboard
 {
 	Keyboard()
+		: m_ring(BX_COUNTOF(m_char) )
 	{
 	}
 
@@ -98,8 +99,69 @@ struct Keyboard
 		m_once[_key] = false;
 	}
 
+	void pushChar(uint8_t _len, const uint8_t _char[4])
+	{
+		for (uint32_t len = m_ring.reserve(4)
+			; len < _len
+			; len = m_ring.reserve(4)
+			)
+		{
+			popChar();
+		}
+
+		memcpy(&m_char[m_ring.m_current], _char, 4);
+		m_ring.commit(4);
+	}
+
+	const uint8_t* popChar()
+	{
+		if (0 < m_ring.available() )
+		{
+			uint8_t* utf8 = &m_char[m_ring.m_read];
+			m_ring.consume(4);
+			return utf8;
+		}
+
+		return NULL;
+	}
+
+	void charFlush()
+	{
+		m_ring.m_current = 0;
+		m_ring.m_write   = 0;
+		m_ring.m_read    = 0;
+	}
+
 	uint32_t m_key[256];
 	bool m_once[256];
+
+	bx::RingBufferControl m_ring;
+	uint8_t m_char[256];
+};
+
+struct Gamepad
+{
+	Gamepad()
+	{
+		reset();
+	}
+
+	void reset()
+	{
+		memset(m_axis, 0, sizeof(m_axis) );
+	}
+
+	void setAxis(entry::GamepadAxis::Enum _axis, int32_t _value)
+	{
+		m_axis[_axis] = _value;
+	}
+
+	int32_t getAxis(entry::GamepadAxis::Enum _axis)
+	{
+		return m_axis[_axis];
+	}
+
+	int32_t m_axis[entry::GamepadAxis::Count];
 };
 
 struct Input
@@ -120,7 +182,11 @@ struct Input
 
 	void removeBindings(const char* _name)
 	{
-		m_inputBindingsMap.erase(m_inputBindingsMap.find(_name));
+		InputBindingMap::iterator it = m_inputBindingsMap.find(_name);
+		if (it != m_inputBindingsMap.end() )
+		{
+			m_inputBindingsMap.erase(it);
+		}
 	}
 
 	void process(const InputBinding* _bindings)
@@ -170,12 +236,17 @@ struct Input
 	{
 		m_mouse.reset();
 		m_keyboard.reset();
+		for (uint32_t ii = 0; ii < BX_COUNTOF(m_gamepad); ++ii)
+		{
+			m_gamepad[ii].reset();
+		}
 	}
 
 	typedef stl::unordered_map<const char*, const InputBinding*> InputBindingMap;
 	InputBindingMap m_inputBindingsMap;
 	Mouse m_mouse;
 	Keyboard m_keyboard;
+	Gamepad m_gamepad[ENTRY_CONFIG_MAX_GAMEPADS];
 };
 
 static Input s_input;
@@ -203,6 +274,21 @@ void inputSetMouseResolution(uint16_t _width, uint16_t _height)
 void inputSetKeyState(entry::Key::Enum _key, uint8_t _modifiers, bool _down)
 {
 	s_input.m_keyboard.setKeyState(_key, _modifiers, _down);
+}
+
+void inputChar(uint8_t _len, const uint8_t _char[4])
+{
+	s_input.m_keyboard.pushChar(_len, _char);
+}
+
+const uint8_t* inputGetChar()
+{
+	return s_input.m_keyboard.popChar();
+}
+
+void inputCharFlush()
+{
+	s_input.m_keyboard.charFlush();
 }
 
 void inputSetMousePos(int32_t _mx, int32_t _my, int32_t _mz)
@@ -235,7 +321,8 @@ void inputSetMouseLock(bool _lock)
 	if (s_input.m_mouse.m_lock != _lock)
 	{
 		s_input.m_mouse.m_lock = _lock;
-		entry::setMouseLock(_lock);
+		entry::WindowHandle defaultWindow = { 0 };
+		entry::setMouseLock(defaultWindow, _lock);
 		if (_lock)
 		{
 			s_input.m_mouse.m_norm[0] = 0.0f;
@@ -243,4 +330,14 @@ void inputSetMouseLock(bool _lock)
 			s_input.m_mouse.m_norm[2] = 0.0f;
 		}
 	}
+}
+
+void inputSetGamepadAxis(entry::GamepadHandle _handle, entry::GamepadAxis::Enum _axis, int32_t _value)
+{
+	s_input.m_gamepad[_handle.idx].setAxis(_axis, _value);
+}
+
+int32_t inputGetGamepadAxis(entry::GamepadHandle _handle, entry::GamepadAxis::Enum _axis)
+{
+	return s_input.m_gamepad[_handle.idx].getAxis(_axis);
 }

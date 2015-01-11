@@ -37,26 +37,6 @@
 #define RENDERVIEW_DRAWDEPTH_2_ID 18
 #define RENDERVIEW_DRAWDEPTH_3_ID 19
 
-#define RENDERVIEW_SHADOWMAP_0_BIT (1<<RENDERVIEW_SHADOWMAP_0_ID)
-#define RENDERVIEW_SHADOWMAP_1_BIT (1<<RENDERVIEW_SHADOWMAP_1_ID)
-#define RENDERVIEW_SHADOWMAP_2_BIT (1<<RENDERVIEW_SHADOWMAP_2_ID)
-#define RENDERVIEW_SHADOWMAP_3_BIT (1<<RENDERVIEW_SHADOWMAP_3_ID)
-#define RENDERVIEW_SHADOWMAP_4_BIT (1<<RENDERVIEW_SHADOWMAP_4_ID)
-#define RENDERVIEW_VBLUR_0_BIT     (1<<RENDERVIEW_VBLUR_0_ID)
-#define RENDERVIEW_HBLUR_0_BIT     (1<<RENDERVIEW_HBLUR_0_ID)
-#define RENDERVIEW_VBLUR_1_BIT     (1<<RENDERVIEW_VBLUR_1_ID)
-#define RENDERVIEW_HBLUR_1_BIT     (1<<RENDERVIEW_HBLUR_1_ID)
-#define RENDERVIEW_VBLUR_2_BIT     (1<<RENDERVIEW_VBLUR_2_ID)
-#define RENDERVIEW_HBLUR_2_BIT     (1<<RENDERVIEW_HBLUR_2_ID)
-#define RENDERVIEW_VBLUR_3_BIT     (1<<RENDERVIEW_VBLUR_3_ID)
-#define RENDERVIEW_HBLUR_3_BIT     (1<<RENDERVIEW_HBLUR_3_ID)
-#define RENDERVIEW_DRAWSCENE_0_BIT (1<<RENDERVIEW_DRAWSCENE_0_ID)
-#define RENDERVIEW_DRAWSCENE_1_BIT (1<<RENDERVIEW_DRAWSCENE_1_ID)
-#define RENDERVIEW_DRAWDEPTH_0_BIT (1<<RENDERVIEW_DRAWDEPTH_0_ID)
-#define RENDERVIEW_DRAWDEPTH_1_BIT (1<<RENDERVIEW_DRAWDEPTH_1_ID)
-#define RENDERVIEW_DRAWDEPTH_2_BIT (1<<RENDERVIEW_DRAWDEPTH_2_ID)
-#define RENDERVIEW_DRAWDEPTH_3_BIT (1<<RENDERVIEW_DRAWDEPTH_3_ID)
-
 uint32_t packUint32(uint8_t _x, uint8_t _y, uint8_t _z, uint8_t _w)
 {
 	union
@@ -2066,7 +2046,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 	const float camAspect  = float(int32_t(viewState.m_width) ) / float(int32_t(viewState.m_height) );
 	const float camNear    = 0.1f;
 	const float camFar     = 2000.0f;
-	const float projHeight = 1.0f/tanf(camFovy*( (float)M_PI/180.0f)*0.5f);
+	const float projHeight = 1.0f/tanf(bx::toRad(camFovy)*0.5f);
 	const float projWidth  = projHeight * 1.0f/camAspect;
 	bx::mtxProj(viewState.m_proj, camFovy, camAspect, camNear, camFar);
 	cameraGetViewMtx(viewState.m_view);
@@ -2259,7 +2239,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		bgfx::dbgTextPrintf(0, 3, 0x0f, "Frame: % 7.3f[ms]", double(frameTime)*toMs);
 
 		// Update camera.
-		cameraUpdate(deltaTime, mouseState.m_mx, mouseState.m_my, !!mouseState.m_buttons[entry::MouseButton::Right]);
+		cameraUpdate(deltaTime, mouseState);
 
 		// Update view mtx.
 		cameraGetViewMtx(viewState.m_view);
@@ -2349,9 +2329,9 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 				, 0.0f
 				, float(ii)
 				, 0.0f
-				, sinf(float(ii)*2.0f*float(M_PI)/float(numTrees) ) * 60.0f
+				, sinf(float(ii)*2.0f*bx::pi/float(numTrees) ) * 60.0f
 				, 0.0f
-				, cosf(float(ii)*2.0f*float(M_PI)/float(numTrees) ) * 60.0f
+				, cosf(float(ii)*2.0f*bx::pi/float(numTrees) ) * 60.0f
 				);
 		}
 
@@ -2553,9 +2533,11 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		}
 
 		// Reset render targets.
-		const uint32_t viewMask = (uint32_t(1) << (RENDERVIEW_DRAWDEPTH_3_ID+1) ) - 1;
 		const bgfx::FrameBufferHandle invalidRt = BGFX_INVALID_HANDLE;
-		bgfx::setViewFrameBufferMask(viewMask, invalidRt);
+		for (uint32_t ii = 0; ii < RENDERVIEW_DRAWDEPTH_3_ID+1; ++ii)
+		{
+			bgfx::setViewFrameBuffer(ii, invalidRt);
+		}
 
 		// Determine on-screen rectangle size where depth buffer will be drawn.
 		const uint16_t depthRectHeight = uint16_t(float(viewState.m_height) / 2.5f);

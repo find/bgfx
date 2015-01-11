@@ -1,5 +1,5 @@
 --
--- Copyright 2010-2014 Branimir Karadzic. All rights reserved.
+-- Copyright 2010-2015 Branimir Karadzic. All rights reserved.
 -- License: http://www.opensource.org/licenses/BSD-2-Clause
 --
 
@@ -11,6 +11,16 @@ newoption {
 newoption {
 	trigger = "with-shared-lib",
 	description = "Enable building shared library.",
+}
+
+newoption {
+	trigger = "with-sdl",
+	description = "Enable SDL entry.",
+}
+
+newoption {
+	trigger = "with-ovr",
+	description = "Enable OculusVR integration.",
 }
 
 solution "bgfx"
@@ -27,6 +37,7 @@ solution "bgfx"
 	}
 
 	language "C++"
+	startproject "example-00-helloworld"
 
 BGFX_DIR = (path.getabsolute("..") .. "/")
 local BGFX_BUILD_DIR = (BGFX_DIR .. ".build/")
@@ -38,9 +49,19 @@ defines {
 }
 
 dofile (BX_DIR .. "scripts/toolchain.lua")
-toolchain(BGFX_BUILD_DIR, BGFX_THIRD_PARTY_DIR)
+if not toolchain(BGFX_BUILD_DIR, BGFX_THIRD_PARTY_DIR) then
+	return -- no action specified
+end
 
 function copyLib()
+end
+
+if _OPTIONS["with-sdl"] then
+	if os.is("windows") then
+		if not os.getenv("SDL2_DIR") then
+			print("Set SDL2_DIR enviroment variable.")
+		end
+	end
 end
 
 function exampleProject(_name)
@@ -51,7 +72,10 @@ function exampleProject(_name)
 
 	configuration {}
 
-	debugdir (BGFX_DIR .. "examples/runtime/")
+	-- don't output debugdir for winphone builds
+	if "winphone81" ~= _OPTIONS["vs"] then
+		debugdir (BGFX_DIR .. "examples/runtime/")
+	end
 
 	includedirs {
 		BX_DIR .. "include",
@@ -70,6 +94,46 @@ function exampleProject(_name)
 		"example-common",
 	}
 
+	if _OPTIONS["with-sdl"] then
+		defines { "ENTRY_CONFIG_USE_SDL=1" }
+		links   { "SDL2" }
+
+		configuration { "x32", "windows" }
+			libdirs { "$(SDL2_DIR)/lib/x86" }
+
+		configuration { "x64", "windows" }
+			libdirs { "$(SDL2_DIR)/lib/x64" }
+
+		configuration {}
+	end
+
+	if _OPTIONS["with-ovr"] then
+		links   {
+			"winmm",
+			"ws2_32",
+		}
+
+		configuration { "x32" }
+			libdirs { "$(OVR_DIR)/LibOVR/Lib/Win32/" .. _ACTION }
+
+		configuration { "x64" }
+			libdirs { "$(OVR_DIR)/LibOVR/Lib/x64/" .. _ACTION }
+
+		configuration { "x32", "Debug" }
+			links { "libovrd" }
+
+		configuration { "x32", "Release" }
+			links { "libovr" }
+
+		configuration { "x64", "Debug" }
+			links { "libovr64d" }
+
+		configuration { "x64", "Release" }
+			links { "libovr64" }
+
+		configuration {}
+	end
+
 	configuration { "vs*" }
 		linkoptions {
 			"/ignore:4199", -- LNK4199: /DELAYLOAD:*.dll ignored; no imports found from *.dll
@@ -84,6 +148,35 @@ function exampleProject(_name)
 			"/DELAYLOAD:\"libGLESv2.dll\"",
 		}
 
+	configuration { "mingw*" }
+		targetextension ".exe"
+
+	configuration { "vs20* or mingw*" }
+		links {
+			"gdi32",
+			"psapi",
+		}
+
+	configuration { "winphone8*"}
+		removelinks {
+			"DelayImp",
+			"gdi32",
+			"psapi"
+		}
+		links {
+			"d3d11",
+			"dxgi"
+		}
+		linkoptions {
+			"/ignore:4264" -- LNK4264: archiving object file compiled with /ZW into a static library; note that when authoring Windows Runtime types it is not recommended to link with a static library that contains Windows Runtime metadata
+		}
+		-- WinRT targets need their own output directories are build files stomp over each other
+		targetdir (BGFX_BUILD_DIR .. "arm_" .. _ACTION .. "/bin/" .. _name)
+		objdir (BGFX_BUILD_DIR .. "arm_" .. _ACTION .. "/obj/" .. _name)
+
+	configuration { "mingw-clang" }
+		kind "ConsoleApp"
+
 	configuration { "android*" }
 		kind "ConsoleApp"
 		targetextension ".so"
@@ -95,7 +188,7 @@ function exampleProject(_name)
 			"GLESv2",
 		}
 
-	configuration { "nacl or nacl-arm" }
+	configuration { "nacl*" }
 		kind "ConsoleApp"
 		targetextension ".nexe"
 		links {
@@ -142,7 +235,6 @@ function exampleProject(_name)
 		links {
 			"Cocoa.framework",
 			"OpenGL.framework",
---			"SDL2",
 		}
 
 	configuration { "xcode4" }
@@ -184,9 +276,14 @@ function exampleProject(_name)
 end
 
 dofile "bgfx.lua"
+
+group "examples"
 dofile "example-common.lua"
+
+group "libs"
 bgfxProject("", "StaticLib", {})
 
+group "examples"
 exampleProject("00-helloworld")
 exampleProject("01-cubes")
 exampleProject("02-metaballs")
@@ -209,12 +306,17 @@ exampleProject("18-ibl")
 exampleProject("19-oit")
 exampleProject("20-nanovg")
 exampleProject("21-deferred")
+exampleProject("22-windows")
+exampleProject("23-vectordisplay")
+exampleProject("24-nbody")
 
 if _OPTIONS["with-shared-lib"] then
+	group "libs"
 	bgfxProject("-shared-lib", "SharedLib", {})
 end
 
 if _OPTIONS["with-tools"] then
+	group "tools"
 	dofile "makedisttex.lua"
 	dofile "shaderc.lua"
 	dofile "texturec.lua"

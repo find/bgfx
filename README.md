@@ -14,24 +14,36 @@ Supported rendering backends:
  * OpenGL 3.1+
  * OpenGL ES 2
  * OpenGL ES 3.1
+ * WebGL 1.0
 
-Platforms:
+Supported HMD:
 
- * Android
- * asm.js/Emscripten
+ * OculusVR (0.4.2+)
+
+Supported platforms:
+
+ * Android (14+, ARM, x86, MIPS)
+ * asm.js/Emscripten (1.25.0)
  * iOS
  * Linux
- * Native Client
- * OSX
+ * Native Client (PPAPI 37+, ARM, x86, x64, PNaCl)
+ * OSX (10.9)
  * RaspberryPi
- * Windows
+ * Windows (XP, Vista, 7, 8, 10)
+ * WinRT (WinPhone 8.0+)
+
+Supported compilers:
+
+ * Clang 3.3 and above
+ * GCC 4.6 and above
+ * vs2008 and above
 
 Languages:
 
  * [C99 API documentation](https://github.com/bkaradzic/bgfx/blob/master/include/bgfx.c99.h)
  * [C++ API documentation](https://github.com/bkaradzic/bgfx/blob/master/include/bgfx.h)
  * [C#/VB/F# language API bindings](https://github.com/MikePopoloski/SharpBgfx)
- * [D language API bindings](https://github.com/p0nce/DerelictBgfx)
+ * [D language API bindings](https://github.com/DerelictOrg/DerelictBgfx)
  * [Go language API bindings](https://github.com/james4k/go-bgfx)
 
 Who is using it?
@@ -46,15 +58,18 @@ scripting language, and an efficient command-line workflow. Here is video where
 they explain why they choose bgfx over alternatives:  
 <a href="https://www.youtube.com/watch?feature=player_embedded&v=PHY_XHkMGIM&t=1m53s" target="_blank"><img src="https://img.youtube.com/vi/PHY_XHkMGIM/0.jpg" alt="Why did you choose bgfx?" width="240" height="180" border="10" /></a>
 
-https://github.com/dariomanesku/cmftStudio cmftStudio - cubemap filtering tool.
+https://github.com/dariomanesku/cmftStudio cmftStudio - cubemap filtering tool.  
+![cmftStudio](https://github.com/dariomanesku/cmftStudio/raw/master/screenshots/cmftStudio_small.jpg)
 
 https://github.com/taylor001/crown Crown is a general purpose data-driven game
 engine, written from scratch with a minimalistic and data-oriented design
 philosophy in mind.
 
-https://d-gamedev-team.github.io/gfm/ - GFM is a feature-rich library to ease
-the creation of video games / multimedia applications with the D programming
-language.
+https://github.com/emoon/ProDBG - ProDBG is a new debugger under development
+that will support a variety of targets and operating systems. Currently it's in
+very early development and primary focusing on Mac as primary target. This is
+how it currently looks.  
+![mac_screenshot](https://raw.githubusercontent.com/emoon/ProDBG/master/data/screens/mac_screenshot.png)
 
 Examples
 --------
@@ -67,6 +82,8 @@ examples your current directory should be examples/runtime.
 ### [00-helloworld](https://github.com/bkaradzic/bgfx/blob/master/examples/00-helloworld)
 
 Initialization and debug text.
+
+![example-00-helloworld](https://github.com/bkaradzic/bgfx/raw/master/examples/00-helloworld/screenshot.png)
 
 ### [01-cubes](https://github.com/bkaradzic/bgfx/blob/master/examples/01-cubes/cubes.cpp)
 
@@ -166,9 +183,12 @@ draw calls per frame.
 
 | CPU          | Renderer     | GPU       |Compiler| Arch | OS         | Dim | Calls |
 |:-------------|:-------------|:----------|:------:|:----:|:----------:|----:|------:|
+| i7-4790K 4.0 | DX9          | GTX970    | VS2013 | x64  | Windows10  |  40 | 64000+|
 | i5-3570 3.8  | NV 331.49    | GTX560Ti  | GCC    | x64  | Linux      |  40 | 64000+|
 | i7-920 2.66  | GL2.1        | GTX650Ti  | VS2008 | x64  | Windows7   |  38 | 54872 |
 | i7-920 2.66  | GL2.1        | GTX650Ti  | VS2008 | x86  | Windows7   |  38 | 54872 |
+| i7-920 2.66  | NV 331.113   | GTX650Ti  | GCC    | x64  | Linux      |  34 | 39304 |
+| i7-4790K 4.0 | DX11         | GTX970    | VS2013 | x64  | Windows10  |  33 | 35937 |
 | i7-920 2.66  | DX9          | GTX650Ti  | GCC    | x64  | Windows7   |  32 | 32768 |
 | i7-920 2.66  | DX9          | GTX650Ti  | VS2008 | x64  | Windows7   |  32 | 32768 |
 | i7-920 2.66  | DX9          | GTX650Ti  | GCC    | x86  | Windows7   |  30 | 27000 |
@@ -178,6 +198,7 @@ draw calls per frame.
 | i7-2600K 3.4 | DX9          | AMD6800   | VS2012 | x64  | Windows7   |  27 | 19683 |
 | i7-2600K 3.4 | GL2.1        | AMD6800   | VS2012 | x64  | Windows7   |  26 | 17576 |
 | i7-4770R 3.2 | Mesa 10.0.1  | HD5200    | GCC    | x64  | SteamOS    |  25 | 15625 |
+| i7-920 2.66  | DX9-Wine     | GTX650Ti  | GCC    | x64  | Linux      |  24 | 13824 |
 | i7-4750HQ 2.0| Mesa 10.0.1  | HD5200    | GCC    | x64  | Linux      |  22 | 10648 |
 | i7-4750HQ 2.0| Mesa 10.1.3  | HD5200    | GCC    | x64  | Linux      |  21 |  9261 |
 | i7-920 2.66  | ES2-ANGLE    | GTX650Ti  | VS2008 | x86  | Windows7   |  21 |  9261 |
@@ -260,6 +281,22 @@ NanoVG is small antialiased vector graphics rendering library.
 MRT rendering and deferred shading.
 
 ![example-21-deferred](https://github.com/bkaradzic/bgfx/raw/master/examples/21-deferred/screenshot.png)
+
+### [22-windows](https://github.com/bkaradzic/bgfx/tree/master/examples/22-windows)
+
+Rendering into multiple windows.
+
+### [23-vectordisplay](https://github.com/bkaradzic/bgfx/tree/master/examples/23-vectordisplay)
+
+Rendering lines as oldschool vectors.
+
+![example-23-vectordisplay](https://github.com/bkaradzic/bgfx/raw/master/examples/23-vectordisplay/screenshot.png)
+
+### [24-nbody](https://github.com/bkaradzic/bgfx/tree/master/examples/24-nbody)
+
+N-body simulation with compute shaders using buffers.
+
+![example-24-nbody](https://github.com/bkaradzic/bgfx/raw/master/examples/24-nbody/screenshot.png)
 
 Dependencies
 ------------
@@ -351,6 +388,12 @@ Linux 64-bit:
 
 	make linux-release64
 
+WinRT / Windows Phone 8.1:
+
+	../bx/tools/bin/windows/genie --vs=winphone81 vs2013
+Build the resulting solution and deploy to device. Note that
+shaders will need to be compiled with the appropriate target profile for your platform.
+
 Other platforms:
 
 	make <configuration>
@@ -359,6 +402,28 @@ Configuration is `<platform>-<debug/release>[32/64]`. For example:
 
 	linux-release32, nacl-debug64, nacl-arm-debug, pnacl-release, 
 	android-release, etc.
+
+OculusVR integration
+--------------------
+
+OculusVR support is currently experimental, and only DX11 is tested. To build
+with OculusVR HDM support enabled you must set `OVR_DIR` enviroment variable:
+
+	set OVR_DIR=<path to OculusSDK>
+
+And generate project files with `--with-ovr` option:
+
+	genie --with-ovr vs2012
+
+In `LibOVR/Include` create trampoline headers `OVR_D3D.h` and `OVR_GL.h`.
+
+`OVR_D3D.h` should contain:
+
+	#include "../Src/OVR_CAPI_D3D.h"
+
+`OVR_GL.h` should contain:
+
+	#include "../Src/OVR_CAPI_GL.h"
 
 Internals
 ---------
@@ -404,21 +469,44 @@ Certain platforms have only single choice, for example the Native Client works
 only with OpenGL ES 2.0 renderer, using anything other than that will result in
 build errors.
 
-Debugging
----------
+Debugging and Profiling
+-----------------------
+
+### RenderDoc
+
+Loading of RenderDoc is integrated in bgfx when using DX11 or OpenGL renderer.
+You can drop in `renderdoc.dll` from RenderDoc distribution into working
+directory, and it will be automatically loaded during bgfx initialization. This
+allows frame capture at any time by pressing **F11**.
+
+Download: [RenderDoc](https://renderdoc.org/builds)
+
+### IntelGPA
+
+Right click **Intel GPA Monitor** tray icon, choose preferences, check
+"Auto-detect launched applications" option. Find `InjectionList.txt` in GPA
+directory and add `examples-*` to the list.
+
+Download: [IntelGPA](https://software.intel.com/en-us/vcsource/tools/intel-gpa)
+
+Other debuggers:
 
 | Name      | OS            | DX9  | DX11 |  GL  | GLES | Source |
 |:----------|:--------------|:----:|:----:|:----:|:----:|:------:|
 | APITrace  | Linux/OSX/Win |   x  |  x   |  x   |   x  |    x   |
 | CodeXL    | Linux/Win     |      |      |  x   |      |        |
 | IntelGPA  | Linux/OSX/Win |   x  |  x   |      |   x  |        |
-| RenderDoc | Win           |      |  x   |      |      |    x   |
+| Nsight    | Win           |   x  |  x   |  x   |      |        |
+| PerfHUD   | Win           |   x  |  x   |      |      |        |
+| RenderDoc | Win           |      |  x   |  x   |      |    x   |
+| vogl      | Linux         |      |      |  x   |      |    x   |
 
+Download:  
 [APITrace](https://apitrace.github.io/)  
 [CodeXL](http://developer.amd.com/tools-and-sdks/opencl-zone/codexl/)  
-[IntelGPA](https://software.intel.com/en-us/vcsource/tools/intel-gpa)  
-[RenderDoc](http://cryengine.com/renderdoc)
-
+[Nsight](https://developer.nvidia.com/nvidia-nsight-visual-studio-edition)  
+[PerfHUD](https://developer.nvidia.com/nvidia-perfhud)  
+[vogl](https://github.com/ValveSoftware/vogl)  
 
 SDL, GLFW, etc.
 ---------------
@@ -443,6 +531,11 @@ Using bgfx with SDL example:
 	
 	    ...
 	    bgfx::init();
+
+**NOTE** You can use `--with-sdl` when runnning GENie to enable SDL2 integration
+with examples:
+
+	genie --with-sdl vs2012
 
 Tools
 -----
@@ -487,12 +580,17 @@ Todo
  - Occlusion queries.
  - Fullscreen mode.
  - ETC2, PVRTC1/2 decoding fallback for targets that don't support it natively.
+ - shaderc as library for runtime shader building.
+ - texturec tool with support for all supported texture formats.
+ - Multiple vertex streams support.
+ - Animated mesh example.
+ - Direct3D 12 renderer backend.
+ - Metal renderer backend.
 
 Contact
 -------
 
 [@bkaradzic](https://twitter.com/bkaradzic)  
-http://www.stuckingeometry.com
 
 Project page  
 https://github.com/bkaradzic/bgfx
@@ -507,7 +605,7 @@ directory.
 
 Blendish - Blender 2.5 UI based theming functions for NanoVG.
 
-https://bitbucket.org/duangle/blendish
+https://bitbucket.org/duangle/oui-blendish
 
 ### edtaa3 (MIT)
 
@@ -552,6 +650,10 @@ https://github.com/memononen/SDF
 ### stb_image, stb_truetype (Public Domain)
 
 http://nothings.org
+
+### Vertex Cache Optimised Index Buffer Compression (BSD)
+
+https://github.com/ConorStokes/IndexBufferCompression
 
 Assets
 ------
@@ -620,18 +722,20 @@ Contributors
 Garett Bass ([@gtbass](https://github.com/gtbass)) - OSX port.  
 Jeremie Roy ([@jeremieroy](https://github.com/jeremieroy)) - Font system and
   examples.  
-Milos Tosic ([@milostosic](https://github.com/milostosic)) - 12-lod example.  
+Miloš Tošić ([@milostosic](https://github.com/milostosic)) - 12-lod example.  
 Dario Manesku ([@dariomanesku](https://github.com/dariomanesku)) - 13-stencil, 
   14-shadowvolumes, 15-shadowmaps-simple, 16-shadowmaps, 18-ibl  
 James Gray ([@james4k](https://github.com/james4k)) - Go language API bindings.  
 p0nce ([@p0nce](https://github.com/p0nce)) - D language API bindings.  
 Mike Popoloski ([@MikePopoloski](https://github.com/MikePopoloski)) - C#/VB/F# 
-language API bindings  
+language API bindings, WinRT/WinPhone support.  
+Kai Jourdan ([@questor](https://github.com/questor)) - 23-vectordisplay example  
+Stanlo Slasinski ([@stanlo](https://github.com/stanlo)) - 24-nbody example  
 
 [License (BSD 2-clause)](https://github.com/bkaradzic/bgfx/blob/master/LICENSE)
 -------------------------------------------------------------------------------
 
-	Copyright 2010-2014 Branimir Karadzic. All rights reserved.
+	Copyright 2010-2015 Branimir Karadzic. All rights reserved.
 	
 	https://github.com/bkaradzic/bgfx
 	

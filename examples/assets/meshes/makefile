@@ -1,5 +1,5 @@
 #
-# Copyright 2011-2014 Branimir Karadzic. All rights reserved.
+# Copyright 2011-2015 Branimir Karadzic. All rights reserved.
 # License: http://www.opensource.org/licenses/BSD-2-Clause
 #
 
@@ -28,6 +28,12 @@ GEOMETRY_SRC= \
 GEOMETRY_BIN=$(addprefix $(RUNTIME_DIR)/meshes/, $(addsuffix .bin, $(basename $(GEOMETRY_SRC))))
 
 all: $(GEOMETRY_BIN)
+
+clean:
+	@echo Cleaning...
+	@-rm -vf $(GEOMETRY_BIN)
+
+rebuild: clean all
 
 $(RUNTIME_DIR)/meshes/%.bin : %.obj
 	$(SILENT) $(GEOMETRYC) -f $(<) -o $(@) --packnormal 1

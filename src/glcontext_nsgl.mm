@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2014 Branimir Karadzic. All rights reserved.
+ * Copyright 2011-2015 Branimir Karadzic. All rights reserved.
  * License: http://www.opensource.org/licenses/BSD-2-Clause
  */
 
@@ -15,6 +15,26 @@ namespace bgfx
 
 #	define GL_IMPORT(_optional, _proto, _func, _import) _proto _func
 #	include "glimports.h"
+
+	struct SwapChainGL
+	{
+		SwapChainGL(void* _nwh)
+		{
+			BX_UNUSED(_nwh);
+		}
+
+		~SwapChainGL()
+		{
+		}
+
+		void makeCurrent()
+		{
+		}
+
+		void swapBuffers()
+		{
+		}
+	};
 	
 	static void* s_opengl = NULL;
 
@@ -81,34 +101,53 @@ namespace bgfx
 
 	void GlContext::resize(uint32_t _width, uint32_t _height, bool _vsync)
 	{
-		BX_UNUSED(_width, _height, _vsync);
+		BX_UNUSED(_width, _height);
 
 		GLint interval = _vsync ? 1 : 0;
 		NSOpenGLContext* glContext = (NSOpenGLContext*)m_context;
 		[glContext setValues:&interval forParameter:NSOpenGLCPSwapInterval];
+		[glContext update];
 	}
 
-	SwapChainGL* GlContext::createSwapChain(void* /*_nwh*/)
+	bool GlContext::isSwapChainSupported()
 	{
-		BX_CHECK(false, "Shouldn't be called!");
-		return NULL;
+		return false;
 	}
 
-	void GlContext::destorySwapChain(SwapChainGL*  /*_swapChain*/)
+	SwapChainGL* GlContext::createSwapChain(void* _nwh)
 	{
-		BX_CHECK(false, "Shouldn't be called!");
+		return BX_NEW(g_allocator, SwapChainGL)(_nwh);
+	}
+
+	void GlContext::destroySwapChain(SwapChainGL* _swapChain)
+	{
+		BX_DELETE(g_allocator, _swapChain);
 	}
 
 	void GlContext::swap(SwapChainGL* _swapChain)
 	{
-		BX_CHECK(NULL == _swapChain, "Shouldn't be called!"); BX_UNUSED(_swapChain);
-		NSOpenGLContext* glContext = (NSOpenGLContext*)m_context;
-		[glContext makeCurrentContext];
-		[glContext flushBuffer];
+		if (NULL == _swapChain)
+		{
+			NSOpenGLContext* glContext = (NSOpenGLContext*)m_context;
+			[glContext makeCurrentContext];
+			[glContext flushBuffer];
+		}
+		else
+		{
+			_swapChain->makeCurrent();
+			_swapChain->swapBuffers();
+		}
 	}
 
-	void GlContext::makeCurrent(SwapChainGL* /*_swapChain*/)
+	void GlContext::makeCurrent(SwapChainGL* _swapChain)
 	{
+		if (NULL == _swapChain)
+		{
+		}
+		else
+		{
+			_swapChain->makeCurrent();
+		}
 	}
 
 	void GlContext::import()

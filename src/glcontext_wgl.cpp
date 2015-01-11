@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2014 Branimir Karadzic. All rights reserved.
+ * Copyright 2011-2015 Branimir Karadzic. All rights reserved.
  * License: http://www.opensource.org/licenses/BSD-2-Clause
  */
 
@@ -42,6 +42,8 @@ namespace bgfx
 		void makeCurrent()
 		{
 			wglMakeCurrent(m_hdc, m_context);
+			GLenum err = glGetError();
+			BX_WARN(0 == err, "wglMakeCurrent failed with GL error: 0x%04x.", err); BX_UNUSED(err);
 		}
 
 		void swapBuffers()
@@ -215,7 +217,7 @@ namespace bgfx
 				// create context will fail and it will error out there.
 				BX_WARN(result, "SetPixelFormat failed (last err: 0x%08x)!", GetLastError() );
 
-				uint32_t flags = BGFX_CONFIG_DEBUG ? WGL_CONTEXT_DEBUG_BIT_ARB : 0;
+				int32_t flags = BGFX_CONFIG_DEBUG ? WGL_CONTEXT_DEBUG_BIT_ARB : 0;
 				BX_UNUSED(flags);
 				int32_t contextAttrs[9] =
 				{
@@ -292,6 +294,11 @@ namespace bgfx
 		}
 	}
 
+	bool GlContext::isSwapChainSupported()
+	{
+		return true;
+	}
+
 	SwapChainGL* GlContext::createSwapChain(void* _nwh)
 	{
 		SwapChainGL* swapChain = BX_NEW(g_allocator, SwapChainGL)(_nwh);
@@ -304,7 +311,7 @@ namespace bgfx
 		return swapChain;
 	}
 
-	void GlContext::destorySwapChain(SwapChainGL*  _swapChain)
+	void GlContext::destroySwapChain(SwapChainGL*  _swapChain)
 	{
 		BX_DELETE(g_allocator, _swapChain);
 	}
@@ -314,6 +321,8 @@ namespace bgfx
 		if (NULL == _swapChain)
 		{
 			wglMakeCurrent(m_hdc, m_context);
+			GLenum err = glGetError();
+			BX_WARN(0 == err, "wglMakeCurrent failed with GL error: 0x%04x.", err); BX_UNUSED(err);
 		}
 		else
 		{

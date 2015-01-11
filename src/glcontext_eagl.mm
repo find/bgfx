@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2014 Branimir Karadzic. All rights reserved.
+ * Copyright 2011-2015 Branimir Karadzic. All rights reserved.
  * License: http://www.opensource.org/licenses/BSD-2-Clause
  */
 
@@ -91,13 +91,18 @@ namespace bgfx
 		BX_TRACE("resize context");
 	}
 
+	bool GlContext::isSwapChainSupported()
+	{
+		return false;
+	}
+
 	SwapChainGL* GlContext::createSwapChain(void* /*_nwh*/)
 	{
 		BX_CHECK(false, "Shouldn't be called!");
 		return NULL;
 	}
 
-	void GlContext::destorySwapChain(SwapChainGL*  /*_swapChain*/)
+	void GlContext::destroySwapChain(SwapChainGL*  /*_swapChain*/)
 	{
 		BX_CHECK(false, "Shouldn't be called!");
 	}

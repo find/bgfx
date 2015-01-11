@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2014 Branimir Karadzic. All rights reserved.
+ * Copyright 2011-2015 Branimir Karadzic. All rights reserved.
  * License: http://www.opensource.org/licenses/BSD-2-Clause
  */
 
@@ -13,72 +13,65 @@
 #	define BGFX_CONFIG_DEBUG_PIX 0
 #endif // !USE_D3D11_DYNAMIC_LIB
 
+BX_PRAGMA_DIAGNOSTIC_PUSH();
+BX_PRAGMA_DIAGNOSTIC_IGNORED_CLANG("-Wunknown-pragmas" );
+BX_PRAGMA_DIAGNOSTIC_IGNORED_GCC("-Wpragmas");
+BX_PRAGMA_DIAGNOSTIC_IGNORED_MSVC(4005) // warning C4005: '' : macro redefinition
 #define D3D11_NO_HELPERS
-#if BX_COMPILER_MSVC
-#	pragma warning(push)
-//  winerror.h and dxgitypes.h both define DXGI_ERRORs.
-#	pragma warning(disable:4005) // warning C4005: '' : macro redefinition
-#	include <d3d11.h>
-#	pragma warning(pop)
+#if BX_PLATFORM_WINRT
+#include <d3d11_2.h>
 #else
-#	include <d3d11.h>
-#endif // BX_COMPILER_MSVC
-#include "renderer_d3d.h"
+#include <d3d11.h>
+#endif
+BX_PRAGMA_DIAGNOSTIC_POP()
 
-#define D3DCOLOR_ARGB(_a, _r, _g, _b) ( (DWORD)( ( ( (_a)&0xff)<<24)|( ( (_r)&0xff)<<16)|( ( (_g)&0xff)<<8)|( (_b)&0xff) ) )
-#define D3DCOLOR_RGBA(_r, _g, _b, _a) D3DCOLOR_ARGB(_a, _r, _g, _b)
+#include "renderer.h"
+#include "renderer_d3d.h"
+#include "ovr.h"
+#include "renderdoc.h"
+
+#ifndef D3DCOLOR_ARGB
+#	define D3DCOLOR_ARGB(_a, _r, _g, _b) ( (DWORD)( ( ( (_a)&0xff)<<24)|( ( (_r)&0xff)<<16)|( ( (_g)&0xff)<<8)|( (_b)&0xff) ) )
+#endif // D3DCOLOR_ARGB
+
+#ifndef D3DCOLOR_RGBA
+#	define D3DCOLOR_RGBA(_r, _g, _b, _a) D3DCOLOR_ARGB(_a, _r, _g, _b)
+#endif // D3DCOLOR_RGBA
+
+#ifndef DXGI_FORMAT_B4G4R4A4_UNORM
+// Win8 only BS
+// https://blogs.msdn.com/b/chuckw/archive/2012/11/14/directx-11-1-and-windows-7.aspx?Redirected=true
+// http://msdn.microsoft.com/en-us/library/windows/desktop/bb173059%28v=vs.85%29.aspx
+#	define DXGI_FORMAT_B4G4R4A4_UNORM DXGI_FORMAT(115)
+#endif // DXGI_FORMAT_B4G4R4A4_UNORM
+
+#ifndef D3D_FEATURE_LEVEL_11_1
+#	define D3D_FEATURE_LEVEL_11_1 D3D_FEATURE_LEVEL(0xb100)
+#endif // D3D_FEATURE_LEVEL_11_1
+
+// MinGW Linux/Wine missing defines...
+#ifndef D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT
+#	define D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT 8
+#endif // D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT
+
+#ifndef D3D11_PS_CS_UAV_REGISTER_COUNT
+#	define D3D11_PS_CS_UAV_REGISTER_COUNT 8
+#endif // D3D11_PS_CS_UAV_REGISTER_COUNT
+
+#ifndef D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT
+#	define D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT 8
+#endif
+
+#ifndef D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT
+#	define D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT 8
+#endif // D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT
+
+#ifndef D3D11_APPEND_ALIGNED_ELEMENT
+#	define D3D11_APPEND_ALIGNED_ELEMENT UINT32_MAX
+#endif // D3D11_APPEND_ALIGNED_ELEMENT
 
 namespace bgfx
 {
-	typedef HRESULT (WINAPI * PFN_CREATEDXGIFACTORY)(REFIID _riid, void** _factory);
-
-	template <typename Ty>
-	class StateCacheT
-	{
-	public:
-		void add(uint64_t _id, Ty* _item)
-		{
-			invalidate(_id);
-			m_hashMap.insert(stl::make_pair(_id, _item) );
-		}
-
-		Ty* find(uint64_t _id)
-		{
-			HashMap::iterator it = m_hashMap.find(_id);
-			if (it != m_hashMap.end() )
-			{
-				return it->second;
-			}
-
-			return NULL;
-		}
-
-		void invalidate(uint64_t _id)
-		{
-			HashMap::iterator it = m_hashMap.find(_id);
-			if (it != m_hashMap.end() )
-			{
-				DX_RELEASE_WARNONLY(it->second, 0);
-				m_hashMap.erase(it);
-			}
-		}
-
-		void invalidate()
-		{
-			for (HashMap::iterator it = m_hashMap.begin(), itEnd = m_hashMap.end(); it != itEnd; ++it)
-			{
-				DX_CHECK_REFCOUNT(it->second, 1);
-				it->second->Release();
-			}
-
-			m_hashMap.clear();
-		}
-
-	private:
-		typedef stl::unordered_map<uint64_t, Ty*> HashMap;
-		HashMap m_hashMap;
-	};
-
 	struct IndexBufferD3D11
 	{
 		IndexBufferD3D11()
@@ -108,11 +101,13 @@ namespace bgfx
 	{
 		VertexBufferD3D11()
 			: m_ptr(NULL)
+			, m_srv(NULL)
+			, m_uav(NULL)
 			, m_dynamic(false)
 		{
 		}
 
-		void create(uint32_t _size, void* _data, VertexDeclHandle _declHandle);
+		void create(uint32_t _size, void* _data, VertexDeclHandle _declHandle, uint8_t _flags);
 		void update(uint32_t _offset, uint32_t _size, void* _data, bool _discard = false);
 
 		void destroy()
@@ -122,9 +117,14 @@ namespace bgfx
 				DX_RELEASE(m_ptr, 0);
 				m_dynamic = false;
 			}
+
+			DX_RELEASE(m_srv, 0);
+			DX_RELEASE(m_uav, 0);
 		}
 
 		ID3D11Buffer* m_ptr;
+		ID3D11ShaderResourceView* m_srv;
+		ID3D11UnorderedAccessView* m_uav;
 		uint32_t m_size;
 		VertexDeclHandle m_decl;
 		bool m_dynamic;

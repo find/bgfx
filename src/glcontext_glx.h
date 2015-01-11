@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2014 Branimir Karadzic. All rights reserved.
+ * Copyright 2011-2015 Branimir Karadzic. All rights reserved.
  * License: http://www.opensource.org/licenses/BSD-2-Clause
  */
 
@@ -19,6 +19,7 @@ namespace bgfx
 	{
 		GlContext()
 			: m_context(0)
+			, m_visualInfo(NULL)
 		{
 		}
 
@@ -26,8 +27,9 @@ namespace bgfx
 		void destroy();
 		void resize(uint32_t _width, uint32_t _height, bool _vsync);
 
+		static bool isSwapChainSupported();
 		SwapChainGL* createSwapChain(void* _nwh);
-		void destorySwapChain(SwapChainGL*  _swapChain);
+		void destroySwapChain(SwapChainGL*  _swapChain);
 		void swap(SwapChainGL* _swapChain = NULL);
 		void makeCurrent(SwapChainGL* _swapChain = NULL);
 
@@ -39,6 +41,7 @@ namespace bgfx
 		}
 
 		GLXContext m_context;
+		XVisualInfo* m_visualInfo;
 	};
 } // namespace bgfx
 
