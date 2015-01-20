@@ -94,7 +94,13 @@ namespace bgfx
 #define BGFX_CHUNK_MAGIC_TEX BX_MAKEFOURCC('T', 'E', 'X', 0x0)
 #define BGFX_CHUNK_MAGIC_VSH BX_MAKEFOURCC('V', 'S', 'H', 0x3)
 
-#define BGFX_CLEAR_COLOR_USE_PALETTE_BIT UINT8_C(0x80)
+#define BGFX_CLEAR_COLOR_USE_PALETTE UINT16_C(0x8000)
+#define BGFX_CLEAR_MASK (0 \
+			| BGFX_CLEAR_COLOR \
+			| BGFX_CLEAR_DEPTH \
+			| BGFX_CLEAR_STENCIL \
+			| BGFX_CLEAR_COLOR_USE_PALETTE \
+			)
 
 #include <list> // mingw wants it to be before tr1/unordered_*...
 
@@ -204,10 +210,10 @@ namespace bgfx
 
 	struct Clear
 	{
-		uint8_t m_index[8];
-		float   m_depth;
-		uint8_t m_stencil;
-		uint8_t m_flags;
+		uint8_t  m_index[8];
+		float    m_depth;
+		uint8_t  m_stencil;
+		uint16_t m_flags;
 	};
 
 	struct Rect
@@ -1020,15 +1026,41 @@ namespace bgfx
 			return info;
 		}
 
- 	private:
- 		typedef stl::unordered_map<stl::string, UniformInfo> UniformHashMap;
- 		UniformHashMap m_uniforms;
- 	};
+	private:
+		typedef stl::unordered_map<stl::string, UniformInfo> UniformHashMap;
+		UniformHashMap m_uniforms;
+	};
 
-	struct Sampler
+	struct Binding
 	{
-		uint32_t m_flags;
+		enum Enum
+		{
+			Image,
+			IndexBuffer,
+			VertexBuffer,
+			Texture,
+
+			Count
+		};
+
 		uint16_t m_idx;
+		uint8_t  m_type;
+
+		union
+		{
+			struct
+			{
+				uint32_t m_flags;
+			} m_draw;
+
+			struct
+			{
+				uint8_t  m_format;
+				uint8_t  m_access;
+				uint8_t  m_mip;
+			} m_compute;
+
+		} m_un;
 	};
 
 	struct RenderDraw
@@ -1058,11 +1090,11 @@ namespace bgfx
 
 			for (uint32_t ii = 0; ii < BGFX_CONFIG_MAX_TEXTURE_SAMPLERS; ++ii)
 			{
-				m_sampler[ii].m_idx = invalidHandle;
-				m_sampler[ii].m_flags = 0;
+				m_bind[ii].m_idx  = invalidHandle;
 			}
 		}
 
+		Binding  m_bind[BGFX_CONFIG_MAX_TEXTURE_SAMPLERS];
 		uint64_t m_flags;
 		uint64_t m_stencil;
 		uint32_t m_rgba;
@@ -1084,24 +1116,6 @@ namespace bgfx
 		VertexDeclHandle   m_vertexDecl;
 		IndexBufferHandle  m_indexBuffer;
 		VertexBufferHandle m_instanceDataBuffer;
-		Sampler m_sampler[BGFX_CONFIG_MAX_TEXTURE_SAMPLERS];
-	};
-
-	struct ComputeBinding
-	{
-		enum Enum
-		{
-			Image,
-			Buffer,
-
-			Count
-		};
-
-		uint16_t m_idx;
-		uint8_t m_format;
-		uint8_t m_access;
-		uint8_t m_mip;
-		uint8_t m_type;
 	};
 
 	struct RenderCompute
@@ -1123,6 +1137,7 @@ namespace bgfx
 			}
 		}
 
+		Binding  m_bind[BGFX_MAX_COMPUTE_BINDINGS];
 		uint32_t m_constBegin;
 		uint32_t m_constEnd;
 		uint32_t m_matrix;
@@ -1132,8 +1147,6 @@ namespace bgfx
 		uint16_t m_numZ;
 		uint16_t m_num;
 		uint8_t  m_submitFlags;
-
-		ComputeBinding m_bind[BGFX_MAX_COMPUTE_BINDINGS];
 	};
 
 	union RenderItem
@@ -1375,9 +1388,9 @@ namespace bgfx
 
 		void setTexture(uint8_t _stage, UniformHandle _sampler, TextureHandle _handle, uint32_t _flags)
 		{
-			Sampler& sampler = m_draw.m_sampler[_stage];
+			Binding& sampler = m_draw.m_bind[_stage];
 			sampler.m_idx    = _handle.idx;
-			sampler.m_flags  = (_flags&BGFX_SAMPLER_DEFAULT_FLAGS) ? BGFX_SAMPLER_DEFAULT_FLAGS : _flags;
+			sampler.m_un.m_draw.m_flags = (_flags&BGFX_SAMPLER_DEFAULT_FLAGS) ? BGFX_SAMPLER_DEFAULT_FLAGS : _flags;
 
 			if (isValid(_sampler)
 			&& (BX_ENABLED(BGFX_CONFIG_RENDERER_OPENGL) || BX_ENABLED(BGFX_CONFIG_RENDERER_OPENGLES) ) )
@@ -1387,24 +1400,34 @@ namespace bgfx
 			}
 		}
 
+		void setBuffer(uint8_t _stage, IndexBufferHandle _handle, Access::Enum _access)
+		{
+			Binding& bind = m_compute.m_bind[_stage];
+			bind.m_idx    = _handle.idx;
+			bind.m_type   = uint8_t(Binding::IndexBuffer);
+			bind.m_un.m_compute.m_format = 0;
+			bind.m_un.m_compute.m_access = uint8_t(_access);
+			bind.m_un.m_compute.m_mip    = 0;
+		}
+
 		void setBuffer(uint8_t _stage, VertexBufferHandle _handle, Access::Enum _access)
 		{
-			ComputeBinding& bind = m_compute.m_bind[_stage];
+			Binding& bind = m_compute.m_bind[_stage];
 			bind.m_idx    = _handle.idx;
-			bind.m_format = 0;
-			bind.m_access = uint8_t(_access);
-			bind.m_mip    = 0;
-			bind.m_type   = uint8_t(ComputeBinding::Buffer);
+			bind.m_type   = uint8_t(Binding::VertexBuffer);
+			bind.m_un.m_compute.m_format = 0;
+			bind.m_un.m_compute.m_access = uint8_t(_access);
+			bind.m_un.m_compute.m_mip    = 0;
 		}
 
 		void setImage(uint8_t _stage, UniformHandle _sampler, TextureHandle _handle, uint8_t _mip, TextureFormat::Enum _format, Access::Enum _access)
 		{
-			ComputeBinding& bind = m_compute.m_bind[_stage];
-			bind.m_idx     = _handle.idx;
-			bind.m_format  = uint8_t(_format);
-			bind.m_access  = uint8_t(_access);
-			bind.m_mip     = _mip;
-			bind.m_type    = uint8_t(ComputeBinding::Image);
+			Binding& bind = m_compute.m_bind[_stage];
+			bind.m_idx    = _handle.idx;
+			bind.m_type   = uint8_t(Binding::Image);
+			bind.m_un.m_compute.m_format = uint8_t(_format);
+			bind.m_un.m_compute.m_access = uint8_t(_access);
+			bind.m_un.m_compute.m_mip    = _mip;
 
 			if (isValid(_sampler)
 			&& (BX_ENABLED(BGFX_CONFIG_RENDERER_OPENGL) || BX_ENABLED(BGFX_CONFIG_RENDERER_OPENGLES) ) )
@@ -1773,13 +1796,13 @@ namespace bgfx
 		virtual RendererType::Enum getRendererType() const = 0;
 		virtual const char* getRendererName() const = 0;
 		virtual void flip() = 0;
-		virtual void createIndexBuffer(IndexBufferHandle _handle, Memory* _mem) = 0;
+		virtual void createIndexBuffer(IndexBufferHandle _handle, Memory* _mem, uint8_t _flags) = 0;
 		virtual void destroyIndexBuffer(IndexBufferHandle _handle) = 0;
 		virtual void createVertexDecl(VertexDeclHandle _handle, const VertexDecl& _decl) = 0;
 		virtual void destroyVertexDecl(VertexDeclHandle _handle) = 0;
 		virtual void createVertexBuffer(VertexBufferHandle _handle, Memory* _mem, VertexDeclHandle _declHandle, uint8_t _flags) = 0;
 		virtual void destroyVertexBuffer(VertexBufferHandle _handle) = 0;
-		virtual void createDynamicIndexBuffer(IndexBufferHandle _handle, uint32_t _size) = 0;
+		virtual void createDynamicIndexBuffer(IndexBufferHandle _handle, uint32_t _size, uint8_t _flags) = 0;
 		virtual void updateDynamicIndexBuffer(IndexBufferHandle _handle, uint32_t _offset, uint32_t _size, Memory* _mem) = 0;
 		virtual void destroyDynamicIndexBuffer(IndexBufferHandle _handle) = 0;
 		virtual void createDynamicVertexBuffer(VertexBufferHandle _handle, uint32_t _size, uint8_t _flags) = 0;
@@ -1903,7 +1926,7 @@ namespace bgfx
 			return NULL;
 		}
 
-		BGFX_API_FUNC(IndexBufferHandle createIndexBuffer(const Memory* _mem) )
+		BGFX_API_FUNC(IndexBufferHandle createIndexBuffer(const Memory* _mem, uint8_t _flags) )
 		{
 			IndexBufferHandle handle = { m_indexBufferHandle.alloc() };
 
@@ -1913,6 +1936,7 @@ namespace bgfx
 				CommandBuffer& cmdbuf = getCommandBuffer(CommandBuffer::CreateIndexBuffer);
 				cmdbuf.write(handle);
 				cmdbuf.write(_mem);
+				cmdbuf.write(_flags);
 			}
 
 			return handle;
@@ -1982,26 +2006,47 @@ namespace bgfx
 			m_vertexBufferHandle.free(_handle.idx);
 		}
 
-		BGFX_API_FUNC(DynamicIndexBufferHandle createDynamicIndexBuffer(uint32_t _num) )
+		BGFX_API_FUNC(DynamicIndexBufferHandle createDynamicIndexBuffer(uint32_t _num, uint8_t _flags))
 		{
 			DynamicIndexBufferHandle handle = BGFX_INVALID_HANDLE;
 			uint32_t size = BX_ALIGN_16(_num*2);
-			uint64_t ptr = m_dynamicIndexBufferAllocator.alloc(size);
-			if (ptr == NonLocalAllocator::invalidBlock)
+
+			uint64_t ptr = 0;
+			if (0 != (_flags & BGFX_BUFFER_COMPUTE_WRITE))
 			{
-				IndexBufferHandle indexBufferHandle = { m_indexBufferHandle.alloc() };
-				BX_WARN(isValid(indexBufferHandle), "Failed to allocate index buffer handle.");
-				if (!isValid(indexBufferHandle) )
+				VertexBufferHandle vertexBufferHandle = { m_vertexBufferHandle.alloc() };
+				if (!isValid(vertexBufferHandle))
 				{
 					return handle;
 				}
 
-				CommandBuffer& cmdbuf = getCommandBuffer(CommandBuffer::CreateDynamicIndexBuffer);
-				cmdbuf.write(indexBufferHandle);
-				cmdbuf.write(BGFX_CONFIG_DYNAMIC_INDEX_BUFFER_SIZE);
+				CommandBuffer& cmdbuf = getCommandBuffer(CommandBuffer::CreateDynamicVertexBuffer);
+				cmdbuf.write(vertexBufferHandle);
+				cmdbuf.write(size);
+				cmdbuf.write(_flags);
 
-				m_dynamicIndexBufferAllocator.add(uint64_t(indexBufferHandle.idx)<<32, BGFX_CONFIG_DYNAMIC_INDEX_BUFFER_SIZE);
-				ptr = m_dynamicIndexBufferAllocator.alloc(size);
+				ptr = uint64_t(vertexBufferHandle.idx) << 32;
+			}
+			else
+			{
+				ptr = m_dynIndexBufferAllocator.alloc(size);
+				if (ptr == NonLocalAllocator::invalidBlock)
+				{
+					IndexBufferHandle indexBufferHandle = { m_indexBufferHandle.alloc() };
+					BX_WARN(isValid(indexBufferHandle), "Failed to allocate index buffer handle.");
+					if (!isValid(indexBufferHandle))
+					{
+						return handle;
+					}
+
+					CommandBuffer& cmdbuf = getCommandBuffer(CommandBuffer::CreateDynamicIndexBuffer);
+					cmdbuf.write(indexBufferHandle);
+					cmdbuf.write(BGFX_CONFIG_DYNAMIC_INDEX_BUFFER_SIZE);
+					cmdbuf.write(_flags);
+
+					m_dynIndexBufferAllocator.add(uint64_t(indexBufferHandle.idx) << 32, BGFX_CONFIG_DYNAMIC_INDEX_BUFFER_SIZE);
+					ptr = m_dynIndexBufferAllocator.alloc(size);
+				}
 			}
 
 			handle.idx = m_dynamicIndexBufferHandle.alloc();
@@ -2021,7 +2066,7 @@ namespace bgfx
 
 		BGFX_API_FUNC(DynamicIndexBufferHandle createDynamicIndexBuffer(const Memory* _mem) )
 		{
-			DynamicIndexBufferHandle handle = createDynamicIndexBuffer(_mem->size/2);
+			DynamicIndexBufferHandle handle = createDynamicIndexBuffer(_mem->size/2, BGFX_BUFFER_COMPUTE_NONE);
 			if (isValid(handle) )
 			{
 				updateDynamicIndexBuffer(handle, _mem);
@@ -2047,7 +2092,7 @@ namespace bgfx
 		void destroyDynamicIndexBufferInternal(DynamicIndexBufferHandle _handle)
 		{
 			DynamicIndexBuffer& dib = m_dynamicIndexBuffers[_handle.idx];
-			m_dynamicIndexBufferAllocator.free(uint64_t(dib.m_handle.idx)<<32 | dib.m_offset);
+			m_dynIndexBufferAllocator.free(uint64_t(dib.m_handle.idx)<<32 | dib.m_offset);
 			m_dynamicIndexBufferHandle.free(_handle.idx);
 		}
 
@@ -2074,7 +2119,7 @@ namespace bgfx
 			}
 			else
 			{
-				ptr = m_cpuDvbAllocator.alloc(size);
+				ptr = m_dynVertexBufferAllocator.alloc(size);
 				if (ptr == NonLocalAllocator::invalidBlock)
 				{
 					VertexBufferHandle vertexBufferHandle = { m_vertexBufferHandle.alloc() };
@@ -2090,8 +2135,8 @@ namespace bgfx
 					cmdbuf.write(BGFX_CONFIG_DYNAMIC_VERTEX_BUFFER_SIZE);
 					cmdbuf.write(_flags);
 
-					m_cpuDvbAllocator.add(uint64_t(vertexBufferHandle.idx)<<32, BGFX_CONFIG_DYNAMIC_VERTEX_BUFFER_SIZE);
-					ptr = m_cpuDvbAllocator.alloc(size);
+					m_dynVertexBufferAllocator.add(uint64_t(vertexBufferHandle.idx)<<32, BGFX_CONFIG_DYNAMIC_VERTEX_BUFFER_SIZE);
+					ptr = m_dynVertexBufferAllocator.alloc(size);
 				}
 			}
 
@@ -2116,7 +2161,7 @@ namespace bgfx
 		{
 			uint32_t numVertices = _mem->size/_decl.m_stride;
 			BX_CHECK(numVertices <= UINT16_MAX, "Num vertices exceeds maximum (num %d, max %d).", numVertices, UINT16_MAX);
-			DynamicVertexBufferHandle handle = createDynamicVertexBuffer(uint16_t(numVertices), _decl, false);
+			DynamicVertexBufferHandle handle = createDynamicVertexBuffer(uint16_t(numVertices), _decl, BGFX_BUFFER_COMPUTE_NONE);
 			if (isValid(handle) )
 			{
 				updateDynamicVertexBuffer(handle, _mem);
@@ -2157,7 +2202,7 @@ namespace bgfx
 			}
 			else
 			{
-				m_cpuDvbAllocator.free(uint64_t(dvb.m_handle.idx)<<32 | dvb.m_offset);
+				m_dynVertexBufferAllocator.free(uint64_t(dvb.m_handle.idx)<<32 | dvb.m_offset);
 			}
 			m_dynamicVertexBufferHandle.free(_handle.idx);
 		}
@@ -2183,6 +2228,7 @@ namespace bgfx
 				CommandBuffer& cmdbuf = getCommandBuffer(CommandBuffer::CreateDynamicIndexBuffer);
 				cmdbuf.write(handle);
 				cmdbuf.write(_size);
+				cmdbuf.write(uint8_t(BGFX_BUFFER_COMPUTE_NONE) );
 
 				ib = (TransientIndexBuffer*)BX_ALLOC(g_allocator, sizeof(TransientIndexBuffer)+_size);
 				ib->data = (uint8_t*)&ib[1];
@@ -2818,7 +2864,7 @@ namespace bgfx
 			scissor.m_height = _height;
 		}
 
-		BGFX_API_FUNC(void setViewClear(uint8_t _id, uint8_t _flags, uint32_t _rgba, float _depth, uint8_t _stencil) )
+		BGFX_API_FUNC(void setViewClear(uint8_t _id, uint16_t _flags, uint32_t _rgba, float _depth, uint8_t _stencil) )
 		{
 			Clear& clear = m_clear[_id];
 			clear.m_flags = _flags;
@@ -2830,11 +2876,11 @@ namespace bgfx
 			clear.m_stencil  = _stencil;
 		}
 
-		BGFX_API_FUNC(void setViewClear(uint8_t _id, uint8_t _flags, float _depth, uint8_t _stencil, uint8_t _0, uint8_t _1, uint8_t _2, uint8_t _3, uint8_t _4, uint8_t _5, uint8_t _6, uint8_t _7) )
+		BGFX_API_FUNC(void setViewClear(uint8_t _id, uint16_t _flags, float _depth, uint8_t _stencil, uint8_t _0, uint8_t _1, uint8_t _2, uint8_t _3, uint8_t _4, uint8_t _5, uint8_t _6, uint8_t _7) )
 		{
 			Clear& clear = m_clear[_id];
-			clear.m_flags = (_flags & ~BGFX_CLEAR_COLOR_BIT)
-				| (0xff != (_0&_1&_2&_3&_4&_5&_6&_7) ? BGFX_CLEAR_COLOR_BIT|BGFX_CLEAR_COLOR_USE_PALETTE_BIT : 0)
+			clear.m_flags = (_flags & ~BGFX_CLEAR_COLOR)
+				| (0xff != (_0&_1&_2&_3&_4&_5&_6&_7) ? BGFX_CLEAR_COLOR|BGFX_CLEAR_COLOR_USE_PALETTE : 0)
 				;
 			clear.m_index[0] = _0;
 			clear.m_index[1] = _1;
@@ -3020,9 +3066,20 @@ namespace bgfx
 			return m_submit->submit(_id, _depth);
 		}
 
+		BGFX_API_FUNC(void setBuffer(uint8_t _stage, IndexBufferHandle _handle, Access::Enum _access) )
+		{
+			m_submit->setBuffer(_stage, _handle, _access);
+		}
+
 		BGFX_API_FUNC(void setBuffer(uint8_t _stage, VertexBufferHandle _handle, Access::Enum _access) )
 		{
 			m_submit->setBuffer(_stage, _handle, _access);
+		}
+
+		BGFX_API_FUNC(void setBuffer(uint8_t _stage, DynamicIndexBufferHandle _handle, Access::Enum _access) )
+		{
+			const DynamicIndexBuffer& dib = m_dynamicIndexBuffers[_handle.idx];
+			m_submit->setBuffer(_stage, dib.m_handle, _access);
 		}
 
 		BGFX_API_FUNC(void setBuffer(uint8_t _stage, DynamicVertexBufferHandle _handle, Access::Enum _access) )
@@ -3139,9 +3196,9 @@ namespace bgfx
 		DynamicIndexBufferHandle m_freeDynamicIndexBufferHandle[BGFX_CONFIG_MAX_DYNAMIC_INDEX_BUFFERS];
 		DynamicVertexBufferHandle m_freeDynamicVertexBufferHandle[BGFX_CONFIG_MAX_DYNAMIC_VERTEX_BUFFERS];
 
-		NonLocalAllocator m_dynamicIndexBufferAllocator;
+		NonLocalAllocator m_dynIndexBufferAllocator;
 		bx::HandleAllocT<BGFX_CONFIG_MAX_DYNAMIC_INDEX_BUFFERS> m_dynamicIndexBufferHandle;
-		NonLocalAllocator m_cpuDvbAllocator;
+		NonLocalAllocator m_dynVertexBufferAllocator;
 		bx::HandleAllocT<BGFX_CONFIG_MAX_DYNAMIC_VERTEX_BUFFERS> m_dynamicVertexBufferHandle;
 
 		bx::HandleAllocT<BGFX_CONFIG_MAX_INDEX_BUFFERS> m_indexBufferHandle;

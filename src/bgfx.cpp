@@ -905,6 +905,8 @@ namespace bgfx
 		TextureFormat::ETC2,
 		TextureFormat::ETC2A,
 		TextureFormat::ETC2A1,
+		TextureFormat::PTC14,
+		TextureFormat::PTC14A,
 	};
 
 	void Context::init(RendererType::Enum _type)
@@ -1327,9 +1329,24 @@ namespace bgfx
 
 	static RendererDestroyFn s_rendererDestroyFn;
 
-	bool windowsVersionIsOrAbove(uint32_t _version)
+	struct Condition
+	{
+		enum Enum
+		{
+			LessEqual,
+			GreaterEqual,
+		};
+	};
+
+	bool windowsVersionIs(Condition::Enum _op, uint32_t _version)
 	{
 #if BX_PLATFORM_WINDOWS
+		static const uint8_t s_condition[] =
+		{
+			VER_LESS_EQUAL,
+			VER_GREATER_EQUAL,
+		};
+
 		OSVERSIONINFOEXA ovi;
 		memset(&ovi, 0, sizeof(ovi) );
 		ovi.dwOSVersionInfoSize = sizeof(ovi);
@@ -1340,11 +1357,11 @@ namespace bgfx
 		ovi.dwMajorVersion = HIBYTE(_version);
 		ovi.dwMinorVersion = LOBYTE(_version);
 		DWORDLONG cond = 0;
-		VER_SET_CONDITION(cond, VER_MAJORVERSION, VER_GREATER_EQUAL);
-		VER_SET_CONDITION(cond, VER_MINORVERSION, VER_GREATER_EQUAL);
+		VER_SET_CONDITION(cond, VER_MAJORVERSION, s_condition[_op]);
+		VER_SET_CONDITION(cond, VER_MINORVERSION, s_condition[_op]);
 		return !!VerifyVersionInfoA(&ovi, VER_MAJORVERSION | VER_MINORVERSION, cond);
 #else
-		BX_UNUSED(_version);
+		BX_UNUSED(_op, _version);
 		return false;
 #endif // BX_PLATFORM_WINDOWS
 	}
@@ -1359,12 +1376,14 @@ again:
 				RendererType::Enum first  = RendererType::Direct3D9;
 				RendererType::Enum second = RendererType::Direct3D11;
 
-				if (windowsVersionIsOrAbove(0x0603) )
+				if (windowsVersionIs(Condition::GreaterEqual, 0x0603) )
 				{
 					first  = RendererType::Direct3D11 /* Direct3D12 */;
 					second = RendererType::Direct3D11;
+					if (!s_rendererCreator[second].supported)
+						second = RendererType::Direct3D9;
 				}
-				else if (windowsVersionIsOrAbove(0x0601) )
+				else if (windowsVersionIs(Condition::GreaterEqual, 0x0601) )
 				{
 					first  = RendererType::Direct3D11;
 					second = RendererType::Direct3D9;
@@ -1475,7 +1494,7 @@ again:
 					m_renderCtx = NULL;
 					m_exit = true;
 				}
-				// fallthrough
+				// fall through
 
 			case CommandBuffer::End:
 				end = true;
@@ -1489,7 +1508,10 @@ again:
 					Memory* mem;
 					_cmdbuf.read(mem);
 
-					m_renderCtx->createIndexBuffer(handle, mem);
+					uint8_t flags;
+					_cmdbuf.read(flags);
+
+					m_renderCtx->createIndexBuffer(handle, mem, flags);
 
 					release(mem);
 				}
@@ -1562,7 +1584,10 @@ again:
 					uint32_t size;
 					_cmdbuf.read(size);
 
-					m_renderCtx->createDynamicIndexBuffer(handle, size);
+					uint8_t flags;
+					_cmdbuf.read(flags);
+
+					m_renderCtx->createDynamicIndexBuffer(handle, size, flags);
 				}
 				break;
 
@@ -1881,6 +1906,12 @@ again:
 		uint8_t num = 0;
 		for (uint8_t ii = 0; ii < uint8_t(RendererType::Count); ++ii)
 		{
+			if (RendererType::Direct3D11 == ii
+			&&  windowsVersionIs(Condition::LessEqual, 0x0502) )
+			{
+				continue;
+			}
+
 			if (s_rendererCreator[ii].supported)
 			{
 				_enum[num++] = RendererType::Enum(ii);
@@ -2057,11 +2088,11 @@ again:
 		s_ctx->dbgTextImage(_x, _y, _width, _height, _data, _pitch);
 	}
 
-	IndexBufferHandle createIndexBuffer(const Memory* _mem)
+	IndexBufferHandle createIndexBuffer(const Memory* _mem, uint8_t _flags)
 	{
 		BGFX_CHECK_MAIN_THREAD();
 		BX_CHECK(NULL != _mem, "_mem can't be NULL");
-		return s_ctx->createIndexBuffer(_mem);
+		return s_ctx->createIndexBuffer(_mem, _flags);
 	}
 
 	void destroyIndexBuffer(IndexBufferHandle _handle)
@@ -2084,10 +2115,10 @@ again:
 		s_ctx->destroyVertexBuffer(_handle);
 	}
 
-	DynamicIndexBufferHandle createDynamicIndexBuffer(uint32_t _num)
+	DynamicIndexBufferHandle createDynamicIndexBuffer(uint32_t _num, uint8_t _flags)
 	{
 		BGFX_CHECK_MAIN_THREAD();
-		return s_ctx->createDynamicIndexBuffer(_num);
+		return s_ctx->createDynamicIndexBuffer(_num, _flags);
 	}
 
 	DynamicIndexBufferHandle createDynamicIndexBuffer(const Memory* _mem)
@@ -2575,14 +2606,14 @@ again:
 		s_ctx->setViewScissor(_id, _x, _y, _width, _height);
 	}
 
-	void setViewClear(uint8_t _id, uint8_t _flags, uint32_t _rgba, float _depth, uint8_t _stencil)
+	void setViewClear(uint8_t _id, uint16_t _flags, uint32_t _rgba, float _depth, uint8_t _stencil)
 	{
 		BGFX_CHECK_MAIN_THREAD();
 		BX_CHECK(_id < BGFX_CONFIG_MAX_VIEWS, "Invalid view id: %d", _id);
 		s_ctx->setViewClear(_id, _flags, _rgba, _depth, _stencil);
 	}
 
-	void setViewClear(uint8_t _id, uint8_t _flags, float _depth, uint8_t _stencil, uint8_t _0, uint8_t _1, uint8_t _2, uint8_t _3, uint8_t _4, uint8_t _5, uint8_t _6, uint8_t _7)
+	void setViewClear(uint8_t _id, uint16_t _flags, float _depth, uint8_t _stencil, uint8_t _0, uint8_t _1, uint8_t _2, uint8_t _3, uint8_t _4, uint8_t _5, uint8_t _6, uint8_t _7)
 	{
 		BGFX_CHECK_MAIN_THREAD();
 		BX_CHECK(_id < BGFX_CONFIG_MAX_VIEWS, "Invalid view id: %d", _id);
@@ -2760,7 +2791,19 @@ again:
 		return s_ctx->submit(_id, _depth);
 	}
 
+	void setBuffer(uint8_t _stage, IndexBufferHandle _handle, Access::Enum _access)
+	{
+		BGFX_CHECK_MAIN_THREAD();
+		s_ctx->setBuffer(_stage, _handle, _access);
+	}
+
 	void setBuffer(uint8_t _stage, VertexBufferHandle _handle, Access::Enum _access)
+	{
+		BGFX_CHECK_MAIN_THREAD();
+		s_ctx->setBuffer(_stage, _handle, _access);
+	}
+
+	void setBuffer(uint8_t _stage, DynamicIndexBufferHandle _handle, Access::Enum _access)
 	{
 		BGFX_CHECK_MAIN_THREAD();
 		s_ctx->setBuffer(_stage, _handle, _access);
@@ -3250,12 +3293,12 @@ BGFX_C_API void bgfx_set_view_scissor(uint8_t _id, uint16_t _x, uint16_t _y, uin
 	bgfx::setViewScissor(_id, _x, _y, _width, _height);
 }
 
-BGFX_C_API void bgfx_set_view_clear(uint8_t _id, uint8_t _flags, uint32_t _rgba, float _depth, uint8_t _stencil)
+BGFX_C_API void bgfx_set_view_clear(uint8_t _id, uint16_t _flags, uint32_t _rgba, float _depth, uint8_t _stencil)
 {
 	bgfx::setViewClear(_id, _flags, _rgba, _depth, _stencil);
 }
 
-BGFX_C_API void bgfx_set_view_clear_mrt(uint8_t _id, uint8_t _flags, float _depth, uint8_t _stencil, uint8_t _0, uint8_t _1, uint8_t _2, uint8_t _3, uint8_t _4, uint8_t _5, uint8_t _6, uint8_t _7)
+BGFX_C_API void bgfx_set_view_clear_mrt(uint8_t _id, uint16_t _flags, float _depth, uint8_t _stencil, uint8_t _0, uint8_t _1, uint8_t _2, uint8_t _3, uint8_t _4, uint8_t _5, uint8_t _6, uint8_t _7)
 {
 	bgfx::setViewClear(_id, _flags, _depth, _stencil, _0, _1, _2, _3, _4, _5, _6, _7);
 }
