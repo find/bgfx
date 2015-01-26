@@ -4,6 +4,7 @@
  */
 
 #include "common.h"
+#include "bgfx_utils.h"
 
 #include <bgfx.h>
 #include <bx/timer.h>
@@ -85,16 +86,8 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		, 0
 		);
 
-	FILE* file = fopen("font/droidsans.ttf", "rb");
-	uint32_t size = (uint32_t)fsize(file);
-	void* data = malloc(size);
-	size_t ignore = fread(data, 1, size, file);
-	BX_UNUSED(ignore);
-	fclose(file);
-
-	imguiCreate(data);
-
-	free(data);
+	// Imgui.
+	imguiCreate();
 
 	char* bigText = loadText( "text/sherlock_holmes_a_scandal_in_bohemia_arthur_conan_doyle.txt");
 
@@ -170,9 +163,9 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		if (recomputeVisibleText)
 		{
 			textBufferManager->clearTextBuffer(scrollableBuffer);
-			metrics.getSubText(bigText,(uint32_t)textScroll, (uint32_t)(textScroll+visibleLineCount), textBegin, textEnd);			
+			metrics.getSubText(bigText,(uint32_t)textScroll, (uint32_t)(textScroll+visibleLineCount), textBegin, textEnd);
 			textBufferManager->appendText(scrollableBuffer, fontScaled, textBegin, textEnd);
-		}			
+		}
 
 		imguiEndScrollArea();
 

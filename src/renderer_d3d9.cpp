@@ -275,6 +275,7 @@ namespace bgfx
 			, m_captureSurface(NULL)
 			, m_captureResolve(NULL)
 			, m_flags(BGFX_RESET_NONE)
+			, m_maxAnisotropy(1)
 			, m_initialized(false)
 			, m_amd(false)
 			, m_nvidia(false)
@@ -458,6 +459,8 @@ namespace bgfx
 
 			m_caps.NumSimultaneousRTs = bx::uint32_min(m_caps.NumSimultaneousRTs, BGFX_CONFIG_MAX_FRAME_BUFFER_ATTACHMENTS);
 			g_caps.maxFBAttachments = (uint8_t)m_caps.NumSimultaneousRTs;
+
+			m_caps.MaxAnisotropy = bx::uint32_min(m_caps.MaxAnisotropy, 1);
 
 			if (BX_ENABLED(BGFX_CONFIG_RENDERER_USE_EXTENSIONS) )
 			{
@@ -964,11 +967,17 @@ namespace bgfx
 
 		void updateResolution(const Resolution& _resolution)
 		{
+			m_maxAnisotropy = !!(_resolution.m_flags & BGFX_RESET_MAXANISOTROPY)
+				? m_caps.MaxAnisotropy
+				: 1
+				;
+			uint32_t flags = _resolution.m_flags & ~(BGFX_RESET_HMD_RECENTER | BGFX_RESET_MAXANISOTROPY);
+
 			if (m_params.BackBufferWidth  != _resolution.m_width
 			||  m_params.BackBufferHeight != _resolution.m_height
-			||  m_flags != _resolution.m_flags)
+			||  m_flags != flags)
 			{
-				m_flags = _resolution.m_flags;
+				m_flags = flags;
 
 				m_textVideoMem.resize(false, _resolution.m_width, _resolution.m_height);
 				m_textVideoMem.clear();
@@ -1241,12 +1250,13 @@ namespace bgfx
 				D3DTEXTUREFILTERTYPE minFilter = s_textureFilter[(_flags&BGFX_TEXTURE_MIN_MASK)>>BGFX_TEXTURE_MIN_SHIFT];
 				D3DTEXTUREFILTERTYPE magFilter = s_textureFilter[(_flags&BGFX_TEXTURE_MAG_MASK)>>BGFX_TEXTURE_MAG_SHIFT];
 				D3DTEXTUREFILTERTYPE mipFilter = s_textureFilter[(_flags&BGFX_TEXTURE_MIP_MASK)>>BGFX_TEXTURE_MIP_SHIFT];
-				DX_CHECK(device->SetSamplerState(_stage, D3DSAMP_ADDRESSU, tau) );
-				DX_CHECK(device->SetSamplerState(_stage, D3DSAMP_ADDRESSV, tav) );
+				DX_CHECK(device->SetSamplerState(_stage, D3DSAMP_ADDRESSU,  tau) );
+				DX_CHECK(device->SetSamplerState(_stage, D3DSAMP_ADDRESSV,  tav) );
+				DX_CHECK(device->SetSamplerState(_stage, D3DSAMP_ADDRESSW,  taw) );
 				DX_CHECK(device->SetSamplerState(_stage, D3DSAMP_MINFILTER, minFilter) );
 				DX_CHECK(device->SetSamplerState(_stage, D3DSAMP_MAGFILTER, magFilter) );
 				DX_CHECK(device->SetSamplerState(_stage, D3DSAMP_MIPFILTER, mipFilter) );
-				DX_CHECK(device->SetSamplerState(_stage, D3DSAMP_ADDRESSW, taw) );
+				DX_CHECK(device->SetSamplerState(_stage, D3DSAMP_MAXANISOTROPY, m_maxAnisotropy) );
 			}
 		}
 
@@ -1665,6 +1675,7 @@ namespace bgfx
 		D3DDEVTYPE m_deviceType;
 		D3DPRESENT_PARAMETERS m_params;
 		uint32_t m_flags;
+		uint32_t m_maxAnisotropy;
 		D3DADAPTER_IDENTIFIER9 m_identifier;
 		Resolution m_resolution;
 
@@ -3373,10 +3384,11 @@ namespace bgfx
 					);
 
 				const uint32_t msaa = (m_resolution.m_flags&BGFX_RESET_MSAA_MASK)>>BGFX_RESET_MSAA_SHIFT;
-				tvm.printf(10, pos++, 0x8e, " Reset flags: [%c] vsync, [%c] MSAAx%d "
+				tvm.printf(10, pos++, 0x8e, " Reset flags: [%c] vsync, [%c] MSAAx%d, [%c] MaxAnisotropy "
 					, !!(m_resolution.m_flags&BGFX_RESET_VSYNC) ? '\xfe' : ' '
 					, 0 != msaa ? '\xfe' : ' '
 					, 1<<msaa
+					, !!(m_resolution.m_flags&BGFX_RESET_MAXANISOTROPY) ? '\xfe' : ' '
 					);
 
 				double elapsedCpuMs = double(elapsed)*toMs;

@@ -11,10 +11,7 @@
 
 // embedded shaders
 #include "vs_drawstress.bin.h"
-#include "fs_drawstress.bin.h" 
-
-// embedded font
-#include "droidsans.ttf.h"
+#include "fs_drawstress.bin.h"
 
 #if BX_PLATFORM_EMSCRIPTEN
 #	include <emscripten.h>
@@ -238,7 +235,7 @@ BX_NO_INLINE bool mainloop()
 			}
 		}
 
-		// Advance to next frame. Rendering thread will be kicked to 
+		// Advance to next frame. Rendering thread will be kicked to
 		// process submitted rendering primitives.
 		bgfx::frame();
 
@@ -310,7 +307,8 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 	mem = bgfx::makeRef(s_cubeIndices, sizeof(s_cubeIndices) );
 	ibh = bgfx::createIndexBuffer(mem);
 
-	imguiCreate(s_droidSansTtf);
+	// Imgui.
+	imguiCreate();
 
 #if BX_PLATFORM_EMSCRIPTEN
 	emscripten_set_main_loop(&loop, -1, 1);
