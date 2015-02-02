@@ -21,17 +21,27 @@ namespace bgfx
 
 #if BX_PLATFORM_ANDROID
 	::ANativeWindow* g_bgfxAndroidWindow = NULL;
+
 	void androidSetWindow(::ANativeWindow* _window)
 	{
 		g_bgfxAndroidWindow = _window;
 	}
 #elif BX_PLATFORM_IOS
 	void* g_bgfxEaglLayer = NULL;
+
 	void iosSetEaglLayer(void* _layer)
 	{
 		g_bgfxEaglLayer = _layer;
 	}
+#elif BX_PLATFORM_LINUX
+	::Display* g_bgfxX11Display;
+	::Window   g_bgfxX11Window;
 
+	void x11SetDisplayWindow(::Display* _display, ::Window _window)
+	{
+		g_bgfxX11Display = _display;
+		g_bgfxX11Window  = _window;
+	}
 #elif BX_PLATFORM_OSX
 	void* g_bgfxNSWindow = NULL;
 
@@ -710,7 +720,7 @@ namespace bgfx
 		BX_WARN(invalidHandle != m_key.m_program, "Program with invalid handle");
 		if (invalidHandle != m_key.m_program)
 		{
-			m_key.m_depth  = _depth;
+			m_key.m_depth  = (uint32_t)_depth;
 			m_key.m_view   = _id;
 			m_key.m_seq    = s_ctx->m_seq[_id] & s_ctx->m_seqMask[_id];
 			s_ctx->m_seq[_id]++;
@@ -1013,6 +1023,9 @@ namespace bgfx
 
 		getCommandBuffer(CommandBuffer::RendererShutdownEnd);
 		frame();
+
+		m_dynVertexBufferAllocator.compact();
+		m_dynIndexBufferAllocator.compact();
 
 		m_declRef.shutdown(m_vertexDeclHandle);
 
@@ -1376,7 +1389,7 @@ again:
 				RendererType::Enum first  = RendererType::Direct3D9;
 				RendererType::Enum second = RendererType::Direct3D11;
 
-				if (windowsVersionIs(Condition::GreaterEqual, 0x0603) )
+				if (windowsVersionIs(Condition::GreaterEqual, 0x0602) )
 				{
 					first  = RendererType::Direct3D11 /* Direct3D12 */;
 					second = RendererType::Direct3D11;
@@ -1422,7 +1435,14 @@ again:
 			}
 			else
 			{
-				_type = RendererType::OpenGL;
+				if (s_rendererCreator[RendererType::OpenGL].supported)
+				{
+					_type = RendererType::OpenGL;
+				}
+				else if (s_rendererCreator[RendererType::OpenGLES].supported)
+				{
+					_type = RendererType::OpenGLES;
+				}
 			}
 
 			if (!s_rendererCreator[_type].supported)
@@ -2121,11 +2141,11 @@ again:
 		return s_ctx->createDynamicIndexBuffer(_num, _flags);
 	}
 
-	DynamicIndexBufferHandle createDynamicIndexBuffer(const Memory* _mem)
+	DynamicIndexBufferHandle createDynamicIndexBuffer(const Memory* _mem, uint8_t _flags)
 	{
 		BGFX_CHECK_MAIN_THREAD();
 		BX_CHECK(NULL != _mem, "_mem can't be NULL");
-		return s_ctx->createDynamicIndexBuffer(_mem);
+		return s_ctx->createDynamicIndexBuffer(_mem, _flags);
 	}
 
 	void updateDynamicIndexBuffer(DynamicIndexBufferHandle _handle, const Memory* _mem)
@@ -2141,19 +2161,19 @@ again:
 		s_ctx->destroyDynamicIndexBuffer(_handle);
 	}
 
-	DynamicVertexBufferHandle createDynamicVertexBuffer(uint16_t _num, const VertexDecl& _decl, uint8_t _compute)
+	DynamicVertexBufferHandle createDynamicVertexBuffer(uint16_t _num, const VertexDecl& _decl, uint8_t _flags)
 	{
 		BGFX_CHECK_MAIN_THREAD();
 		BX_CHECK(0 != _decl.m_stride, "Invalid VertexDecl.");
-		return s_ctx->createDynamicVertexBuffer(_num, _decl, _compute);
+		return s_ctx->createDynamicVertexBuffer(_num, _decl, _flags);
 	}
 
-	DynamicVertexBufferHandle createDynamicVertexBuffer(const Memory* _mem, const VertexDecl& _decl)
+	DynamicVertexBufferHandle createDynamicVertexBuffer(const Memory* _mem, const VertexDecl& _decl, uint8_t _flags)
 	{
 		BGFX_CHECK_MAIN_THREAD();
 		BX_CHECK(NULL != _mem, "_mem can't be NULL");
 		BX_CHECK(0 != _decl.m_stride, "Invalid VertexDecl.");
-		return s_ctx->createDynamicVertexBuffer(_mem, _decl);
+		return s_ctx->createDynamicVertexBuffer(_mem, _decl, _flags);
 	}
 
 	void updateDynamicVertexBuffer(DynamicVertexBufferHandle _handle, const Memory* _mem)

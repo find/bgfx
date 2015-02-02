@@ -615,7 +615,7 @@ namespace bgfx
 	/// @remarks
 	///   Only 16-bit index buffer is supported.
 	///
-	IndexBufferHandle createIndexBuffer(const Memory* _mem, uint8_t _flags = BGFX_BUFFER_COMPUTE_NONE);
+	IndexBufferHandle createIndexBuffer(const Memory* _mem, uint8_t _flags = BGFX_BUFFER_NONE);
 
 	/// Destroy static index buffer.
 	void destroyIndexBuffer(IndexBufferHandle _handle);
@@ -626,7 +626,7 @@ namespace bgfx
 	/// @param _decl Vertex declaration.
 	/// @returns Static vertex buffer handle.
 	///
-	VertexBufferHandle createVertexBuffer(const Memory* _mem, const VertexDecl& _decl, uint8_t _flags = BGFX_BUFFER_COMPUTE_NONE);
+	VertexBufferHandle createVertexBuffer(const Memory* _mem, const VertexDecl& _decl, uint8_t _flags = BGFX_BUFFER_NONE);
 
 	/// Destroy static vertex buffer.
 	///
@@ -637,12 +637,18 @@ namespace bgfx
 	/// Create empty dynamic index buffer.
 	///
 	/// @param _num Number of indices.
-	/// @param _flags `BGFX_BUFFER_*` flags.
+	/// @param _flags Buffer creation flags.
+	///   `BGFX_BUFFER_COMPUTE_READ` - compute shader will read buffer.
+	///   `BGFX_BUFFER_COMPUTE_WRITE` - compute shader will write into buffer.
+	///   `BGFX_BUFFER_ALLOW_RESIZE` buffer can be resized if updated with different size buffer.
 	///
 	/// @remarks
-	///   Only 16-bit index buffer is supported.
+	///   1. Only 16-bit index buffer is supported.
 	///
-	DynamicIndexBufferHandle createDynamicIndexBuffer(uint32_t _num, uint8_t _flags = BGFX_BUFFER_COMPUTE_NONE);
+	///   2. When buffer is created with `BGFX_BUFFER_COMPUTE_WRITE` flag it cannot be updated
+	///      from CPU.
+	///
+	DynamicIndexBufferHandle createDynamicIndexBuffer(uint32_t _num, uint8_t _flags = BGFX_BUFFER_NONE);
 
 	/// Create dynamic index buffer and initialized it.
 	///
@@ -651,7 +657,7 @@ namespace bgfx
 	/// @remarks
 	///   Only 16-bit index buffer is supported.
 	///
-	DynamicIndexBufferHandle createDynamicIndexBuffer(const Memory* _mem);
+	DynamicIndexBufferHandle createDynamicIndexBuffer(const Memory* _mem, uint8_t _flags = BGFX_BUFFER_NONE);
 
 	/// Update dynamic index buffer.
 	///
@@ -670,16 +676,23 @@ namespace bgfx
 	///
 	/// @param _num Number of vertices.
 	/// @param _decl Vertex declaration.
-	/// @param _flags `BGFX_BUFFER_*` flags.
+	/// @param _flags Buffer creation flags.
+	///   `BGFX_BUFFER_COMPUTE_READ` - compute shader will read buffer.
+	///   `BGFX_BUFFER_COMPUTE_WRITE` - compute shader will write into buffer.
+	///   `BGFX_BUFFER_ALLOW_RESIZE` buffer can be resized if updated with different size buffer.
 	///
-	DynamicVertexBufferHandle createDynamicVertexBuffer(uint16_t _num, const VertexDecl& _decl, uint8_t _flags = BGFX_BUFFER_COMPUTE_NONE);
+	/// @remarks
+	///   When buffer is created with `BGFX_BUFFER_COMPUTE_WRITE` flag it cannot be updated
+	///   from CPU.
+	///
+	DynamicVertexBufferHandle createDynamicVertexBuffer(uint16_t _num, const VertexDecl& _decl, uint8_t _flags = BGFX_BUFFER_NONE);
 
 	/// Create dynamic vertex buffer and initialize it.
 	///
 	/// @param _mem Vertex buffer data.
 	/// @param _decl Vertex declaration.
 	///
-	DynamicVertexBufferHandle createDynamicVertexBuffer(const Memory* _mem, const VertexDecl& _decl);
+	DynamicVertexBufferHandle createDynamicVertexBuffer(const Memory* _mem, const VertexDecl& _decl, uint8_t _flags = BGFX_BUFFER_NONE);
 
 	/// Update dynamic vertex buffer.
 	void updateDynamicVertexBuffer(DynamicVertexBufferHandle _handle, const Memory* _mem);
@@ -1197,10 +1210,10 @@ namespace bgfx
 	void setInstanceDataBuffer(const InstanceDataBuffer* _idb, uint32_t _num = UINT32_MAX);
 
 	/// Set instance data buffer for draw primitive.
-	void setInstanceDataBuffer(VertexBufferHandle _handle, uint32_t _offset, uint32_t _num, uint16_t _stride);
+	void setInstanceDataBuffer(VertexBufferHandle _handle, uint32_t _startVertex, uint32_t _num);
 
 	/// Set instance data buffer for draw primitive.
-	void setInstanceDataBuffer(DynamicVertexBufferHandle _handle, uint32_t _offset, uint32_t _num);
+	void setInstanceDataBuffer(DynamicVertexBufferHandle _handle, uint32_t _startVertex, uint32_t _num);
 
 	/// Set program for draw primitive.
 	void setProgram(ProgramHandle _handle);

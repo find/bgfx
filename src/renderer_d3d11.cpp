@@ -1092,14 +1092,17 @@ namespace bgfx
 
 		void blitRender(TextVideoMemBlitter& _blitter, uint32_t _numIndices) BX_OVERRIDE
 		{
-			ID3D11DeviceContext* deviceCtx = m_deviceCtx;
+			const uint32_t numVertices = _numIndices*4/6;
+			if (0 < numVertices)
+			{
+				ID3D11DeviceContext* deviceCtx = m_deviceCtx;
 
-			uint32_t numVertices = _numIndices*4/6;
-			m_indexBuffers [_blitter.m_ib->handle.idx].update(0, _numIndices*2, _blitter.m_ib->data);
-			m_vertexBuffers[_blitter.m_vb->handle.idx].update(0, numVertices*_blitter.m_decl.m_stride, _blitter.m_vb->data, true);
+				m_indexBuffers [_blitter.m_ib->handle.idx].update(0, _numIndices*2, _blitter.m_ib->data);
+				m_vertexBuffers[_blitter.m_vb->handle.idx].update(0, numVertices*_blitter.m_decl.m_stride, _blitter.m_vb->data, true);
 
-			deviceCtx->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-			deviceCtx->DrawIndexed(_numIndices, 0, 0);
+				deviceCtx->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+				deviceCtx->DrawIndexed(_numIndices, 0, 0);
+			}
 		}
 
 		void preReset()
@@ -2361,10 +2364,8 @@ namespace bgfx
 		BX_CHECK(m_dynamic, "Must be dynamic!");
 
 		D3D11_MAPPED_SUBRESOURCE mapped;
-		D3D11_MAP type = m_dynamic && ( (0 == _offset && m_size == _size) || _discard)
-			? D3D11_MAP_WRITE_DISCARD
-			: D3D11_MAP_WRITE_NO_OVERWRITE
-			;
+		BX_UNUSED(_discard);
+		D3D11_MAP type = D3D11_MAP_WRITE_DISCARD;
 		DX_CHECK(deviceCtx->Map(m_ptr, 0, type, 0, &mapped));
 		memcpy((uint8_t*)mapped.pData + _offset, _data, _size);
 		deviceCtx->Unmap(m_ptr, 0);
