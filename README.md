@@ -69,6 +69,10 @@ very early development and primary focusing on Mac as primary target. This is
 how it currently looks.  
 ![mac_screenshot](https://raw.githubusercontent.com/emoon/ProDBG/master/data/screens/mac_screenshot.png)
 
+
+http://www.dogbytegames.com/ Dogbyte Games is an indie mobile developer studio
+focusing on racing games.
+
 Examples
 --------
 
@@ -303,6 +307,9 @@ Dependencies
 
 Building
 --------
+
+Steps bellow are for default build system inside bgfx repository. There is
+alterative way to build bgfx and examples with [fips](https://github.com/floooh/fips-bgfx/#fips-bgfx).
 
 ### Prerequisites
 
@@ -739,7 +746,9 @@ language API bindings, WinRT/WinPhone support.
 Kai Jourdan ([@questor](https://github.com/questor)) - 23-vectordisplay example  
 Stanlo Slasinski ([@stanlo](https://github.com/stanlo)) - 24-nbody example  
 Daniel Collin ([@emoon](https://github.com/emoon)) - Port of Ocornut's ImGui
-  to bgfx.
+  to bgfx.  
+Andre Weissflog ([@floooh](https://github.com/floooh)) - Alternative build
+system fips.
 
 [License (BSD 2-clause)](https://github.com/bkaradzic/bgfx/blob/master/LICENSE)
 -------------------------------------------------------------------------------
