@@ -189,7 +189,7 @@ namespace bgfx
 
 	static TextureFormatInfo s_textureFormat[] =
 	{
-		{ D3DFMT_DXT1          }, // BC1 
+		{ D3DFMT_DXT1          }, // BC1
 		{ D3DFMT_DXT3          }, // BC2
 		{ D3DFMT_DXT5          }, // BC3
 		{ D3DFMT_UNKNOWN       }, // BC4
@@ -229,11 +229,11 @@ namespace bgfx
 		{ D3DFMT_A2B10G10R10   }, // RGB10A2
 		{ D3DFMT_UNKNOWN       }, // R11G11B10F
 		{ D3DFMT_UNKNOWN       }, // UnknownDepth
-		{ D3DFMT_D16           }, // D16  
-		{ D3DFMT_D24X8         }, // D24  
+		{ D3DFMT_D16           }, // D16
+		{ D3DFMT_D24X8         }, // D24
 		{ D3DFMT_D24S8         }, // D24S8
-		{ D3DFMT_D32           }, // D32  
-		{ D3DFMT_DF16          }, // D16F 
+		{ D3DFMT_D32           }, // D32
+		{ D3DFMT_DF16          }, // D16F
 		{ D3DFMT_DF24          }, // D24F
 		{ D3DFMT_D32F_LOCKABLE }, // D32F
 		{ D3DFMT_S8_LOCKABLE   }, // D0S8
@@ -275,6 +275,7 @@ namespace bgfx
 			, m_captureSurface(NULL)
 			, m_captureResolve(NULL)
 			, m_flags(BGFX_RESET_NONE)
+			, m_maxAnisotropy(1)
 			, m_initialized(false)
 			, m_amd(false)
 			, m_nvidia(false)
@@ -459,6 +460,8 @@ namespace bgfx
 			m_caps.NumSimultaneousRTs = bx::uint32_min(m_caps.NumSimultaneousRTs, BGFX_CONFIG_MAX_FRAME_BUFFER_ATTACHMENTS);
 			g_caps.maxFBAttachments = (uint8_t)m_caps.NumSimultaneousRTs;
 
+			m_caps.MaxAnisotropy = bx::uint32_min(m_caps.MaxAnisotropy, 1);
+
 			if (BX_ENABLED(BGFX_CONFIG_RENDERER_USE_EXTENSIONS) )
 			{
 				BX_TRACE("Extended formats:");
@@ -567,7 +570,7 @@ namespace bgfx
 			}
 
 			// Init reserved part of view name.
-			for (uint8_t ii = 0; ii < BGFX_CONFIG_MAX_VIEWS; ++ii)
+			for (uint32_t ii = 0; ii < BGFX_CONFIG_MAX_VIEWS; ++ii)
 			{
 				char name[BGFX_CONFIG_MAX_VIEW_NAME_RESERVED+1];
 				bx::snprintf(name, sizeof(name), "%3d  ", ii);
@@ -640,7 +643,7 @@ namespace bgfx
 			return BGFX_RENDERER_DIRECT3D9_NAME;
 		}
 
-		void createIndexBuffer(IndexBufferHandle _handle, Memory* _mem) BX_OVERRIDE
+		void createIndexBuffer(IndexBufferHandle _handle, Memory* _mem, uint8_t /*_flags*/) BX_OVERRIDE
 		{
 			m_indexBuffers[_handle.idx].create(_mem->size, _mem->data);
 		}
@@ -670,7 +673,7 @@ namespace bgfx
 			m_vertexBuffers[_handle.idx].destroy();
 		}
 
-		void createDynamicIndexBuffer(IndexBufferHandle _handle, uint32_t _size) BX_OVERRIDE
+		void createDynamicIndexBuffer(IndexBufferHandle _handle, uint32_t _size, uint8_t /*_flags*/) BX_OVERRIDE
 		{
 			m_indexBuffers[_handle.idx].create(_size, NULL);
 		}
@@ -921,17 +924,20 @@ namespace bgfx
 
 		void blitRender(TextVideoMemBlitter& _blitter, uint32_t _numIndices) BX_OVERRIDE
 		{
-			uint32_t numVertices = _numIndices*4/6;
-			m_indexBuffers [_blitter.m_ib->handle.idx].update(0, _numIndices*2, _blitter.m_ib->data, true);
-			m_vertexBuffers[_blitter.m_vb->handle.idx].update(0, numVertices*_blitter.m_decl.m_stride, _blitter.m_vb->data, true);
+			const uint32_t numVertices = _numIndices*4/6;
+			if (0 < numVertices)
+			{
+				m_indexBuffers[_blitter.m_ib->handle.idx].update(0, _numIndices * 2, _blitter.m_ib->data, true);
+				m_vertexBuffers[_blitter.m_vb->handle.idx].update(0, numVertices*_blitter.m_decl.m_stride, _blitter.m_vb->data, true);
 
-			DX_CHECK(m_device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST
-				, 0
-				, 0
-				, numVertices
-				, 0
-				, _numIndices/3
-				) );
+				DX_CHECK(m_device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST
+					, 0
+					, 0
+					, numVertices
+					, 0
+					, _numIndices / 3
+					) );
+			}
 		}
 
 		void updateMsaa()
@@ -964,11 +970,17 @@ namespace bgfx
 
 		void updateResolution(const Resolution& _resolution)
 		{
+			m_maxAnisotropy = !!(_resolution.m_flags & BGFX_RESET_MAXANISOTROPY)
+				? m_caps.MaxAnisotropy
+				: 1
+				;
+			uint32_t flags = _resolution.m_flags & ~(BGFX_RESET_HMD_RECENTER | BGFX_RESET_MAXANISOTROPY);
+
 			if (m_params.BackBufferWidth  != _resolution.m_width
 			||  m_params.BackBufferHeight != _resolution.m_height
-			||  m_flags != _resolution.m_flags)
+			||  m_flags != flags)
 			{
-				m_flags = _resolution.m_flags;
+				m_flags = flags;
 
 				m_textVideoMem.resize(false, _resolution.m_width, _resolution.m_height);
 				m_textVideoMem.clear();
@@ -1075,7 +1087,7 @@ namespace bgfx
 
 			HRESULT hr;
 
-			do 
+			do
 			{
 				hr = m_device->Reset(&m_params);
 			} while (FAILED(hr) );
@@ -1122,7 +1134,7 @@ namespace bgfx
 					{
 						do
 						{
-							do 
+							do
 							{
 								hr = m_device->TestCooperativeLevel();
 							}
@@ -1241,12 +1253,13 @@ namespace bgfx
 				D3DTEXTUREFILTERTYPE minFilter = s_textureFilter[(_flags&BGFX_TEXTURE_MIN_MASK)>>BGFX_TEXTURE_MIN_SHIFT];
 				D3DTEXTUREFILTERTYPE magFilter = s_textureFilter[(_flags&BGFX_TEXTURE_MAG_MASK)>>BGFX_TEXTURE_MAG_SHIFT];
 				D3DTEXTUREFILTERTYPE mipFilter = s_textureFilter[(_flags&BGFX_TEXTURE_MIP_MASK)>>BGFX_TEXTURE_MIP_SHIFT];
-				DX_CHECK(device->SetSamplerState(_stage, D3DSAMP_ADDRESSU, tau) );
-				DX_CHECK(device->SetSamplerState(_stage, D3DSAMP_ADDRESSV, tav) );
+				DX_CHECK(device->SetSamplerState(_stage, D3DSAMP_ADDRESSU,  tau) );
+				DX_CHECK(device->SetSamplerState(_stage, D3DSAMP_ADDRESSV,  tav) );
+				DX_CHECK(device->SetSamplerState(_stage, D3DSAMP_ADDRESSW,  taw) );
 				DX_CHECK(device->SetSamplerState(_stage, D3DSAMP_MINFILTER, minFilter) );
 				DX_CHECK(device->SetSamplerState(_stage, D3DSAMP_MAGFILTER, magFilter) );
 				DX_CHECK(device->SetSamplerState(_stage, D3DSAMP_MIPFILTER, mipFilter) );
-				DX_CHECK(device->SetSamplerState(_stage, D3DSAMP_ADDRESSW, taw) );
+				DX_CHECK(device->SetSamplerState(_stage, D3DSAMP_MAXANISOTROPY, m_maxAnisotropy) );
 			}
 		}
 
@@ -1467,9 +1480,9 @@ namespace bgfx
 				D3DCOLOR color = 0;
 				DWORD flags    = 0;
 
-				if (BGFX_CLEAR_COLOR_BIT & _clear.m_flags)
+				if (BGFX_CLEAR_COLOR & _clear.m_flags)
 				{
-					if (BGFX_CLEAR_COLOR_USE_PALETTE_BIT & _clear.m_flags)
+					if (BGFX_CLEAR_COLOR_USE_PALETTE & _clear.m_flags)
 					{
 						uint8_t index = (uint8_t)bx::uint32_min(BGFX_CONFIG_MAX_CLEAR_COLOR_PALETTE-1, _clear.m_index[0]);
 						const float* rgba = _palette[index];
@@ -1493,13 +1506,13 @@ namespace bgfx
 						) );
 				}
 
-				if (BGFX_CLEAR_DEPTH_BIT & _clear.m_flags)
+				if (BGFX_CLEAR_DEPTH & _clear.m_flags)
 				{
 					flags |= D3DCLEAR_ZBUFFER;
 					DX_CHECK(device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE) );
 				}
 
-				if (BGFX_CLEAR_STENCIL_BIT & _clear.m_flags)
+				if (BGFX_CLEAR_STENCIL & _clear.m_flags)
 				{
 					flags |= D3DCLEAR_STENCIL;
 				}
@@ -1523,7 +1536,7 @@ namespace bgfx
 				DX_CHECK(device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE) );
 				DX_CHECK(device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE) );
 
-				if (BGFX_CLEAR_DEPTH_BIT & _clear.m_flags)
+				if (BGFX_CLEAR_DEPTH & _clear.m_flags)
 				{
 					DX_CHECK(device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE) );
 					DX_CHECK(device->SetRenderState(D3DRS_COLORWRITEENABLE
@@ -1542,7 +1555,7 @@ namespace bgfx
 					DX_CHECK(device->SetRenderState(D3DRS_ZENABLE, FALSE) );
 				}
 
-				if (BGFX_CLEAR_STENCIL_BIT & _clear.m_flags)
+				if (BGFX_CLEAR_STENCIL & _clear.m_flags)
 				{
 					DX_CHECK(device->SetRenderState(D3DRS_STENCILENABLE, TRUE) );
 					DX_CHECK(device->SetRenderState(D3DRS_TWOSIDEDSTENCILMODE, TRUE) );
@@ -1598,7 +1611,7 @@ namespace bgfx
 				device->SetVertexShader(program.m_vsh->m_vertexShader);
 				device->SetPixelShader(program.m_fsh->m_pixelShader);
 
-				if (BGFX_CLEAR_COLOR_USE_PALETTE_BIT & _clear.m_flags)
+				if (BGFX_CLEAR_COLOR_USE_PALETTE & _clear.m_flags)
 				{
 					float mrtClear[BGFX_CONFIG_MAX_FRAME_BUFFER_ATTACHMENTS][4];
 					for (uint32_t ii = 0; ii < numMrt; ++ii)
@@ -1665,6 +1678,7 @@ namespace bgfx
 		D3DDEVTYPE m_deviceType;
 		D3DPRESENT_PARAMETERS m_params;
 		uint32_t m_flags;
+		uint32_t m_maxAnisotropy;
 		D3DADAPTER_IDENTIFIER9 m_identifier;
 		Resolution m_resolution;
 
@@ -1785,7 +1799,7 @@ namespace bgfx
 				, 0
 				, pool
 				, &m_ptr
-				, NULL 
+				, NULL
 				) );
 
 		if (NULL != _data)
@@ -1811,7 +1825,7 @@ namespace bgfx
 					, 0
 					, D3DPOOL_DEFAULT
 					, &m_ptr
-					, NULL 
+					, NULL
 					) );
 		}
 	}
@@ -2458,7 +2472,7 @@ namespace bgfx
 		uint8_t* bits = s_renderD3D9->m_updateTextureBits + _rect.m_y*dstpitch + _rect.m_x*bpp/8;
 
 		const bool convert = m_textureFormat != m_requestedFormat;
-		
+
 		uint8_t* data = _mem->data;
 		uint8_t* temp = NULL;
 
@@ -2850,7 +2864,7 @@ namespace bgfx
 		{
 			for (uint32_t item = 0, numItems = _render->m_num; item < numItems; ++item)
 			{
-				const bool isCompute = key.decode(_render->m_sortKeys[item]);
+				const bool isCompute = key.decode(_render->m_sortKeys[item], _render->m_viewRemap);
 
 				if (isCompute)
 				{
@@ -2905,7 +2919,7 @@ namespace bgfx
 
 					Clear& clear = _render->m_clear[view];
 
-					if (BGFX_CLEAR_NONE != clear.m_flags)
+					if (BGFX_CLEAR_NONE != (clear.m_flags & BGFX_CLEAR_MASK) )
 					{
 						clearQuad(_clearQuad, viewState.m_rect, clear, _render->m_clearColor);
 						prim = s_primInfo[BX_COUNTOF(s_primName)]; // Force primitive type update after clear quad.
@@ -2955,7 +2969,7 @@ namespace bgfx
 				{
 					bool enable = 0 != newStencil;
 					DX_CHECK(device->SetRenderState(D3DRS_STENCILENABLE, enable) );
-					
+
 					if (0 != newStencil)
 					{
 						uint32_t fstencil = unpackStencil(0, newStencil);
@@ -3027,7 +3041,7 @@ namespace bgfx
 					}
 
 					if (BGFX_STATE_DEPTH_WRITE & changedFlags)
-					{ 
+					{
 						DX_CHECK(device->SetRenderState(D3DRS_ZWRITEENABLE, !!(BGFX_STATE_DEPTH_WRITE & newFlags) ) );
 					}
 
@@ -3139,7 +3153,7 @@ namespace bgfx
 						device->SetPixelShader(program.m_fsh->m_pixelShader);
 					}
 
-					programChanged = 
+					programChanged =
 						constantsChanged = true;
 				}
 
@@ -3168,15 +3182,15 @@ namespace bgfx
 				{
 					for (uint32_t stage = 0; stage < BGFX_CONFIG_MAX_TEXTURE_SAMPLERS; ++stage)
 					{
-						const Sampler& sampler = draw.m_sampler[stage];
-						Sampler& current = currentState.m_sampler[stage];
+						const Binding& sampler = draw.m_bind[stage];
+						Binding& current = currentState.m_bind[stage];
 						if (current.m_idx != sampler.m_idx
-						||  current.m_flags != sampler.m_flags
+						||  current.m_un.m_draw.m_flags != sampler.m_un.m_draw.m_flags
 						||  programChanged)
 						{
 							if (invalidHandle != sampler.m_idx)
 							{
-								m_textures[sampler.m_idx].commit(stage, sampler.m_flags);
+								m_textures[sampler.m_idx].commit(stage, sampler.m_un.m_draw.m_flags);
 							}
 							else
 							{
@@ -3373,10 +3387,11 @@ namespace bgfx
 					);
 
 				const uint32_t msaa = (m_resolution.m_flags&BGFX_RESET_MSAA_MASK)>>BGFX_RESET_MSAA_SHIFT;
-				tvm.printf(10, pos++, 0x8e, " Reset flags: [%c] vsync, [%c] MSAAx%d "
+				tvm.printf(10, pos++, 0x8e, " Reset flags: [%c] vsync, [%c] MSAAx%d, [%c] MaxAnisotropy "
 					, !!(m_resolution.m_flags&BGFX_RESET_VSYNC) ? '\xfe' : ' '
 					, 0 != msaa ? '\xfe' : ' '
 					, 1<<msaa
+					, !!(m_resolution.m_flags&BGFX_RESET_MAXANISOTROPY) ? '\xfe' : ' '
 					);
 
 				double elapsedCpuMs = double(elapsed)*toMs;

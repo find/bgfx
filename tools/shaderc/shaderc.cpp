@@ -997,6 +997,12 @@ int main(int _argc, const char* _argv[])
 					var.m_name.assign(name, bx::strword(name)-name);
 					var.m_semantics.assign(semantics, bx::strword(semantics)-semantics);
 
+					if (d3d == 9
+					&&  var.m_semantics == "BITANGENT")
+					{
+						var.m_semantics = "BINORMAL";
+					}
+
 					if (assign < eol
 					&&  '=' == *assign
 					&&  init < eol)
@@ -1437,6 +1443,8 @@ int main(int _argc, const char* _argv[])
 						const bool hasFragCoord   = NULL != strstr(input, "gl_FragCoord") || hlsl > 3;
 						const bool hasFragDepth   = NULL != strstr(input, "gl_FragDepth");
 						const bool hasFrontFacing = NULL != strstr(input, "gl_FrontFacing");
+						const bool hasPrimitiveId = NULL != strstr(input, "gl_PrimitiveID");
+
 						bool hasFragData[8] = {};
 						uint32_t numFragData = 0;
 						for (uint32_t ii = 0; ii < BX_COUNTOF(hasFragData); ++ii)
@@ -1515,6 +1523,22 @@ int main(int _argc, const char* _argv[])
 								" \\\n\t%sfloat __vface : VFACE"
 								, arg++ > 0 ? ", " : "  "
 								);
+						}
+
+						if (hasPrimitiveId)
+						{
+							if (d3d > 9)
+							{
+								preprocessor.writef(
+									" \\\n\t%suint gl_PrimitiveID : SV_PrimitiveID"
+									, arg++ > 0 ? ", " : "  "
+									);
+							}
+							else
+							{
+								fprintf(stderr, "PrimitiveID builtin is not supported by this D3D9 HLSL.\n");
+								return EXIT_FAILURE;
+							}
 						}
 
 						preprocessor.writef(

@@ -11,10 +11,7 @@
 
 // embedded shaders
 #include "vs_drawstress.bin.h"
-#include "fs_drawstress.bin.h" 
-
-// embedded font
-#include "droidsans.ttf.h"
+#include "fs_drawstress.bin.h"
 
 #if BX_PLATFORM_EMSCRIPTEN
 #	include <emscripten.h>
@@ -238,7 +235,7 @@ BX_NO_INLINE bool mainloop()
 			}
 		}
 
-		// Advance to next frame. Rendering thread will be kicked to 
+		// Advance to next frame. Rendering thread will be kicked to
 		// process submitted rendering primitives.
 		bgfx::frame();
 
@@ -263,7 +260,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 	// Set view 0 clear state.
 	bgfx::setViewClear(0
-			, BGFX_CLEAR_COLOR_BIT|BGFX_CLEAR_DEPTH_BIT
+			, BGFX_CLEAR_COLOR|BGFX_CLEAR_DEPTH
 			, 0x303030ff
 			, 1.0f
 			, 0
@@ -283,6 +280,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 			break;
 
 		case bgfx::RendererType::Direct3D11:
+		case bgfx::RendererType::Direct3D12:
 			vs_drawstress = bgfx::makeRef(vs_drawstress_dx11, sizeof(vs_drawstress_dx11) );
 			fs_drawstress = bgfx::makeRef(fs_drawstress_dx11, sizeof(fs_drawstress_dx11) );
 			break;
@@ -310,7 +308,8 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 	mem = bgfx::makeRef(s_cubeIndices, sizeof(s_cubeIndices) );
 	ibh = bgfx::createIndexBuffer(mem);
 
-	imguiCreate(s_droidSansTtf);
+	// Imgui.
+	imguiCreate();
 
 #if BX_PLATFORM_EMSCRIPTEN
 	emscripten_set_main_loop(&loop, -1, 1);

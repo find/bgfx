@@ -5,6 +5,8 @@
 
 #include <string.h> // strlen
 
+#include "common.h"
+
 #include <tinystl/allocator.h>
 #include <tinystl/vector.h>
 #include <tinystl/string.h>
@@ -18,7 +20,7 @@ namespace stl = tinystl;
 
 #include "bgfx_utils.h"
 
-void* load(bx::FileReaderI* _reader, const char* _filePath)
+void* load(bx::FileReaderI* _reader, const char* _filePath, uint32_t* _size)
 {
 	if (0 == bx::open(_reader, _filePath) )
 	{
@@ -26,15 +28,23 @@ void* load(bx::FileReaderI* _reader, const char* _filePath)
 		void* data = malloc(size);
 		bx::read(_reader, data, size);
 		bx::close(_reader);
+		if (NULL != _size)
+		{
+			*_size = size;
+		}
 		return data;
 	}
 
+	if (NULL != _size)
+	{
+		*_size = 0;
+	}
 	return NULL;
 }
 
-void* load(const char* _filePath)
+void* load(const char* _filePath, uint32_t* _size)
 {
-	return load(entry::getFileReader(), _filePath);
+	return load(entry::getFileReader(), _filePath, _size);
 }
 
 static const bgfx::Memory* loadMem(bx::FileReaderI* _reader, const char* _filePath)
@@ -61,6 +71,7 @@ static bgfx::ShaderHandle loadShader(bx::FileReaderI* _reader, const char* _name
 	switch (bgfx::getRendererType() )
 	{
 	case bgfx::RendererType::Direct3D11:
+	case bgfx::RendererType::Direct3D12:
 		shaderPath = "shaders/dx11/";
 		break;
 

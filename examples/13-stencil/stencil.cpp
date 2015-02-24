@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "common.h"
+#include "bgfx_utils.h"
 
 #include <bgfx.h>
 #include <bx/timer.h>
@@ -16,14 +17,14 @@
 #include "camera.h"
 #include "imgui/imgui.h"
 
-#define RENDER_VIEWID_RANGE1_PASS_0   1 
-#define RENDER_VIEWID_RANGE1_PASS_1   2 
-#define RENDER_VIEWID_RANGE1_PASS_2   3 
-#define RENDER_VIEWID_RANGE1_PASS_3   4 
-#define RENDER_VIEWID_RANGE1_PASS_4   5 
-#define RENDER_VIEWID_RANGE1_PASS_5   6 
+#define RENDER_VIEWID_RANGE1_PASS_0   1
+#define RENDER_VIEWID_RANGE1_PASS_1   2
+#define RENDER_VIEWID_RANGE1_PASS_2   3
+#define RENDER_VIEWID_RANGE1_PASS_3   4
+#define RENDER_VIEWID_RANGE1_PASS_4   5
+#define RENDER_VIEWID_RANGE1_PASS_5   6
 #define RENDER_VIEWID_RANGE5_PASS_6   7
-#define RENDER_VIEWID_RANGE1_PASS_7  13 
+#define RENDER_VIEWID_RANGE1_PASS_7  13
 
 #define MAX_NUM_LIGHTS 5
 
@@ -145,7 +146,6 @@ static const uint16_t s_planeIndices[] =
 	1, 3, 2,
 };
 
-static const char* s_shaderPath = NULL;
 static bool s_flipV = false;
 static uint32_t s_viewMask = 0;
 static uint32_t s_clearMask = 0;
@@ -154,70 +154,6 @@ static bgfx::UniformHandle u_texColor;
 inline void mtxProj(float* _result, float _fovy, float _aspect, float _near, float _far)
 {
 	bx::mtxProj(_result, _fovy, _aspect, _near, _far, s_flipV);
-}
-
-static void shaderFilePath(char* _out, const char* _name)
-{
-	strcpy(_out, s_shaderPath);
-	strcat(_out, _name);
-	strcat(_out, ".bin");
-}
-
-long int fsize(FILE* _file)
-{
-	long int pos = ftell(_file);
-	fseek(_file, 0L, SEEK_END);
-	long int size = ftell(_file);
-	fseek(_file, pos, SEEK_SET);
-	return size;
-}
-
-static const bgfx::Memory* load(const char* _filePath)
-{
-	FILE* file = fopen(_filePath, "rb");
-	if (NULL != file)
-	{
-		uint32_t size = (uint32_t)fsize(file);
-		const bgfx::Memory* mem = bgfx::alloc(size+1);
-		size_t ignore = fread(mem->data, 1, size, file);
-		BX_UNUSED(ignore);
-		fclose(file);
-		mem->data[mem->size-1] = '\0';
-		return mem;
-	}
-
-	return NULL;
-}
-
-static const bgfx::Memory* loadShader(const char* _name)
-{
-	char filePath[512];
-	shaderFilePath(filePath, _name);
-	return load(filePath);
-}
-
-static const bgfx::Memory* loadTexture(const char* _name)
-{
-	char filePath[512];
-	strcpy(filePath, "textures/");
-	strcat(filePath, _name);
-	return load(filePath);
-}
-
-static bgfx::ProgramHandle loadProgram(const char* _vsName, const char* _fsName)
-{
-	const bgfx::Memory* mem;
-
-	// Load vertex shader.
-	mem = loadShader(_vsName);
-	bgfx::ShaderHandle vsh = bgfx::createShader(mem);
-
-	// Load fragment shader.
-	mem = loadShader(_fsName);
-	bgfx::ShaderHandle fsh = bgfx::createShader(mem);
-
-	// Create program from shaders.
-	return bgfx::createProgram(vsh, fsh, true /* destroy shaders when program is destroyed */);
 }
 
 void setViewClearMask(uint32_t _viewMask, uint8_t _flags, uint32_t _rgba, float _depth, uint8_t _stencil)
@@ -920,36 +856,17 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 	// for each renderer.
 	switch (bgfx::getRendererType() )
 	{
-	default:
-	case bgfx::RendererType::Direct3D9:
-		s_shaderPath = "shaders/dx9/";
-		break;
-
-	case bgfx::RendererType::Direct3D11:
-		s_shaderPath = "shaders/dx11/";
-		break;
-
 	case bgfx::RendererType::OpenGL:
-		s_shaderPath = "shaders/glsl/";
+	case bgfx::RendererType::OpenGLES:
 		s_flipV = true;
 		break;
 
-	case bgfx::RendererType::OpenGLES:
-		s_shaderPath = "shaders/gles/";
-		s_flipV = true;
+	default:
 		break;
 	}
 
-	FILE* file = fopen("font/droidsans.ttf", "rb");
-	uint32_t size = (uint32_t)fsize(file);
-	void* data = malloc(size);
-	size_t ignore = fread(data, 1, size, file);
-	BX_UNUSED(ignore);
-	fclose(file);
-
-	imguiCreate(data);
-
-	free(data);
+	// Imgui.
+	imguiCreate();
 
 	PosNormalTexcoordVertex::init();
 
@@ -975,16 +892,9 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 	hplaneMesh.load(s_hplaneVertices, BX_COUNTOF(s_hplaneVertices), PosNormalTexcoordVertex::ms_decl, s_planeIndices, BX_COUNTOF(s_planeIndices) );
 	vplaneMesh.load(s_vplaneVertices, BX_COUNTOF(s_vplaneVertices), PosNormalTexcoordVertex::ms_decl, s_planeIndices, BX_COUNTOF(s_planeIndices) );
 
-	const bgfx::Memory* mem;
-
-	mem = loadTexture("figure-rgba.dds");
-	bgfx::TextureHandle figureTex = bgfx::createTexture(mem);
-
-	mem = loadTexture("flare.dds");
-	bgfx::TextureHandle flareTex = bgfx::createTexture(mem);
-
-	mem = loadTexture("fieldstone-rgba.dds");
-	bgfx::TextureHandle fieldstoneTex = bgfx::createTexture(mem);
+	bgfx::TextureHandle figureTex     = loadTexture("figure-rgba.dds");
+	bgfx::TextureHandle flareTex      = loadTexture("flare.dds");
+	bgfx::TextureHandle fieldstoneTex = loadTexture("fieldstone-rgba.dds");
 
 	// Setup lights.
 	const float rgbInnerR[][4] =
@@ -1209,7 +1119,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		}
 
 		// Make sure at the beginning everything gets cleared.
-		clearView(0, BGFX_CLEAR_COLOR_BIT | BGFX_CLEAR_DEPTH_BIT | BGFX_CLEAR_STENCIL_BIT, clearValues);
+		clearView(0, BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH | BGFX_CLEAR_STENCIL, clearValues);
 		bgfx::submit(0);
 		s_viewMask |= 1;
 
@@ -1238,7 +1148,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 				// Second pass - Draw reflected objects.
 
 				// Clear depth from previous pass.
-				clearView(RENDER_VIEWID_RANGE1_PASS_1, BGFX_CLEAR_DEPTH_BIT, clearValues);
+				clearView(RENDER_VIEWID_RANGE1_PASS_1, BGFX_CLEAR_DEPTH, clearValues);
 
 				// Compute reflected matrix.
 				float reflectMtx[16];
@@ -1352,7 +1262,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 				for (uint8_t ii = 0, viewId = RENDER_VIEWID_RANGE5_PASS_6; ii < numLights; ++ii, ++viewId)
 				{
 					// Clear stencil for this light source.
-					clearView(viewId, BGFX_CLEAR_STENCIL_BIT, clearValues);
+					clearView(viewId, BGFX_CLEAR_STENCIL, clearValues);
 
 					// Draw shadow projection of scene objects.
 

@@ -17,6 +17,7 @@ namespace std { namespace tr1 {} }
 using namespace std::tr1;
 
 #include "common.h"
+#include "bgfx_utils.h"
 
 #include <bgfx.h>
 #include <bx/timer.h>
@@ -110,7 +111,6 @@ static const uint16_t s_planeIndices[] =
 	1, 3, 2,
 };
 
-static const char* s_shaderPath = NULL;
 static bool s_oglNdc = false;
 static float s_texelHalf = 0.0f;
 
@@ -119,70 +119,6 @@ static uint32_t s_viewMask = 0;
 static bgfx::UniformHandle u_texColor;
 static bgfx::UniformHandle u_texStencil;
 static bgfx::FrameBufferHandle s_stencilFb;
-
-static void shaderFilePath(char* _out, const char* _name)
-{
-	strcpy(_out, s_shaderPath);
-	strcat(_out, _name);
-	strcat(_out, ".bin");
-}
-
-long int fsize(FILE* _file)
-{
-	long int pos = ftell(_file);
-	fseek(_file, 0L, SEEK_END);
-	long int size = ftell(_file);
-	fseek(_file, pos, SEEK_SET);
-	return size;
-}
-
-static const bgfx::Memory* load(const char* _filePath)
-{
-	FILE* file = fopen(_filePath, "rb");
-	if (NULL != file)
-	{
-		uint32_t size = (uint32_t)fsize(file);
-		const bgfx::Memory* mem = bgfx::alloc(size+1);
-		size_t ignore = fread(mem->data, 1, size, file);
-		BX_UNUSED(ignore);
-		fclose(file);
-		mem->data[mem->size-1] = '\0';
-		return mem;
-	}
-
-	return NULL;
-}
-
-static const bgfx::Memory* loadShader(const char* _name)
-{
-	char filePath[512];
-	shaderFilePath(filePath, _name);
-	return load(filePath);
-}
-
-static const bgfx::Memory* loadTexture(const char* _name)
-{
-	char filePath[512];
-	strcpy(filePath, "textures/");
-	strcat(filePath, _name);
-	return load(filePath);
-}
-
-static bgfx::ProgramHandle loadProgram(const char* _vsName, const char* _fsName)
-{
-	const bgfx::Memory* mem;
-
-	// Load vertex shader.
-	mem = loadShader(_vsName);
-	bgfx::ShaderHandle vsh = bgfx::createShader(mem);
-
-	// Load fragment shader.
-	mem = loadShader(_fsName);
-	bgfx::ShaderHandle fsh = bgfx::createShader(mem);
-
-	// Create program from shaders.
-	return bgfx::createProgram(vsh, fsh, true /* destroy shaders when program is destroyed */);
-}
 
 void setViewClearMask(uint32_t _viewMask, uint8_t _flags, uint32_t _rgba, float _depth, uint8_t _stencil)
 {
@@ -1935,54 +1871,30 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 	// for each renderer.
 	switch (bgfx::getRendererType() )
 	{
-	default:
 	case bgfx::RendererType::Direct3D9:
-		s_shaderPath = "shaders/dx9/";
 		s_texelHalf = 0.5f;
 		break;
 
-	case bgfx::RendererType::Direct3D11:
-		s_shaderPath = "shaders/dx11/";
-		break;
-
 	case bgfx::RendererType::OpenGL:
-		s_shaderPath = "shaders/glsl/";
+	case bgfx::RendererType::OpenGLES:
 		s_oglNdc = true;
 		break;
 
-	case bgfx::RendererType::OpenGLES:
-		s_shaderPath = "shaders/gles/";
-		s_oglNdc = true;
+	default:
 		break;
 	}
 
 	// Imgui
-	FILE* file = fopen("font/droidsans.ttf", "rb");
-	uint32_t size = (uint32_t)fsize(file);
-	void* data = malloc(size);
-	size_t ignore = fread(data, 1, size, file);
-	BX_UNUSED(ignore);
-	fclose(file);
-
-	imguiCreate(data);
-
-	free(data);
+	imguiCreate();
 
 	PosNormalTexcoordVertex::init();
 
 	s_uniforms.init();
 	s_uniforms.submitConstUniforms();
 
-	const bgfx::Memory* mem;
-
-	mem = loadTexture("figure-rgba.dds");
-	bgfx::TextureHandle figureTex = bgfx::createTexture(mem);
-
-	mem = loadTexture("flare.dds");
-	bgfx::TextureHandle flareTex = bgfx::createTexture(mem);
-
-	mem = loadTexture("fieldstone-rgba.dds");
-	bgfx::TextureHandle fieldstoneTex = bgfx::createTexture(mem);
+	bgfx::TextureHandle figureTex     = loadTexture("figure-rgba.dds");
+	bgfx::TextureHandle flareTex      = loadTexture("flare.dds");
+	bgfx::TextureHandle fieldstoneTex = loadTexture("fieldstone-rgba.dds");
 
 	bgfx::TextureHandle fbtextures[] =
 	{
@@ -2616,9 +2528,9 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 		// Make sure at the beginning everything gets cleared.
 		bgfx::setViewClear(0
-				, BGFX_CLEAR_COLOR_BIT
-				| BGFX_CLEAR_DEPTH_BIT
-				| BGFX_CLEAR_STENCIL_BIT
+				, BGFX_CLEAR_COLOR
+				| BGFX_CLEAR_DEPTH
+				| BGFX_CLEAR_STENCIL
 				, clearValues.m_clearRgba
 				, clearValues.m_clearDepth
 				, clearValues.m_clearStencil
@@ -2653,7 +2565,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		// Using stencil texture requires rendering to separate render target. first pass is building depth buffer.
 		if (settings_useStencilTexture)
 		{
-			bgfx::setViewClear(VIEWID_RANGE1_RT_PASS1, BGFX_CLEAR_DEPTH_BIT, 0x00000000, 1.0f, 0);
+			bgfx::setViewClear(VIEWID_RANGE1_RT_PASS1, BGFX_CLEAR_DEPTH, 0x00000000, 1.0f, 0);
 			bgfx::setViewFrameBuffer(VIEWID_RANGE1_RT_PASS1, s_stencilFb);
 
 			const RenderState& renderState = s_renderStates[RenderState::ShadowVolume_UsingStencilTexture_BuildDepth];
@@ -2689,7 +2601,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 				bgfx::setViewFrameBuffer(viewId, s_stencilFb);
 
 				bgfx::setViewClear(viewId
-						, BGFX_CLEAR_COLOR_BIT
+						, BGFX_CLEAR_COLOR
 						, 0x00000000
 						, 1.0f
 						, 0
@@ -2701,7 +2613,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 				bgfx::setViewFrameBuffer(viewId, invalid);
 
 				bgfx::setViewClear(viewId
-						, BGFX_CLEAR_STENCIL_BIT
+						, BGFX_CLEAR_STENCIL
 						, clearValues.m_clearRgba
 						, clearValues.m_clearDepth
 						, clearValues.m_clearStencil

@@ -52,11 +52,9 @@ Who is using it?
 http://airmech.com/ AirMech is a free-to-play futuristic action real-time
 strategy video game developed and published by Carbon Games.
 
-http://theengine.co/ Loom Game Engine developed by The Engine Company. Loom
+http://loomsdk.com/ Loom Game Engine developed by The Engine Company. Loom
 is a powerful 2D game engine with live reloading of code and assets, a friendly
-scripting language, and an efficient command-line workflow. Here is video where
-they explain why they choose bgfx over alternatives:  
-<a href="https://www.youtube.com/watch?feature=player_embedded&v=PHY_XHkMGIM&t=1m53s" target="_blank"><img src="https://img.youtube.com/vi/PHY_XHkMGIM/0.jpg" alt="Why did you choose bgfx?" width="240" height="180" border="10" /></a>
+scripting language, and an efficient command-line workflow.
 
 https://github.com/dariomanesku/cmftStudio cmftStudio - cubemap filtering tool.  
 ![cmftStudio](https://github.com/dariomanesku/cmftStudio/raw/master/screenshots/cmftStudio_small.jpg)
@@ -70,6 +68,10 @@ that will support a variety of targets and operating systems. Currently it's in
 very early development and primary focusing on Mac as primary target. This is
 how it currently looks.  
 ![mac_screenshot](https://raw.githubusercontent.com/emoon/ProDBG/master/data/screens/mac_screenshot.png)
+
+http://www.dogbytegames.com/ Dogbyte Games is an indie mobile developer studio
+focusing on racing games.  
+![ios](http://www.dogbytegames.com/bgfx/offroadlegends2_bgfx_ipad2.jpg)
 
 Examples
 --------
@@ -306,6 +308,9 @@ Dependencies
 Building
 --------
 
+Steps bellow are for default build system inside bgfx repository. There is
+alterative way to build bgfx and examples with [fips](https://github.com/floooh/fips-bgfx/#fips-bgfx).
+
 ### Prerequisites
 
 Windows users download GnuWin32 utilities from:  
@@ -495,6 +500,7 @@ Other debuggers:
 |:----------|:--------------|:----:|:----:|:----:|:----:|:------:|
 | APITrace  | Linux/OSX/Win |   x  |  x   |  x   |   x  |    x   |
 | CodeXL    | Linux/Win     |      |      |  x   |      |        |
+| Dissector | Win           |   x  |      |      |      |    x   |
 | IntelGPA  | Linux/OSX/Win |   x  |  x   |      |   x  |        |
 | Nsight    | Win           |   x  |  x   |  x   |      |        |
 | PerfHUD   | Win           |   x  |  x   |      |      |        |
@@ -504,6 +510,7 @@ Other debuggers:
 Download:  
 [APITrace](https://apitrace.github.io/)  
 [CodeXL](http://developer.amd.com/tools-and-sdks/opencl-zone/codexl/)  
+[Dissector](https://github.com/imccown/Dissector)  
 [Nsight](https://developer.nvidia.com/nvidia-nsight-visual-studio-edition)  
 [PerfHUD](https://developer.nvidia.com/nvidia-perfhud)  
 [vogl](https://github.com/ValveSoftware/vogl)  
@@ -640,6 +647,13 @@ NanoVG is small antialiased vector graphics rendering library.
 
 https://github.com/memononen/nanovg
 
+### ImGui (MIT)
+
+Bloat-free Immediate Mode Graphical User interface for C++ with minimal
+dependencies.
+
+https://github.com/ocornut/imgui
+
 ### SDF (MIT)
 
 Sweep-and-update Euclidean distance transform of an antialised image for contour
@@ -647,7 +661,7 @@ texturing.
 
 https://github.com/memononen/SDF
 
-### stb_image, stb_truetype (Public Domain)
+### stb (Public Domain)
 
 http://nothings.org
 
@@ -723,7 +737,7 @@ Garett Bass ([@gtbass](https://github.com/gtbass)) - OSX port.
 Jeremie Roy ([@jeremieroy](https://github.com/jeremieroy)) - Font system and
   examples.  
 Miloš Tošić ([@milostosic](https://github.com/milostosic)) - 12-lod example.  
-Dario Manesku ([@dariomanesku](https://github.com/dariomanesku)) - 13-stencil, 
+Dario Manesku ([@dariomanesku](https://github.com/dariomanesku)) - 13-stencil,
   14-shadowvolumes, 15-shadowmaps-simple, 16-shadowmaps, 18-ibl  
 James Gray ([@james4k](https://github.com/james4k)) - Go language API bindings.  
 p0nce ([@p0nce](https://github.com/p0nce)) - D language API bindings.  
@@ -731,6 +745,10 @@ Mike Popoloski ([@MikePopoloski](https://github.com/MikePopoloski)) - C#/VB/F#
 language API bindings, WinRT/WinPhone support.  
 Kai Jourdan ([@questor](https://github.com/questor)) - 23-vectordisplay example  
 Stanlo Slasinski ([@stanlo](https://github.com/stanlo)) - 24-nbody example  
+Daniel Collin ([@emoon](https://github.com/emoon)) - Port of Ocornut's ImGui
+  to bgfx.  
+Andre Weissflog ([@floooh](https://github.com/floooh)) - Alternative build
+system fips.
 
 [License (BSD 2-clause)](https://github.com/bkaradzic/bgfx/blob/master/LICENSE)
 -------------------------------------------------------------------------------

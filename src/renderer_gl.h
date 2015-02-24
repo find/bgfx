@@ -6,9 +6,26 @@
 #ifndef BGFX_RENDERER_GL_H_HEADER_GUARD
 #define BGFX_RENDERER_GL_H_HEADER_GUARD
 
-#define BGFX_USE_EGL (BGFX_CONFIG_RENDERER_OPENGLES && (BX_PLATFORM_ANDROID || BX_PLATFORM_EMSCRIPTEN || BX_PLATFORM_QNX || BX_PLATFORM_RPI || BX_PLATFORM_WINDOWS) )
+#define BGFX_USE_EGL (BGFX_CONFIG_RENDERER_OPENGLES && (0 \
+			|| BX_PLATFORM_ANDROID \
+			|| BX_PLATFORM_EMSCRIPTEN \
+			|| BX_PLATFORM_LINUX \
+			|| BX_PLATFORM_QNX \
+			|| BX_PLATFORM_RPI \
+			|| BX_PLATFORM_WINDOWS \
+			) )
+
 #define BGFX_USE_WGL (BGFX_CONFIG_RENDERER_OPENGL && BX_PLATFORM_WINDOWS)
-#define BGFX_USE_GL_DYNAMIC_LIB (BX_PLATFORM_LINUX || BX_PLATFORM_OSX || BX_PLATFORM_WINDOWS)
+#define BGFX_USE_GLX (BGFX_CONFIG_RENDERER_OPENGL && (0 \
+			|| BX_PLATFORM_LINUX \
+			|| BX_PLATFORM_FREEBSD \
+			) )
+
+#define BGFX_USE_GL_DYNAMIC_LIB (0 \
+			|| BX_PLATFORM_LINUX \
+			|| BX_PLATFORM_OSX \
+			|| BX_PLATFORM_WINDOWS \
+			)
 
 #if BGFX_CONFIG_RENDERER_OPENGL
 #	if BGFX_CONFIG_RENDERER_OPENGL >= 31
@@ -89,6 +106,10 @@ typedef uint64_t GLuint64;
 #include "renderer.h"
 #include "ovr.h"
 #include "renderdoc.h"
+
+#ifndef GL_LUMINANCE
+#	define GL_LUMINANCE 0x1909
+#endif // GL_LUMINANCE
 
 #ifndef GL_BGRA
 #	define GL_BGRA 0x80E1
@@ -451,6 +472,22 @@ typedef uint64_t GLuint64;
 #	define GL_IMAGE_CUBE 0x9050
 #endif // GL_IMAGE_CUBE
 
+#ifndef GL_UNSIGNED_INT_IMAGE_1D
+#	define GL_UNSIGNED_INT_IMAGE_1D 0x9062
+#endif // GL_UNSIGNED_INT_IMAGE_1D
+
+#ifndef GL_UNSIGNED_INT_IMAGE_2D
+#	define GL_UNSIGNED_INT_IMAGE_2D 0x9063
+#endif // GL_UNSIGNED_INT_IMAGE_2D
+
+#ifndef GL_UNSIGNED_INT_IMAGE_3D
+#	define GL_UNSIGNED_INT_IMAGE_3D 0x9064
+#endif // GL_UNSIGNED_INT_IMAGE_3D
+
+#ifndef GL_UNSIGNED_INT_IMAGE_CUBE
+#	define GL_UNSIGNED_INT_IMAGE_CUBE 0x9066
+#endif // GL_UNSIGNED_INT_IMAGE_CUBE
+
 #ifndef GL_PROGRAM_INPUT
 #	define GL_PROGRAM_INPUT 0x92E3
 #endif // GL_PROGRAM_INPUT
@@ -519,8 +556,8 @@ typedef uint64_t GLuint64;
 #	define glClearDepth glClearDepthf
 #endif // !BGFX_CONFIG_RENDERER_OPENGL
 
-namespace bgfx 
-{ 
+namespace bgfx
+{
 	class ConstantBuffer;
 	void dumpExtensions(const char* _extensions);
 
@@ -835,6 +872,7 @@ namespace bgfx
 		void create(uint16_t _denseIdx, void* _nwh, uint32_t _width, uint32_t _height, TextureFormat::Enum _depthFormat);
 		uint16_t destroy();
 		void resolve();
+		void discard(uint8_t _flags);
 
 		SwapChainGL* m_swapChain;
 		GLuint m_fbo[2];

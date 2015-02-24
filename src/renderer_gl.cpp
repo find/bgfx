@@ -322,6 +322,7 @@ namespace bgfx
 			ARB_half_float_pixel,
 			ARB_half_float_vertex,
 			ARB_instanced_arrays,
+			ARB_invalidate_subdata,
 			ARB_map_buffer_range,
 			ARB_multisample,
 			ARB_occlusion_query,
@@ -363,6 +364,7 @@ namespace bgfx
 			EXT_compressed_ETC1_RGB8_sub_texture,
 			EXT_debug_label,
 			EXT_debug_marker,
+			EXT_discard_framebuffer,
 			EXT_draw_buffers,
 			EXT_frag_depth,
 			EXT_framebuffer_blit,
@@ -480,6 +482,7 @@ namespace bgfx
 		{ "ARB_half_float_pixel",                  BGFX_CONFIG_RENDERER_OPENGL >= 30, true  },
 		{ "ARB_half_float_vertex",                 BGFX_CONFIG_RENDERER_OPENGL >= 30, true  },
 		{ "ARB_instanced_arrays",                  BGFX_CONFIG_RENDERER_OPENGL >= 33, true  },
+		{ "ARB_invalidate_subdata",                BGFX_CONFIG_RENDERER_OPENGL >= 43, true  },
 		{ "ARB_map_buffer_range",                  BGFX_CONFIG_RENDERER_OPENGL >= 30, true  },
 		{ "ARB_multisample",                       false,                             true  },
 		{ "ARB_occlusion_query",                   BGFX_CONFIG_RENDERER_OPENGL >= 33, true  },
@@ -521,6 +524,7 @@ namespace bgfx
 		{ "EXT_compressed_ETC1_RGB8_sub_texture",  false,                             true  }, // GLES2 extension.
 		{ "EXT_debug_label",                       false,                             true  },
 		{ "EXT_debug_marker",                      false,                             true  },
+		{ "EXT_discard_framebuffer",               false,                             true  }, // GLES2 extension.
 		{ "EXT_draw_buffers",                      false,                             true  }, // GLES2 extension.
 		{ "EXT_frag_depth",                        false,                             true  }, // GLES2 extension.
 		{ "EXT_framebuffer_blit",                  BGFX_CONFIG_RENDERER_OPENGL >= 30, true  },
@@ -691,6 +695,10 @@ namespace bgfx
 	{
 	}
 
+	static void GL_APIENTRY stubInvalidateFramebuffer(GLenum /*_target*/, GLsizei /*_numAttachments*/, const GLenum* /*_attachments*/)
+	{
+	}
+
 	typedef void (*PostSwapBuffersFn)(uint32_t _width, uint32_t _height);
 
 	static const char* getGLString(GLenum _name)
@@ -843,9 +851,11 @@ namespace bgfx
 		RendererContextGL()
 			: m_numWindows(1)
 			, m_rtMsaa(false)
+			, m_fbDiscard(BGFX_CLEAR_NONE)
 			, m_capture(NULL)
 			, m_captureSize(0)
 			, m_maxAnisotropy(0.0f)
+			, m_maxAnisotropyDefault(0.0f)
 			, m_maxMsaa(0)
 			, m_vao(0)
 			, m_vaoSupport(false)
@@ -1155,7 +1165,8 @@ namespace bgfx
 				}
 			}
 
-			if (!isTextureFormatValid(TextureFormat::R8) )
+			if (BX_ENABLED(BX_PLATFORM_EMSCRIPTEN)
+			||  !isTextureFormatValid(TextureFormat::R8) )
 			{
 				// GL core has to use GL_R8 Issue#208, GLES2 has to use GL_LUMINANCE issue#226
 				s_textureFormat[TextureFormat::R8].m_internalFmt = GL_LUMINANCE;
@@ -1278,7 +1289,7 @@ namespace bgfx
 
 			if (s_extension[Extension::EXT_texture_filter_anisotropic].m_supported)
 			{
-				GL_CHECK(glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &m_maxAnisotropy) );
+				GL_CHECK(glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &m_maxAnisotropyDefault) );
 			}
 
 			if (s_extension[Extension::ARB_texture_multisample].m_supported
@@ -1364,13 +1375,18 @@ namespace bgfx
 				glObjectLabel = stubObjectLabel;
 			}
 
+			if (NULL == glInvalidateFramebuffer)
+			{
+				glInvalidateFramebuffer = stubInvalidateFramebuffer;
+			}
+
 			if (BX_ENABLED(BGFX_CONFIG_RENDERER_OPENGL) )
 			{
 				m_queries.create();
 			}
 
 			// Init reserved part of view name.
-			for (uint8_t ii = 0; ii < BGFX_CONFIG_MAX_VIEWS; ++ii)
+			for (uint32_t ii = 0; ii < BGFX_CONFIG_MAX_VIEWS; ++ii)
 			{
 				bx::snprintf(s_viewName[ii], BGFX_CONFIG_MAX_VIEW_NAME_RESERVED+1, "%3d  ", ii);
 			}
@@ -1438,7 +1454,7 @@ namespace bgfx
 			}
 		}
 
-		void createIndexBuffer(IndexBufferHandle _handle, Memory* _mem) BX_OVERRIDE
+		void createIndexBuffer(IndexBufferHandle _handle, Memory* _mem, uint8_t /*_flags*/) BX_OVERRIDE
 		{
 			m_indexBuffers[_handle.idx].create(_mem->size, _mem->data);
 		}
@@ -1469,7 +1485,7 @@ namespace bgfx
 			m_vertexBuffers[_handle.idx].destroy();
 		}
 
-		void createDynamicIndexBuffer(IndexBufferHandle _handle, uint32_t _size) BX_OVERRIDE
+		void createDynamicIndexBuffer(IndexBufferHandle _handle, uint32_t _size, uint8_t /*_flags*/) BX_OVERRIDE
 		{
 			m_indexBuffers[_handle.idx].create(_size, NULL);
 		}
@@ -1688,30 +1704,37 @@ namespace bgfx
 
 		void blitRender(TextVideoMemBlitter& _blitter, uint32_t _numIndices) BX_OVERRIDE
 		{
-			uint32_t numVertices = _numIndices*4/6;
-			m_indexBuffers[_blitter.m_ib->handle.idx].update(0, _numIndices*2, _blitter.m_ib->data);
-			m_vertexBuffers[_blitter.m_vb->handle.idx].update(0, numVertices*_blitter.m_decl.m_stride, _blitter.m_vb->data);
+			const uint32_t numVertices = _numIndices*4/6;
+			if (0 < numVertices)
+			{
+				m_indexBuffers[_blitter.m_ib->handle.idx].update(0, _numIndices*2, _blitter.m_ib->data);
+				m_vertexBuffers[_blitter.m_vb->handle.idx].update(0, numVertices*_blitter.m_decl.m_stride, _blitter.m_vb->data);
 
-			VertexBufferGL& vb = m_vertexBuffers[_blitter.m_vb->handle.idx];
-			GL_CHECK(glBindBuffer(GL_ARRAY_BUFFER, vb.m_id) );
+				VertexBufferGL& vb = m_vertexBuffers[_blitter.m_vb->handle.idx];
+				GL_CHECK(glBindBuffer(GL_ARRAY_BUFFER, vb.m_id) );
 
-			IndexBufferGL& ib = m_indexBuffers[_blitter.m_ib->handle.idx];
-			GL_CHECK(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ib.m_id) );
+				IndexBufferGL& ib = m_indexBuffers[_blitter.m_ib->handle.idx];
+				GL_CHECK(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ib.m_id) );
 
-			ProgramGL& program = m_program[_blitter.m_program.idx];
-			program.bindAttributes(_blitter.m_decl, 0);
+				ProgramGL& program = m_program[_blitter.m_program.idx];
+				program.bindAttributes(_blitter.m_decl, 0);
 
-			GL_CHECK(glDrawElements(GL_TRIANGLES
-				, _numIndices
-				, GL_UNSIGNED_SHORT
-				, (void*)0
-				) );
+				GL_CHECK(glDrawElements(GL_TRIANGLES
+					, _numIndices
+					, GL_UNSIGNED_SHORT
+					, (void*)0
+					) );
+			}
 		}
 
 		void updateResolution(const Resolution& _resolution)
 		{
-			bool recenter  = !!(_resolution.m_flags & BGFX_RESET_HMD_RECENTER);
-			uint32_t flags = _resolution.m_flags & ~BGFX_RESET_HMD_RECENTER;
+			bool recenter   = !!(_resolution.m_flags & BGFX_RESET_HMD_RECENTER);
+			m_maxAnisotropy = !!(_resolution.m_flags & BGFX_RESET_MAXANISOTROPY)
+				? m_maxAnisotropyDefault
+				: 0.0f
+				;
+			uint32_t flags = _resolution.m_flags & ~(BGFX_RESET_HMD_RECENTER | BGFX_RESET_MAXANISOTROPY);
 
 			if (m_resolution.m_width  != _resolution.m_width
 			||  m_resolution.m_height != _resolution.m_height
@@ -1756,14 +1779,24 @@ namespace bgfx
 				) );
 		}
 
-		uint32_t setFrameBuffer(FrameBufferHandle _fbh, uint32_t _height, bool _msaa = true)
+		uint32_t setFrameBuffer(FrameBufferHandle _fbh, uint32_t _height, uint8_t _discard = BGFX_CLEAR_NONE, bool _msaa = true)
 		{
 			if (isValid(m_fbh)
 			&&  m_fbh.idx != _fbh.idx
-			&&  m_rtMsaa)
+			&& (BGFX_CLEAR_NONE != m_fbDiscard || m_rtMsaa) )
 			{
 				FrameBufferGL& frameBuffer = m_frameBuffers[m_fbh.idx];
-				frameBuffer.resolve();
+				if (m_rtMsaa)
+				{
+					frameBuffer.resolve();
+				}
+
+				if (BGFX_CLEAR_NONE != m_fbDiscard)
+				{
+					frameBuffer.discard(m_fbDiscard);
+				}
+
+				m_fbDiscard = BGFX_CLEAR_NONE;
 			}
 
 			m_glctx.makeCurrent(NULL);
@@ -1788,8 +1821,9 @@ namespace bgfx
 				}
 			}
 
-			m_fbh = _fbh;
-			m_rtMsaa = _msaa;
+			m_fbh       = _fbh;
+			m_fbDiscard = _discard;
+			m_rtMsaa    = _msaa;
 
 			return _height;
 		}
@@ -2256,9 +2290,9 @@ namespace bgfx
 			if (1 == numMrt)
 			{
 				GLuint flags = 0;
-				if (BGFX_CLEAR_COLOR_BIT & _clear.m_flags)
+				if (BGFX_CLEAR_COLOR & _clear.m_flags)
 				{
-					if (BGFX_CLEAR_COLOR_USE_PALETTE_BIT & _clear.m_flags)
+					if (BGFX_CLEAR_COLOR_USE_PALETTE & _clear.m_flags)
 					{
 						uint8_t index = (uint8_t)bx::uint32_min(BGFX_CONFIG_MAX_CLEAR_COLOR_PALETTE-1, _clear.m_index[0]);
 						const float* rgba = _palette[index];
@@ -2281,14 +2315,14 @@ namespace bgfx
 					GL_CHECK(glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE) );
 				}
 
-				if (BGFX_CLEAR_DEPTH_BIT & _clear.m_flags)
+				if (BGFX_CLEAR_DEPTH & _clear.m_flags)
 				{
 					flags |= GL_DEPTH_BUFFER_BIT;
 					GL_CHECK(glClearDepth(_clear.m_depth) );
 					GL_CHECK(glDepthMask(GL_TRUE) );
 				}
 
-				if (BGFX_CLEAR_STENCIL_BIT & _clear.m_flags)
+				if (BGFX_CLEAR_STENCIL & _clear.m_flags)
 				{
 					flags |= GL_STENCIL_BUFFER_BIT;
 					GL_CHECK(glClearStencil(_clear.m_stencil) );
@@ -2314,10 +2348,10 @@ namespace bgfx
 				GL_CHECK(glDisable(GL_CULL_FACE) );
 				GL_CHECK(glDisable(GL_BLEND) );
 
-				GLboolean colorMask = !!(BGFX_CLEAR_COLOR_BIT & _clear.m_flags);
+				GLboolean colorMask = !!(BGFX_CLEAR_COLOR & _clear.m_flags);
 				GL_CHECK(glColorMask(colorMask, colorMask, colorMask, colorMask) );
 
-				if (BGFX_CLEAR_DEPTH_BIT & _clear.m_flags)
+				if (BGFX_CLEAR_DEPTH & _clear.m_flags)
 				{
 					GL_CHECK(glEnable(GL_DEPTH_TEST) );
 					GL_CHECK(glDepthFunc(GL_ALWAYS) );
@@ -2328,7 +2362,7 @@ namespace bgfx
 					GL_CHECK(glDisable(GL_DEPTH_TEST) );
 				}
 
-				if (BGFX_CLEAR_STENCIL_BIT & _clear.m_flags)
+				if (BGFX_CLEAR_STENCIL & _clear.m_flags)
 				{
 					GL_CHECK(glEnable(GL_STENCIL_TEST) );
 					GL_CHECK(glStencilFuncSeparate(GL_FRONT_AND_BACK, GL_ALWAYS, _clear.m_stencil,  0xff) );
@@ -2380,7 +2414,7 @@ namespace bgfx
 				GL_CHECK(glUseProgram(program.m_id) );
 				program.bindAttributes(vertexDecl, 0);
 
-				if (BGFX_CLEAR_COLOR_USE_PALETTE_BIT & _clear.m_flags)
+				if (BGFX_CLEAR_COLOR_USE_PALETTE & _clear.m_flags)
 				{
 					float mrtClear[BGFX_CONFIG_MAX_FRAME_BUFFER_ATTACHMENTS][4];
 					for (uint32_t ii = 0; ii < numMrt; ++ii)
@@ -2433,11 +2467,13 @@ namespace bgfx
 		bool m_rtMsaa;
 
 		FrameBufferHandle m_fbh;
+		uint32_t m_fbDiscard;
 
 		Resolution m_resolution;
 		void* m_capture;
 		uint32_t m_captureSize;
 		float m_maxAnisotropy;
+		float m_maxAnisotropyDefault;
 		int32_t m_maxMsaa;
 		GLuint m_vao;
 		bool m_vaoSupport;
@@ -2519,6 +2555,10 @@ namespace bgfx
 			GLSL_TYPE(GL_IMAGE_2D);
 			GLSL_TYPE(GL_IMAGE_3D);
 			GLSL_TYPE(GL_IMAGE_CUBE);
+			GLSL_TYPE(GL_UNSIGNED_INT_IMAGE_1D);
+			GLSL_TYPE(GL_UNSIGNED_INT_IMAGE_2D);
+			GLSL_TYPE(GL_UNSIGNED_INT_IMAGE_3D);
+			GLSL_TYPE(GL_UNSIGNED_INT_IMAGE_CUBE);
 		}
 
 #undef GLSL_TYPE
@@ -2601,6 +2641,10 @@ namespace bgfx
 		case GL_IMAGE_2D:
 		case GL_IMAGE_3D:
 		case GL_IMAGE_CUBE:
+		case GL_UNSIGNED_INT_IMAGE_1D:
+		case GL_UNSIGNED_INT_IMAGE_2D:
+		case GL_UNSIGNED_INT_IMAGE_3D:
+		case GL_UNSIGNED_INT_IMAGE_CUBE:
 			return UniformType::Uniform1iv;
 		};
 
@@ -2798,6 +2842,10 @@ namespace bgfx
 			case GL_IMAGE_2D:
 			case GL_IMAGE_3D:
 			case GL_IMAGE_CUBE:
+			case GL_UNSIGNED_INT_IMAGE_1D:
+			case GL_UNSIGNED_INT_IMAGE_2D:
+			case GL_UNSIGNED_INT_IMAGE_3D:
+			case GL_UNSIGNED_INT_IMAGE_CUBE:
 				BX_TRACE("Sampler #%d at location %d.", m_numSamplers, loc);
 				m_sampler[m_numSamplers] = loc;
 				m_numSamplers++;
@@ -3724,7 +3772,9 @@ namespace bgfx
 						}
 					}
 
-					writeString(&writer, "precision mediump float;\n");
+					writeStringf(&writer, "precision %s float;\n"
+							, m_type == GL_FRAGMENT_SHADER ? "mediump" : "highp"
+							);
 
 					bx::write(&writer, code, codeLen);
 					bx::write(&writer, '\0');
@@ -4100,6 +4150,42 @@ namespace bgfx
 		}
 	}
 
+	void FrameBufferGL::discard(uint8_t _flags)
+	{
+		GLenum buffers[BGFX_CONFIG_MAX_FRAME_BUFFER_ATTACHMENTS+2];
+		uint32_t idx = 0;
+
+		if (BGFX_CLEAR_NONE != (_flags & BGFX_CLEAR_DISCARD_COLOR_MASK) )
+		{
+			for (uint32_t ii = 0, num = m_num; ii < num; ++ii)
+			{
+				if (BGFX_CLEAR_NONE != (_flags & (BGFX_CLEAR_DISCARD_COLOR_0<<ii) ) )
+				{
+					buffers[idx++] = GL_COLOR_ATTACHMENT0 + ii;
+				}
+			}
+		}
+
+		uint32_t dsFlags = _flags & (BGFX_CLEAR_DISCARD_DEPTH|BGFX_CLEAR_DISCARD_STENCIL);
+		if (BGFX_CLEAR_NONE != dsFlags)
+		{
+			if ( (BGFX_CLEAR_DISCARD_DEPTH|BGFX_CLEAR_DISCARD_STENCIL) == dsFlags)
+			{
+				buffers[idx++] = GL_DEPTH_STENCIL_ATTACHMENT;
+			}
+			else if (BGFX_CLEAR_DISCARD_DEPTH == dsFlags)
+			{
+				buffers[idx++] = GL_DEPTH_ATTACHMENT;
+			}
+			else if (BGFX_CLEAR_DISCARD_STENCIL == dsFlags)
+			{
+				buffers[idx++] = GL_STENCIL_ATTACHMENT;
+			}
+		}
+
+		GL_CHECK(glInvalidateFramebuffer(GL_FRAMEBUFFER, idx, buffers) );
+	}
+
 	void RendererContextGL::submit(Frame* _render, ClearQuad& _clearQuad, TextVideoMemBlitter& _textVideoMemBlitter)
 	{
 		if (1 < m_numWindows
@@ -4182,6 +4268,7 @@ namespace bgfx
 		bool viewHasScissor = false;
 		Rect viewScissorRect;
 		viewScissorRect.clear();
+		uint8_t discardFlags = BGFX_CLEAR_NONE;
 
 		const bool blendIndependentSupported = s_extension[Extension::ARB_draw_buffers_blend].m_supported;
 		const bool computeSupported = (BX_ENABLED(BGFX_CONFIG_RENDERER_OPENGL) && s_extension[Extension::ARB_compute_shader].m_supported)
@@ -4205,7 +4292,7 @@ namespace bgfx
 			int32_t numItems = _render->m_num;
 			for (int32_t item = 0, restartItem = numItems; item < numItems || restartItem < numItems;)
 			{
-				const bool isCompute   = key.decode(_render->m_sortKeys[item]);
+				const bool isCompute   = key.decode(_render->m_sortKeys[item], _render->m_viewRemap);
 				const bool viewChanged = 0
 					|| key.m_view != view
 					|| item == numItems
@@ -4235,7 +4322,7 @@ namespace bgfx
 							? _render->m_hmd.height
 							: _render->m_resolution.m_height
 							;
-						height = setFrameBuffer(fbh, height);
+						height = setFrameBuffer(fbh, height, discardFlags);
 					}
 
 					viewRestart = ( (BGFX_VIEW_STEREO == (_render->m_viewFlags[view] & BGFX_VIEW_STEREO) ) );
@@ -4284,8 +4371,9 @@ namespace bgfx
 						) );
 
 					Clear& clear = _render->m_clear[view];
+					discardFlags = clear.m_flags & BGFX_CLEAR_DISCARD_MASK;
 
-					if (BGFX_CLEAR_NONE != clear.m_flags)
+					if (BGFX_CLEAR_NONE != (clear.m_flags & BGFX_CLEAR_MASK) )
 					{
 						clearQuad(_clearQuad, viewState.m_rect, clear, height, _render->m_clearColor);
 					}
@@ -4309,23 +4397,38 @@ namespace bgfx
 						GLbitfield barrier = 0;
 						for (uint32_t ii = 0; ii < BGFX_MAX_COMPUTE_BINDINGS; ++ii)
 						{
-							const ComputeBinding& bind = compute.m_bind[ii];
+							const Binding& bind = compute.m_bind[ii];
 							if (invalidHandle != bind.m_idx)
 							{
 								switch (bind.m_type)
 								{
-								case ComputeBinding::Image:
+								case Binding::Image:
 									{
 										const TextureGL& texture = m_textures[bind.m_idx];
-										GL_CHECK(glBindImageTexture(ii, texture.m_id, bind.m_mip, GL_FALSE, 0, s_access[bind.m_access], s_imageFormat[bind.m_format]) );
+										GL_CHECK(glBindImageTexture(ii
+											, texture.m_id
+											, bind.m_un.m_compute.m_mip
+											, GL_FALSE
+											, 0
+											, s_access[bind.m_un.m_compute.m_access]
+											, s_imageFormat[bind.m_un.m_compute.m_format])
+											);
 										barrier |= GL_SHADER_IMAGE_ACCESS_BARRIER_BIT;
 									}
 									break;
 
-								case ComputeBinding::Buffer:
+								case Binding::IndexBuffer:
 									{
-										const VertexBufferGL& vertexBuffer = m_vertexBuffers[bind.m_idx];
-										GL_CHECK(glBindBufferBase(GL_SHADER_STORAGE_BUFFER, ii, vertexBuffer.m_id) );
+										const IndexBufferGL& buffer = m_indexBuffers[bind.m_idx];
+										GL_CHECK(glBindBufferBase(GL_SHADER_STORAGE_BUFFER, ii, buffer.m_id));
+										barrier |= GL_SHADER_STORAGE_BARRIER_BIT;
+									}
+									break;
+
+								case Binding::VertexBuffer:
+									{
+										const VertexBufferGL& buffer = m_vertexBuffers[bind.m_idx];
+										GL_CHECK(glBindBufferBase(GL_SHADER_STORAGE_BUFFER, ii, buffer.m_id));
 										barrier |= GL_SHADER_STORAGE_BARRIER_BIT;
 									}
 									break;
@@ -4675,16 +4778,16 @@ namespace bgfx
 					{
 						for (uint32_t stage = 0; stage < BGFX_CONFIG_MAX_TEXTURE_SAMPLERS; ++stage)
 						{
-							const Sampler& sampler = draw.m_sampler[stage];
-							Sampler& current = currentState.m_sampler[stage];
+							const Binding& sampler = draw.m_bind[stage];
+							Binding& current = currentState.m_bind[stage];
 							if (current.m_idx != sampler.m_idx
-							||  current.m_flags != sampler.m_flags
+							||  current.m_un.m_draw.m_flags != sampler.m_un.m_draw.m_flags
 							||  programChanged)
 							{
 								if (invalidHandle != sampler.m_idx)
 								{
 									TextureGL& texture = m_textures[sampler.m_idx];
-									texture.commit(stage, sampler.m_flags);
+									texture.commit(stage, sampler.m_un.m_draw.m_flags);
 								}
 							}
 
@@ -4697,11 +4800,12 @@ namespace bgfx
 					&&  0 == draw.m_instanceDataOffset)
 					{
 						if (programChanged
-						||  currentState.m_vertexBuffer.idx != draw.m_vertexBuffer.idx
-						||  currentState.m_indexBuffer.idx != draw.m_indexBuffer.idx
-						||  currentState.m_instanceDataBuffer.idx != draw.m_instanceDataBuffer.idx
+						||  baseVertex                        != draw.m_startVertex
+						||  currentState.m_vertexBuffer.idx   != draw.m_vertexBuffer.idx
+						||  currentState.m_indexBuffer.idx    != draw.m_indexBuffer.idx
 						||  currentState.m_instanceDataOffset != draw.m_instanceDataOffset
-						||  currentState.m_instanceDataStride != draw.m_instanceDataStride)
+						||  currentState.m_instanceDataStride != draw.m_instanceDataStride
+						||  currentState.m_instanceDataBuffer.idx != draw.m_instanceDataBuffer.idx)
 						{
 							bx::HashMurmur2A murmur;
 							murmur.begin();
@@ -4981,11 +5085,12 @@ namespace bgfx
 				bx::snprintf(hmd, BX_COUNTOF(hmd), ", [%c] HMD ", hmdEnabled ? '\xfe' : ' ');
 
 				const uint32_t msaa = (m_resolution.m_flags&BGFX_RESET_MSAA_MASK)>>BGFX_RESET_MSAA_SHIFT;
-				tvm.printf(10, pos++, 0x8e, "    Reset flags: [%c] vsync, [%c] MSAAx%d%s"
+				tvm.printf(10, pos++, 0x8e, "    Reset flags: [%c] vsync, [%c] MSAAx%d%s, [%c] MaxAnisotropy "
 					, !!(m_resolution.m_flags&BGFX_RESET_VSYNC) ? '\xfe' : ' '
 					, 0 != msaa ? '\xfe' : ' '
 					, 1<<msaa
 					, m_ovr.isInitialized() ? hmd : ", no-HMD "
+					, !!(m_resolution.m_flags&BGFX_RESET_MAXANISOTROPY) ? '\xfe' : ' '
 					);
 
 				double elapsedCpuMs = double(elapsed)*toMs;

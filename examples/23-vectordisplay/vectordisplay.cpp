@@ -106,7 +106,7 @@ void VectorDisplay::setup(uint16_t _width, uint16_t _height, int _view)
 
 	genLinetex();
 
-	bgfx::setViewClear(_view, BGFX_CLEAR_COLOR_BIT | BGFX_CLEAR_DEPTH_BIT, 0x000000ff, 1.0f, 0);
+	bgfx::setViewClear(_view, BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH, 0x000000ff, 1.0f, 0);
 
 	setupResDependent();
 }
@@ -123,6 +123,11 @@ void VectorDisplay::resize(uint16_t _width, uint16_t _height)
 
 void VectorDisplay::teardown()
 {
+	for (size_t i = 0; i < m_vertexBuffers.size(); ++i)
+	{
+		bgfx::destroyDynamicVertexBuffer(m_vertexBuffers[i]);
+	}
+
 	teardownResDependent();
 
 	bgfx::destroyProgram(m_drawToScreenShader);
@@ -728,7 +733,7 @@ bool VectorDisplay::setDecaySteps(int _steps)
 	{
 		for (size_t i = 0; i < m_vertexBuffers.size(); ++i)
 		{
-			destroyDynamicVertexBuffer(m_vertexBuffers[i]);
+			bgfx::destroyDynamicVertexBuffer(m_vertexBuffers[i]);
 		}
 
 		m_vertexBuffers.clear();
