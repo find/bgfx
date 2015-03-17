@@ -81,7 +81,7 @@ struct OcornutImguiContext
 
 	void create(const void* _data, uint32_t _size, float _fontSize)
 	{
-		m_viewId = 31;
+		m_viewId = 255;
 
 		ImGuiIO& io = ImGui::GetIO();
 		io.DisplaySize = ImVec2(1280.0f, 720.0f);
@@ -99,6 +99,7 @@ struct OcornutImguiContext
 			break;
 
 		case bgfx::RendererType::Direct3D11:
+		case bgfx::RendererType::Direct3D12:
 			vsmem = bgfx::makeRef(vs_ocornut_imgui_dx11, sizeof(vs_ocornut_imgui_dx11));
 			fsmem = bgfx::makeRef(fs_ocornut_imgui_dx11, sizeof(fs_ocornut_imgui_dx11));
 			break;
@@ -164,7 +165,7 @@ struct OcornutImguiContext
 
 		ImGui::NewFrame();
 
-//		ImGui::ShowTestWindow();
+		//ImGui::ShowTestWindow(); //Debug only.
 	}
 
 	void endFrame()

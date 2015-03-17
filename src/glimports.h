@@ -230,7 +230,7 @@ GL_IMPORT______(false, PFNGLBUFFERDATAPROC,                        glBufferData)
 GL_IMPORT______(false, PFNGLBUFFERSUBDATAPROC,                     glBufferSubData);
 GL_IMPORT______(true,  PFNGLCHECKFRAMEBUFFERSTATUSPROC,            glCheckFramebufferStatus);
 GL_IMPORT______(false, PFNGLCLEARPROC,                             glClear);
-GL_IMPORT______(false, PFNGLCLEARBUFFERFVPROC,                     glClearBufferfv);
+GL_IMPORT______(true,  PFNGLCLEARBUFFERFVPROC,                     glClearBufferfv);
 GL_IMPORT______(false, PFNGLCLEARCOLORPROC,                        glClearColor);
 GL_IMPORT______(false, PFNGLCLEARSTENCILPROC,                      glClearStencil);
 GL_IMPORT______(false, PFNGLCOLORMASKPROC,                         glColorMask);
@@ -481,7 +481,7 @@ GL_IMPORT_NV___(true,  PFNGLGETQUERYOBJECTUI64VPROC,               glGetQueryObj
 
 GL_IMPORT      (true,  PFNGLINVALIDATEFRAMEBUFFERPROC,             glInvalidateFramebuffer, glDiscardFramebufferEXT);
 
-#else
+#elif !BGFX_USE_GL_DYNAMIC_LIB
 GL_IMPORT______(true,  PFNGLTEXIMAGE3DPROC,                        glTexImage3D);
 GL_IMPORT______(true,  PFNGLTEXSUBIMAGE3DPROC,                     glTexSubImage3D);
 GL_IMPORT______(true,  PFNGLCOMPRESSEDTEXIMAGE3DPROC,              glCompressedTexImage3D);

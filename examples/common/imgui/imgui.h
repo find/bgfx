@@ -94,6 +94,18 @@ struct ImguiAlign
 	};
 };
 
+struct ImguiCubemap
+{
+	enum Enum
+	{
+		Cross,
+		Latlong,
+		Hex,
+
+		Count,
+	};
+};
+
 struct ImguiBorder
 {
 	enum Enum
@@ -124,7 +136,8 @@ ImguiFontHandle imguiGetCurrentFont();
 ImguiFontHandle imguiCreate(const void* _data = NULL, uint32_t _size = 0, float _fontSize = 15.0f);
 void imguiDestroy();
 
-void imguiBeginFrame(int32_t _mx, int32_t _my, uint8_t _button, int32_t _scroll, uint16_t _width, uint16_t _height, char _inputChar = 0, uint8_t _view = 31);
+void imguiBeginFrame(int32_t _mx, int32_t _my, uint8_t _button, int32_t _scroll, uint16_t _width, uint16_t _height, char _inputChar = 0, uint8_t _view = 255);
+void imguiBeginFrame(int32_t _mx, int32_t _my, uint8_t _button, int32_t _scroll, uint16_t _width, uint16_t _height, uint16_t _surfaceWidth, uint16_t _surfaceHeight, char _inputChar = 0, uint8_t _view = 255);
 void imguiEndFrame();
 
 void imguiDrawText(int _x, int _y, ImguiTextAlign::Enum _align, const char* _text, uint32_t _argb);
@@ -146,7 +159,7 @@ void imguiEndScrollArea(int32_t _r = IMGUI_SCROLL_BAR_R);
 void imguiIndent(uint16_t _width = IMGUI_INDENT_VALUE);
 void imguiUnindent(uint16_t _width = IMGUI_INDENT_VALUE);
 void imguiSeparator(uint16_t _height = IMGUI_SEPARATOR_VALUE);
-void imguiSeparatorLine(uint16_t _height = IMGUI_SEPARATOR_VALUE);
+void imguiSeparatorLine(uint16_t _height = IMGUI_SEPARATOR_VALUE, ImguiAlign::Enum = ImguiAlign::LeftIndented);
 
 int32_t imguiGetWidgetX();
 int32_t imguiGetWidgetY();
@@ -184,7 +197,7 @@ bool imguiImage(bgfx::TextureHandle _image, float _lod, int32_t _width, int32_t 
 bool imguiImage(bgfx::TextureHandle _image, float _lod, float _scale, float _aspect, ImguiAlign::Enum _align = ImguiAlign::LeftIndented, bool _enabled = true, bool _originBottomLeft = false);
 bool imguiImageChannel(bgfx::TextureHandle _image, uint8_t _channel, float _lod, int32_t _width, int32_t _height, ImguiAlign::Enum _align = ImguiAlign::LeftIndented, bool _enabled = true);
 bool imguiImageChannel(bgfx::TextureHandle _image, uint8_t _channel, float _lod, float _scale, float _aspect, ImguiAlign::Enum _align = ImguiAlign::LeftIndented, bool _enabled = true);
-bool imguiCube(bgfx::TextureHandle _cubemap, float _lod = 0.0f, bool _cross = true, ImguiAlign::Enum _align = ImguiAlign::LeftIndented, bool _enabled = true);
+bool imguiCube(bgfx::TextureHandle _cubemap, float _lod = 0.0f, ImguiCubemap::Enum _display = ImguiCubemap::Cross, bool _sameHeight = false, ImguiAlign::Enum _align = ImguiAlign::LeftIndented, bool _enabled = true);
 
 float imguiGetTextLength(const char* _text, ImguiFontHandle _handle);
 bool imguiMouseOverArea();

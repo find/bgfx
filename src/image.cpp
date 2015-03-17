@@ -12,54 +12,62 @@ namespace bgfx
 {
 	static const ImageBlockInfo s_imageBlockInfo[] =
 	{
-		{   4, 4, 4,  8, 1, 1 }, // BC1
-		{   8, 4, 4, 16, 1, 1 }, // BC2
-		{   8, 4, 4, 16, 1, 1 }, // BC3
-		{   4, 4, 4,  8, 1, 1 }, // BC4
-		{   8, 4, 4, 16, 1, 1 }, // BC5
-		{   8, 4, 4, 16, 1, 1 }, // BC6H
-		{   8, 4, 4, 16, 1, 1 }, // BC7
-		{   4, 4, 4,  8, 1, 1 }, // ETC1
-		{   4, 4, 4,  8, 1, 1 }, // ETC2
-		{   8, 4, 4, 16, 1, 1 }, // ETC2A
-		{   4, 4, 4,  8, 1, 1 }, // ETC2A1
-		{   2, 8, 4,  8, 2, 2 }, // PTC12
-		{   4, 4, 4,  8, 2, 2 }, // PTC14
-		{   2, 8, 4,  8, 2, 2 }, // PTC12A
-		{   4, 4, 4,  8, 2, 2 }, // PTC14A
-		{   2, 8, 4,  8, 2, 2 }, // PTC22
-		{   4, 4, 4,  8, 2, 2 }, // PTC24
-		{   0, 0, 0,  0, 1, 1 }, // Unknown
-		{   1, 8, 1,  1, 1, 1 }, // R1
-		{   8, 1, 1,  1, 1, 1 }, // R8
-		{  16, 1, 1,  2, 1, 1 }, // R16
-		{  16, 1, 1,  2, 1, 1 }, // R16F
-		{  32, 1, 1,  4, 1, 1 }, // R32
-		{  32, 1, 1,  4, 1, 1 }, // R32F
-		{  16, 1, 1,  2, 1, 1 }, // RG8
-		{  32, 1, 1,  4, 1, 1 }, // RG16
-		{  32, 1, 1,  4, 1, 1 }, // RG16F
-		{  64, 1, 1,  8, 1, 1 }, // RG32
-		{  64, 1, 1,  8, 1, 1 }, // RG32F
-		{  32, 1, 1,  4, 1, 1 }, // BGRA8
-		{  64, 1, 1,  8, 1, 1 }, // RGBA16
-		{  64, 1, 1,  8, 1, 1 }, // RGBA16F
-		{ 128, 1, 1, 16, 1, 1 }, // RGBA32
-		{ 128, 1, 1, 16, 1, 1 }, // RGBA32F
-		{  16, 1, 1,  2, 1, 1 }, // R5G6B5
-		{  16, 1, 1,  2, 1, 1 }, // RGBA4
-		{  16, 1, 1,  2, 1, 1 }, // RGB5A1
-		{  32, 1, 1,  4, 1, 1 }, // RGB10A2
-		{  32, 1, 1,  4, 1, 1 }, // R11G11B10F
-		{   0, 0, 0,  0, 1, 1 }, // UnknownDepth
-		{  16, 1, 1,  2, 1, 1 }, // D16
-		{  24, 1, 1,  3, 1, 1 }, // D24
-		{  32, 1, 1,  4, 1, 1 }, // D24S8
-		{  32, 1, 1,  4, 1, 1 }, // D32
-		{  16, 1, 1,  2, 1, 1 }, // D16F
-		{  24, 1, 1,  3, 1, 1 }, // D24F
-		{  32, 1, 1,  4, 1, 1 }, // D32F
-		{   8, 1, 1,  1, 1, 1 }, // D0S8
+		//  +------------------ bits per pixel
+		//  |  +--------------- block width
+		//  |  |  +------------ block height
+		//  |  |  |   +-------- block size
+		//  |  |  |   |  +----- min blocks x
+		//  |  |  |   |  |  +-- min blocks y
+		//  |  |  |   |  |  |
+		{   4, 4, 4,  8, 1, 1,  0, 0 }, // BC1
+		{   8, 4, 4, 16, 1, 1,  0, 0 }, // BC2
+		{   8, 4, 4, 16, 1, 1,  0, 0 }, // BC3
+		{   4, 4, 4,  8, 1, 1,  0, 0 }, // BC4
+		{   8, 4, 4, 16, 1, 1,  0, 0 }, // BC5
+		{   8, 4, 4, 16, 1, 1,  0, 0 }, // BC6H
+		{   8, 4, 4, 16, 1, 1,  0, 0 }, // BC7
+		{   4, 4, 4,  8, 1, 1,  0, 0 }, // ETC1
+		{   4, 4, 4,  8, 1, 1,  0, 0 }, // ETC2
+		{   8, 4, 4, 16, 1, 1,  0, 0 }, // ETC2A
+		{   4, 4, 4,  8, 1, 1,  0, 0 }, // ETC2A1
+		{   2, 8, 4,  8, 2, 2,  0, 0 }, // PTC12
+		{   4, 4, 4,  8, 2, 2,  0, 0 }, // PTC14
+		{   2, 8, 4,  8, 2, 2,  0, 0 }, // PTC12A
+		{   4, 4, 4,  8, 2, 2,  0, 0 }, // PTC14A
+		{   2, 8, 4,  8, 2, 2,  0, 0 }, // PTC22
+		{   4, 4, 4,  8, 2, 2,  0, 0 }, // PTC24
+		{   0, 0, 0,  0, 1, 1,  0, 0 }, // Unknown
+		{   1, 8, 1,  1, 1, 1,  0, 0 }, // R1
+		{   8, 1, 1,  1, 1, 1,  0, 0 }, // R8
+		{  16, 1, 1,  2, 1, 1,  0, 0 }, // R16
+		{  16, 1, 1,  2, 1, 1,  0, 0 }, // R16F
+		{  32, 1, 1,  4, 1, 1,  0, 0 }, // R32
+		{  32, 1, 1,  4, 1, 1,  0, 0 }, // R32F
+		{  16, 1, 1,  2, 1, 1,  0, 0 }, // RG8
+		{  32, 1, 1,  4, 1, 1,  0, 0 }, // RG16
+		{  32, 1, 1,  4, 1, 1,  0, 0 }, // RG16F
+		{  64, 1, 1,  8, 1, 1,  0, 0 }, // RG32
+		{  64, 1, 1,  8, 1, 1,  0, 0 }, // RG32F
+		{  32, 1, 1,  4, 1, 1,  0, 0 }, // BGRA8
+		{  32, 1, 1,  4, 1, 1,  0, 0 }, // RGBA8
+		{  64, 1, 1,  8, 1, 1,  0, 0 }, // RGBA16
+		{  64, 1, 1,  8, 1, 1,  0, 0 }, // RGBA16F
+		{ 128, 1, 1, 16, 1, 1,  0, 0 }, // RGBA32
+		{ 128, 1, 1, 16, 1, 1,  0, 0 }, // RGBA32F
+		{  16, 1, 1,  2, 1, 1,  0, 0 }, // R5G6B5
+		{  16, 1, 1,  2, 1, 1,  0, 0 }, // RGBA4
+		{  16, 1, 1,  2, 1, 1,  0, 0 }, // RGB5A1
+		{  32, 1, 1,  4, 1, 1,  0, 0 }, // RGB10A2
+		{  32, 1, 1,  4, 1, 1,  0, 0 }, // R11G11B10F
+		{   0, 0, 0,  0, 1, 1,  0, 0 }, // UnknownDepth
+		{  16, 1, 1,  2, 1, 1, 16, 0 }, // D16
+		{  24, 1, 1,  3, 1, 1, 24, 0 }, // D24
+		{  32, 1, 1,  4, 1, 1, 24, 8 }, // D24S8
+		{  32, 1, 1,  4, 1, 1, 32, 0 }, // D32
+		{  16, 1, 1,  2, 1, 1, 16, 0 }, // D16F
+		{  24, 1, 1,  3, 1, 1, 24, 0 }, // D24F
+		{  32, 1, 1,  4, 1, 1, 32, 0 }, // D32F
+		{   8, 1, 1,  1, 1, 1,  0, 8 }, // D0S8
 	};
 	BX_STATIC_ASSERT(TextureFormat::Count == BX_COUNTOF(s_imageBlockInfo) );
 
@@ -95,6 +103,7 @@ namespace bgfx
 		"RG32",       // RG32
 		"RG32F",      // RG32F
 		"BGRA8",      // BGRA8
+		"RGBA8",      // RGBA8
 		"RGBA16",     // RGBA16
 		"RGBA16F",    // RGBA16F
 		"RGBA32",     // RGBA32
@@ -1309,10 +1318,9 @@ namespace bgfx
 	{
 		uint32_t m_format;
 		TextureFormat::Enum m_textureFormat;
-
 	};
 
-	static TranslateDdsFormat s_translateDdsFormat[] =
+	static TranslateDdsFormat s_translateDdsFourccFormat[] =
 	{
 		{ DDS_DXT1,                  TextureFormat::BC1     },
 		{ DDS_DXT2,                  TextureFormat::BC2     },
@@ -1376,6 +1384,27 @@ namespace bgfx
 		{ DXGI_FORMAT_R10G10B10A2_UNORM,  TextureFormat::RGB10A2 },
 	};
 
+	struct TranslateDdsPixelFormat
+	{
+		uint32_t m_bitCount;
+		uint32_t m_bitmask[4];
+		TextureFormat::Enum m_textureFormat;
+	};
+
+	static TranslateDdsPixelFormat s_translateDdsPixelFormat[] =
+	{
+		{  8, { 0x000000ff, 0x00000000, 0x00000000, 0x00000000 }, TextureFormat::R8      },
+		{ 16, { 0x0000ffff, 0x00000000, 0x00000000, 0x00000000 }, TextureFormat::R16     },
+		{ 16, { 0x00000f00, 0x000000f0, 0x0000000f, 0x0000f000 }, TextureFormat::RGBA4   },
+		{ 16, { 0x0000f800, 0x000007e0, 0x0000001f, 0x00000000 }, TextureFormat::R5G6B5  },
+		{ 16, { 0x00007c00, 0x000003e0, 0x0000001f, 0x00008000 }, TextureFormat::RGB5A1  },
+		{ 32, { 0x00ff0000, 0x0000ff00, 0x000000ff, 0xff000000 }, TextureFormat::BGRA8   },
+		{ 32, { 0x00ff0000, 0x0000ff00, 0x000000ff, 0x00000000 }, TextureFormat::BGRA8   },
+		{ 32, { 0x000003ff, 0x000ffc00, 0x3ff00000, 0xc0000000 }, TextureFormat::RGB10A2 },
+		{ 32, { 0x0000ffff, 0xffff0000, 0x00000000, 0x00000000 }, TextureFormat::RG16    },
+		{ 32, { 0xffffffff, 0x00000000, 0x00000000, 0x00000000 }, TextureFormat::R32     },
+	};
+
 	bool imageParseDds(ImageContainer& _imageContainer, bx::ReaderSeekerI* _reader)
 	{
 		uint32_t headerSize;
@@ -1420,20 +1449,11 @@ namespace bgfx
 		uint32_t fourcc;
 		bx::read(_reader, fourcc);
 
-		uint32_t rgbCount;
-		bx::read(_reader, rgbCount);
+		uint32_t bitCount;
+		bx::read(_reader, bitCount);
 
-		uint32_t rbitmask;
-		bx::read(_reader, rbitmask);
-
-		uint32_t gbitmask;
-		bx::read(_reader, gbitmask);
-
-		uint32_t bbitmask;
-		bx::read(_reader, bbitmask);
-
-		uint32_t abitmask;
-		bx::read(_reader, abitmask);
+		uint32_t bitmask[4];
+		bx::read(_reader, bitmask, sizeof(bitmask) );
 
 		uint32_t caps[4];
 		bx::read(_reader, caps);
@@ -1479,14 +1499,31 @@ namespace bgfx
 
 		if (dxgiFormat == 0)
 		{
-			uint32_t ddsFormat = pixelFlags & DDPF_FOURCC ? fourcc : pixelFlags;
-
-			for (uint32_t ii = 0; ii < BX_COUNTOF(s_translateDdsFormat); ++ii)
+			if (DDPF_FOURCC == (pixelFlags & DDPF_FOURCC) )
 			{
-				if (s_translateDdsFormat[ii].m_format == ddsFormat)
+				for (uint32_t ii = 0; ii < BX_COUNTOF(s_translateDdsFourccFormat); ++ii)
 				{
-					format = s_translateDdsFormat[ii].m_textureFormat;
-					break;
+					if (s_translateDdsFourccFormat[ii].m_format == fourcc)
+					{
+						format = s_translateDdsFourccFormat[ii].m_textureFormat;
+						break;
+					}
+				}
+			}
+			else
+			{
+				for (uint32_t ii = 0; ii < BX_COUNTOF(s_translateDdsPixelFormat); ++ii)
+				{
+					const TranslateDdsPixelFormat& pf = s_translateDdsPixelFormat[ii];
+					if (pf.m_bitCount   == bitCount
+					&&  pf.m_bitmask[0] == bitmask[0]
+					&&  pf.m_bitmask[1] == bitmask[1]
+					&&  pf.m_bitmask[2] == bitmask[2]
+					&&  pf.m_bitmask[3] == bitmask[3])
+					{
+						format = pf.m_textureFormat;
+						break;
+					}
 				}
 			}
 		}

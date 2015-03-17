@@ -4,21 +4,20 @@
  */
 
 #include "bgfx_p.h"
-
-#if BGFX_CONFIG_RENDERER_DIRECT3D12
-#	include "../../d3d12/src/renderer_d3d12.cpp"
+#if BGFX_CONFIG_RENDERER_VULKAN
+#	include "../../vk/src/renderer_vk.cpp"
 #else
 
 namespace bgfx
 {
-	RendererContextI* rendererCreateD3D12()
+	RendererContextI* rendererCreateVK()
 	{
 		return NULL;
 	}
 
-	void rendererDestroyD3D12()
+	void rendererDestroyVK()
 	{
 	}
 } // namespace bgfx
 
-#endif // BGFX_CONFIG_RENDERER_DIRECT3D12
+#endif // BGFX_CONFIG_RENDERER_VULKAN

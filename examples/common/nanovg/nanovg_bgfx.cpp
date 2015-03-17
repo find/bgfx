@@ -132,6 +132,7 @@ namespace
 
 		struct GLNVGtexture* textures;
 		float view[2];
+		float surface[2];
 		int ntextures;
 		int ctextures;
 		int textureId;
@@ -239,6 +240,7 @@ namespace
 			break;
 
 		case bgfx::RendererType::Direct3D11:
+		case bgfx::RendererType::Direct3D12:
 			vs_nanovg_fill = bgfx::makeRef(vs_nanovg_fill_dx11, sizeof(vs_nanovg_fill_dx11) );
 			fs_nanovg_fill = bgfx::makeRef(fs_nanovg_fill_dx11, sizeof(fs_nanovg_fill_dx11) );
 			break;
@@ -515,11 +517,13 @@ namespace
 		gl->th = handle;
 	}
 
-	static void nvgRenderViewport(void* _userPtr, int width, int height)
+	static void nvgRenderViewport(void* _userPtr, int width, int height, int surfaceWidth, int surfaceHeight)
 	{
 		struct GLNVGcontext* gl = (struct GLNVGcontext*)_userPtr;
 		gl->view[0] = (float)width;
 		gl->view[1] = (float)height;
+		gl->surface[0] = (float)surfaceWidth;
+		gl->surface[1] = (float)surfaceHeight;
 		bgfx::setViewRect(gl->viewid, 0, 0, width, height);
 	}
 
@@ -719,7 +723,7 @@ namespace
 								);
 			}
 
-			bgfx::setUniform(gl->u_viewSize, gl->view);
+			bgfx::setUniform(gl->u_viewSize, gl->surface);
 
 			for (uint32_t ii = 0, num = gl->ncalls; ii < num; ++ii)
 			{
@@ -1048,6 +1052,13 @@ error:
 	}
 
 	return NULL;
+}
+
+void nvgViewId(struct NVGcontext* ctx, unsigned char viewid)
+{
+	struct NVGparams* params = nvgInternalParams(ctx);
+	struct GLNVGcontext* gl = (struct GLNVGcontext*)params->userPtr;
+	gl->viewid = uint8_t(viewid);
 }
 
 void nvgDelete(struct NVGcontext* ctx)
