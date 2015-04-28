@@ -217,22 +217,7 @@ namespace stl
 
 namespace bgfx
 {
-#if BX_PLATFORM_ANDROID
-	extern ::ANativeWindow* g_bgfxAndroidWindow;
-#elif BX_PLATFORM_IOS
-	extern void* g_bgfxEaglLayer;
-#elif BX_PLATFORM_LINUX || BX_PLATFORM_FREEBSD
-	extern void*    g_bgfxX11Display;
-	extern uint32_t g_bgfxX11Window;
-	extern void*    g_bgfxGLX;
-#elif BX_PLATFORM_OSX
-	extern void* g_bgfxNSWindow;
-	extern void* g_bgfxNSGL;
-#elif BX_PLATFORM_WINDOWS
-	extern ::HWND g_bgfxHwnd;
-#elif BX_PLATFORM_WINRT
-	extern ::IUnknown* g_bgfxCoreWindow;
-#endif // BX_PLATFORM_*
+	extern PlatformData g_platformData;
 
 #if BGFX_CONFIG_MAX_DRAW_CALLS < (64<<10)
 	typedef uint16_t RenderItemCount;
@@ -1830,7 +1815,7 @@ namespace bgfx
 		virtual ~RendererContextI() = 0;
 		virtual RendererType::Enum getRendererType() const = 0;
 		virtual const char* getRendererName() const = 0;
-		virtual void flip() = 0;
+		virtual void flip(HMD& _hmd) = 0;
 		virtual void createIndexBuffer(IndexBufferHandle _handle, Memory* _mem, uint8_t _flags) = 0;
 		virtual void destroyIndexBuffer(IndexBufferHandle _handle) = 0;
 		virtual void createVertexDecl(VertexDeclHandle _handle, const VertexDecl& _decl) = 0;
@@ -1883,7 +1868,7 @@ namespace bgfx
 	{
 		Context()
 			: m_render(&m_frame[0])
-			, m_submit(&m_frame[1])
+			, m_submit(&m_frame[BGFX_CONFIG_MULTITHREADED ? 1 : 0])
 			, m_numFreeDynamicIndexBufferHandles(0)
 			, m_numFreeDynamicVertexBufferHandles(0)
 			, m_clearColorDirty(0)
@@ -1893,7 +1878,7 @@ namespace bgfx
 			, m_renderCtx(NULL)
 			, m_rendererInitialized(false)
 			, m_exit(false)
-			, m_flipAfterSubmit(false)
+			, m_flipAfterRender(false)
 		{
 		}
 
@@ -1928,7 +1913,7 @@ namespace bgfx
 			m_resolution.m_height = bx::uint32_max(1, _height);
 			m_resolution.m_flags  = _flags;
 
-			m_flipAfterSubmit = !!(_flags & BGFX_RESET_FLIP_AFTER_SUBMIT);
+			m_flipAfterRender = !!(_flags & BGFX_RESET_FLIP_AFTER_RENDER);
 
 			memset(m_fb, 0xff, sizeof(m_fb) );
 
@@ -1936,7 +1921,7 @@ namespace bgfx
 			{
 				uint16_t textureIdx = m_textureHandle.getHandleAt(ii);
 				const TextureRef& textureRef = m_textureRef[textureIdx];
-				if (BackbufferRatio::None != textureRef.m_bbRatio)
+				if (BackbufferRatio::Count != textureRef.m_bbRatio)
 				{
 					TextureHandle handle = { textureIdx };
 					resizeTexture(handle
@@ -2810,7 +2795,7 @@ namespace bgfx
 		void resizeTexture(TextureHandle _handle, uint16_t _width, uint16_t _height)
 		{
 			const TextureRef& textureRef = m_textureRef[_handle.idx];
-			BX_CHECK(BackbufferRatio::None != textureRef.m_bbRatio, "");
+			BX_CHECK(BackbufferRatio::Count != textureRef.m_bbRatio, "");
 
 			getTextureSizeFromRatio(BackbufferRatio::Enum(textureRef.m_bbRatio), _width, _height);
 
@@ -2884,6 +2869,7 @@ namespace bgfx
 					TextureHandle texHandle = _handles[ii];
 					BGFX_CHECK_HANDLE("createFrameBuffer texture handle", m_textureHandle, texHandle);
 					BX_CHECK(bbRatio == m_textureRef[texHandle.idx].m_bbRatio, "Mismatch in texture back-buffer ratio.");
+					BX_UNUSED(bbRatio);
 
 					cmdbuf.write(texHandle);
 
@@ -3424,7 +3410,7 @@ namespace bgfx
 		}
 #endif // BGFX_CONFIG_MULTITHREADED
 
-		Frame m_frame[2];
+		Frame m_frame[1+(BGFX_CONFIG_MULTITHREADED ? 1 : 0)];
 		Frame* m_render;
 		Frame* m_submit;
 
@@ -3530,7 +3516,7 @@ namespace bgfx
 
 		bool m_rendererInitialized;
 		bool m_exit;
-		bool m_flipAfterSubmit;
+		bool m_flipAfterRender;
 
 		typedef UpdateBatchT<256> TextureUpdateBatch;
 		BX_ALIGN_DECL_CACHE_LINE(TextureUpdateBatch m_textureUpdateBatch);
