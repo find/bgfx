@@ -206,6 +206,7 @@ namespace bgfx
 
 	static const uint16_t invalidHandle = UINT16_MAX;
 
+	BGFX_HANDLE(IndirectBufferHandle);
 	BGFX_HANDLE(DynamicIndexBufferHandle);
 	BGFX_HANDLE(DynamicVertexBufferHandle);
 	BGFX_HANDLE(FrameBufferHandle);
@@ -869,6 +870,12 @@ namespace bgfx
 	///
 	const InstanceDataBuffer* allocInstanceDataBuffer(uint32_t _num, uint16_t _stride);
 
+	///
+	IndirectBufferHandle createIndirectBuffer(uint32_t _num);
+
+	///
+	void destroyIndirectBuffer(IndirectBufferHandle _handle);
+
 	/// Create shader from memory buffer.
 	ShaderHandle createShader(const Memory* _mem);
 
@@ -1203,6 +1210,17 @@ namespace bgfx
 
 	/// Set view view and projection matrices, all draw primitives in this
 	/// view will use these matrices.
+	///
+	/// @param _id View id.
+	/// @param _view View matrix.
+	/// @param _projL Projection matrix. When using stereo rendering this projection matrix
+	///   represent projection matrix for left eye.
+	/// @param _flags View flags. Use
+	///   - `BGFX_VIEW_NONE` - View will be rendered only once if stereo mode is enabled.
+	///   - `BGFX_VIEW_STEREO` - View will be rendered for both eyes if stereo mode is enabled. When
+	///     stereo mode is disabled this flag doesn't have effect.
+	/// @param _projR Projection matrix for right eye in stereo mode.
+	///
 	void setViewTransform(uint8_t _id, const void* _view, const void* _projL, uint8_t _flags = BGFX_VIEW_STEREO, const void* _projR = NULL);
 
 	/// Post submit view reordering.
@@ -1377,6 +1395,9 @@ namespace bgfx
 	uint32_t submit(uint8_t _id, int32_t _depth = 0);
 
 	///
+	uint32_t submit(uint8_t _id, IndirectBufferHandle _indirectHandle, uint16_t _start = 0, uint16_t _num = 1, int32_t _depth = 0);
+
+	///
 	void setBuffer(uint8_t _stage, IndexBufferHandle _handle, Access::Enum _access);
 
 	///
@@ -1389,13 +1410,19 @@ namespace bgfx
 	void setBuffer(uint8_t _stage, DynamicVertexBufferHandle _handle, Access::Enum _access);
 
 	///
+	void setBuffer(uint8_t _stage, IndirectBufferHandle _handle, Access::Enum _access);
+
+	///
 	void setImage(uint8_t _stage, UniformHandle _sampler, TextureHandle _handle, uint8_t _mip, Access::Enum _access, TextureFormat::Enum _format = TextureFormat::Count);
 
 	///
 	void setImage(uint8_t _stage, UniformHandle _sampler, FrameBufferHandle _handle, uint8_t _attachment, Access::Enum _access, TextureFormat::Enum _format = TextureFormat::Count);
 
 	/// Dispatch compute.
-	void dispatch(uint8_t _id, ProgramHandle _handle, uint16_t _numX = 1, uint16_t _numY = 1, uint16_t _numZ = 1, uint8_t _flags = BGFX_SUBMIT_EYE_FIRST);
+	uint32_t dispatch(uint8_t _id, ProgramHandle _handle, uint16_t _numX = 1, uint16_t _numY = 1, uint16_t _numZ = 1, uint8_t _flags = BGFX_SUBMIT_EYE_FIRST);
+
+	///
+	uint32_t dispatch(uint8_t _id, ProgramHandle _handle, IndirectBufferHandle _indirectHandle, uint16_t _start = 0, uint16_t _num = 1, uint8_t _flags = BGFX_SUBMIT_EYE_FIRST);
 
 	/// Discard all previously set state for draw or compute call.
 	void discard();

@@ -305,6 +305,22 @@ typedef uint64_t GLuint64;
 #	define GL_COMPRESSED_RGBA_PVRTC_4BPPV2_IMG 0x9138
 #endif // GL_COMPRESSED_RGBA_PVRTC_4BPPV2_IMG
 
+#ifndef GL_COMPRESSED_SRGB_PVRTC_2BPPV1_EXT
+#	define GL_COMPRESSED_SRGB_PVRTC_2BPPV1_EXT 0x8A54
+#endif // GL_COMPRESSED_SRGB_PVRTC_2BPPV1_EXT
+
+#ifndef GL_COMPRESSED_SRGB_PVRTC_4BPPV1_EXT
+#	define GL_COMPRESSED_SRGB_PVRTC_4BPPV1_EXT 0x8A55
+#endif // GL_COMPRESSED_SRGB_PVRTC_4BPPV1_EXT
+
+#ifndef GL_COMPRESSED_SRGB_ALPHA_PVRTC_2BPPV1_EXT
+#	define GL_COMPRESSED_SRGB_ALPHA_PVRTC_2BPPV1_EXT 0x8A56
+#endif // GL_COMPRESSED_SRGB_ALPHA_PVRTC_2BPPV1_EXT
+
+#ifndef GL_COMPRESSED_SRGB_ALPHA_PVRTC_4BPPV1_EXT
+#	define GL_COMPRESSED_SRGB_ALPHA_PVRTC_4BPPV1_EXT 0x8A57
+#endif // GL_COMPRESSED_SRGB_ALPHA_PVRTC_4BPPV1_EXT
+
 #ifndef GL_COMPRESSED_RGBA_BPTC_UNORM_ARB
 #	define GL_COMPRESSED_RGBA_BPTC_UNORM_ARB 0x8E8C
 #endif // GL_COMPRESSED_RGBA_BPTC_UNORM_ARB
@@ -621,6 +637,14 @@ typedef uint64_t GLuint64;
 #	define GL_TEXTURE_CUBE_MAP_SEAMLESS 0x884F
 #endif // GL_TEXTURE_CUBE_MAP_SEAMLESS
 
+#ifndef GL_DRAW_INDIRECT_BUFFER
+#	define GL_DRAW_INDIRECT_BUFFER 0x8F3F
+#endif // GL_DRAW_INDIRECT_BUFFER
+
+#ifndef GL_DISPATCH_INDIRECT_BUFFER
+#	define GL_DISPATCH_INDIRECT_BUFFER 0x90EE
+#endif // GL_DISPATCH_INDIRECT_BUFFER
+
 #if BX_PLATFORM_NACL
 #	include "glcontext_ppapi.h"
 #elif BX_PLATFORM_WINDOWS
@@ -864,32 +888,35 @@ namespace bgfx { namespace gl
 
 	struct VertexBufferGL
 	{
-		void create(uint32_t _size, void* _data, VertexDeclHandle _declHandle)
+		void create(uint32_t _size, void* _data, VertexDeclHandle _declHandle, uint8_t _flags)
 		{
 			m_size = _size;
 			m_decl = _declHandle;
+			const bool drawIndirect = 0 != (_flags & BGFX_BUFFER_DRAW_INDIRECT);
+
+			m_target = drawIndirect ? GL_DRAW_INDIRECT_BUFFER : GL_ARRAY_BUFFER;
 
 			GL_CHECK(glGenBuffers(1, &m_id) );
 			BX_CHECK(0 != m_id, "Failed to generate buffer id.");
-			GL_CHECK(glBindBuffer(GL_ARRAY_BUFFER, m_id) );
-			GL_CHECK(glBufferData(GL_ARRAY_BUFFER
+			GL_CHECK(glBindBuffer(m_target, m_id) );
+			GL_CHECK(glBufferData(m_target
 				, _size
 				, _data
 				, (NULL==_data) ? GL_DYNAMIC_DRAW : GL_STATIC_DRAW
 				) );
-			GL_CHECK(glBindBuffer(GL_ARRAY_BUFFER, 0) );
+			GL_CHECK(glBindBuffer(m_target, 0) );
 		}
 
 		void update(uint32_t _offset, uint32_t _size, void* _data)
 		{
 			BX_CHECK(0 != m_id, "Updating invalid vertex buffer.");
-			GL_CHECK(glBindBuffer(GL_ARRAY_BUFFER, m_id) );
-			GL_CHECK(glBufferSubData(GL_ARRAY_BUFFER
+			GL_CHECK(glBindBuffer(m_target, m_id) );
+			GL_CHECK(glBufferSubData(m_target
 				, _offset
 				, _size
 				, _data
 				) );
-			GL_CHECK(glBindBuffer(GL_ARRAY_BUFFER, 0) );
+			GL_CHECK(glBindBuffer(m_target, 0) );
 		}
 
 		void destroy();
@@ -900,6 +927,7 @@ namespace bgfx { namespace gl
 		}
 
 		GLuint m_id;
+		GLenum m_target;
 		uint32_t m_size;
 		VertexDeclHandle m_decl;
 		VaoCacheRef m_vcref;
