@@ -869,7 +869,7 @@ namespace bgfx { namespace gl
 
 	struct IndexBufferGL
 	{
-		void create(uint32_t _size, void* _data, uint8_t _flags)
+		void create(uint32_t _size, void* _data, uint16_t _flags)
 		{
 			m_size  = _size;
 			m_flags = _flags;
@@ -907,12 +907,12 @@ namespace bgfx { namespace gl
 		GLuint m_id;
 		uint32_t m_size;
 		VaoCacheRef m_vcref;
-		uint8_t m_flags;
+		uint16_t m_flags;
 	};
 
 	struct VertexBufferGL
 	{
-		void create(uint32_t _size, void* _data, VertexDeclHandle _declHandle, uint8_t _flags)
+		void create(uint32_t _size, void* _data, VertexDeclHandle _declHandle, uint16_t _flags)
 		{
 			m_size = _size;
 			m_decl = _declHandle;
@@ -971,7 +971,7 @@ namespace bgfx { namespace gl
 		{
 		}
 
-		bool init(GLenum _target, uint32_t _width, uint32_t _height, uint8_t _format, uint8_t _numMips, uint32_t _flags);
+		bool init(GLenum _target, uint32_t _width, uint32_t _height, uint32_t _depth, uint8_t _format, uint8_t _numMips, uint32_t _flags);
 		void create(const Memory* _mem, uint32_t _flags, uint8_t _skip);
 		void destroy();
 		void update(uint8_t _side, uint8_t _mip, const Rect& _rect, uint16_t _z, uint16_t _depth, uint16_t _pitch, const Memory* _mem);
@@ -987,6 +987,7 @@ namespace bgfx { namespace gl
 		uint32_t m_currentFlags;
 		uint32_t m_width;
 		uint32_t m_height;
+		uint32_t m_depth;
 		uint8_t m_numMips;
 		uint8_t m_requestedFormat;
 		uint8_t m_textureFormat;
