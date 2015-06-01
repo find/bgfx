@@ -588,13 +588,8 @@ namespace bgfx
 
 	const char* s_uniformTypeName[] =
 	{
-		"int",
-		"float",
+		"int1",
 		NULL,
-		"int",
-		"float",
-		"vec2",
-		"vec3",
 		"vec4",
 		"mat3",
 		"mat4",
@@ -781,12 +776,7 @@ namespace bgfx
 	const uint32_t g_uniformTypeSize[UniformType::Count+1] =
 	{
 		sizeof(int32_t),
-		sizeof(float),
 		0,
-		1*sizeof(int32_t),
-		1*sizeof(float),
-		2*sizeof(float),
-		3*sizeof(float),
 		4*sizeof(float),
 		3*3*sizeof(float),
 		4*4*sizeof(float),
@@ -2508,6 +2498,7 @@ again:
 
 	TextureHandle createTexture2D(uint16_t _width, uint16_t _height, uint8_t _numMips, TextureFormat::Enum _format, uint32_t _flags, const Memory* _mem)
 	{
+		BX_CHECK(_width > 0 && _height > 0, "Invalid texture size (width %d, height %d).", _width, _height);
 		return createTexture2D(BackbufferRatio::Count, _width, _height, _numMips, _format, _flags, _mem);
 	}
 
