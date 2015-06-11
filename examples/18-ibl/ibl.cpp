@@ -311,7 +311,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 			, mouseState.m_my
 			, (mouseState.m_buttons[entry::MouseButton::Left  ] ? IMGUI_MBUT_LEFT  : 0)
 			| (mouseState.m_buttons[entry::MouseButton::Right ] ? IMGUI_MBUT_RIGHT : 0)
-			, 0
+			, mouseState.m_mz
 			, width
 			, height
 			);
@@ -347,7 +347,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		{
 			settings.m_crossCubemapPreview = ImguiCubemap::Enum( (settings.m_crossCubemapPreview+1) % ImguiCubemap::Count);
 		}
-		imguiSlider("Texture LOD", lod, float(0.0f), 10.1f, 0.1f);
+		imguiSlider("Texture LOD", lod, 0.0f, 10.1f, 0.1f);
 
 		imguiEndScrollArea();
 
@@ -479,7 +479,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		bgfx::setViewRect(1, 0, 0, width, height);
 
 		// View 0.
-		bgfx::setTexture(4, s_texCube, lightProbes[currentLightProbe].m_tex);
+		bgfx::setTexture(0, s_texCube, lightProbes[currentLightProbe].m_tex);
 		bgfx::setProgram(programSky);
 		bgfx::setState(BGFX_STATE_RGB_WRITE|BGFX_STATE_ALPHA_WRITE);
 		screenSpaceQuad( (float)width, (float)height, true);
@@ -500,8 +500,8 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 				, 0.0f
 				);
 
-		bgfx::setTexture(4, s_texCube,    lightProbes[currentLightProbe].m_tex);
-		bgfx::setTexture(5, s_texCubeIrr, lightProbes[currentLightProbe].m_texIrr);
+		bgfx::setTexture(0, s_texCube,    lightProbes[currentLightProbe].m_tex);
+		bgfx::setTexture(1, s_texCubeIrr, lightProbes[currentLightProbe].m_texIrr);
 		meshSubmit(meshBunny, 1, programMesh, mtx);
 
 		// Advance to next frame. Rendering thread will be kicked to

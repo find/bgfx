@@ -178,7 +178,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 	state[1]->m_viewId  = RENDER_SCENE_PASS_ID;
 	state[1]->m_numTextures = 1;
 	state[1]->m_textures[0].m_flags = UINT32_MAX;
-	state[1]->m_textures[0].m_stage = 4;
+	state[1]->m_textures[0].m_stage = 0;
 	state[1]->m_textures[0].m_sampler = u_shadowMap;
 	state[1]->m_textures[0].m_texture = shadowMapTexture;
 
