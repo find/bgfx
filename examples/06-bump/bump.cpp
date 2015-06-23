@@ -148,12 +148,12 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 	bgfx::IndexBufferHandle ibh = bgfx::createIndexBuffer(bgfx::makeRef(s_cubeIndices, sizeof(s_cubeIndices) ) );
 
 	// Create texture sampler uniforms.
-	bgfx::UniformHandle u_texColor  = bgfx::createUniform("u_texColor",  bgfx::UniformType::Uniform1iv);
-	bgfx::UniformHandle u_texNormal = bgfx::createUniform("u_texNormal", bgfx::UniformType::Uniform1iv);
+	bgfx::UniformHandle s_texColor  = bgfx::createUniform("s_texColor",  bgfx::UniformType::Int1);
+	bgfx::UniformHandle s_texNormal = bgfx::createUniform("s_texNormal", bgfx::UniformType::Int1);
 
 	uint16_t numLights = 4;
-	bgfx::UniformHandle u_lightPosRadius = bgfx::createUniform("u_lightPosRadius", bgfx::UniformType::Uniform4fv, numLights);
-	bgfx::UniformHandle u_lightRgbInnerR = bgfx::createUniform("u_lightRgbInnerR", bgfx::UniformType::Uniform4fv, numLights);
+	bgfx::UniformHandle u_lightPosRadius = bgfx::createUniform("u_lightPosRadius", bgfx::UniformType::Vec4, numLights);
+	bgfx::UniformHandle u_lightRgbInnerR = bgfx::createUniform("u_lightRgbInnerR", bgfx::UniformType::Vec4, numLights);
 
 	// Create program from shaders.
 	bgfx::ProgramHandle program = loadProgram(instancingSupported ? "vs_bump_instanced" : "vs_bump", "fs_bump");
@@ -192,10 +192,10 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 		float at[3]  = { 0.0f, 0.0f,  0.0f };
 		float eye[3] = { 0.0f, 0.0f, -7.0f };
-		
+
 		// Set view and projection matrix for view 0.
 		const bgfx::HMD* hmd = bgfx::getHMD();
-		if (NULL != hmd)
+		if (NULL != hmd && 0 != (hmd->flags & BGFX_HMD_RENDERING))
 		{
 			float view[16];
 			bx::mtxQuatTranslationHMD(view, hmd->eye[0].rotation, eye);
@@ -227,8 +227,8 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		float lightPosRadius[4][4];
 		for (uint32_t ii = 0; ii < numLights; ++ii)
 		{
-			lightPosRadius[ii][0] = sin( (time*(0.1f + ii*0.17f) + ii*bx::piHalf*1.37f ) )*3.0f;
-			lightPosRadius[ii][1] = cos( (time*(0.2f + ii*0.29f) + ii*bx::piHalf*1.49f ) )*3.0f;
+			lightPosRadius[ii][0] = sinf( (time*(0.1f + ii*0.17f) + ii*bx::piHalf*1.37f ) )*3.0f;
+			lightPosRadius[ii][1] = cosf( (time*(0.2f + ii*0.29f) + ii*bx::piHalf*1.49f ) )*3.0f;
 			lightPosRadius[ii][2] = -2.5f;
 			lightPosRadius[ii][3] = 3.0f;
 		}
@@ -280,8 +280,8 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 					bgfx::setIndexBuffer(ibh);
 
 					// Bind textures.
-					bgfx::setTexture(0, u_texColor, textureColor);
-					bgfx::setTexture(1, u_texNormal, textureNormal);
+					bgfx::setTexture(0, s_texColor, textureColor);
+					bgfx::setTexture(1, s_texNormal, textureNormal);
 
 					// Set render states.
 					bgfx::setState(0
@@ -320,8 +320,8 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 					bgfx::setIndexBuffer(ibh);
 
 					// Bind textures.
-					bgfx::setTexture(0, u_texColor, textureColor);
-					bgfx::setTexture(1, u_texNormal, textureNormal);
+					bgfx::setTexture(0, s_texColor, textureColor);
+					bgfx::setTexture(1, s_texNormal, textureNormal);
 
 					// Set render states.
 					bgfx::setState(0
@@ -338,7 +338,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 			}
 		}
 
-		// Advance to next frame. Rendering thread will be kicked to 
+		// Advance to next frame. Rendering thread will be kicked to
 		// process submitted rendering primitives.
 		bgfx::frame();
 	}
@@ -349,8 +349,8 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 	bgfx::destroyProgram(program);
 	bgfx::destroyTexture(textureColor);
 	bgfx::destroyTexture(textureNormal);
-	bgfx::destroyUniform(u_texColor);
-	bgfx::destroyUniform(u_texNormal);
+	bgfx::destroyUniform(s_texColor);
+	bgfx::destroyUniform(s_texNormal);
 	bgfx::destroyUniform(u_lightPosRadius);
 	bgfx::destroyUniform(u_lightRgbInnerR);
 

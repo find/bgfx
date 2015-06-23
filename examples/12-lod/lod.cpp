@@ -20,7 +20,7 @@ KnightPos knightTour[8*4] =
 	{0,0}, {1,2}, {3,3}, {4,1}, {5,3}, {7,2}, {6,0}, {5,2},
 	{7,3}, {6,1}, {4,0}, {3,2}, {2,0}, {0,1}, {1,3}, {2,1},
 	{0,2}, {1,0}, {2,2}, {0,3}, {1,1}, {3,0}, {4,2}, {5,0},
-	{7,1}, {6,3}, {5,1}, {7,0}, {6,2}, {4,3}, {3,1}, {2,3}
+	{7,1}, {6,3}, {5,1}, {7,0}, {6,2}, {4,3}, {3,1}, {2,3},
 };
 
 int _main_(int /*_argc*/, char** /*_argv*/)
@@ -44,9 +44,9 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		, 0
 		);
 
-	bgfx::UniformHandle u_texColor   = bgfx::createUniform("u_texColor",   bgfx::UniformType::Uniform1iv);
-	bgfx::UniformHandle u_stipple    = bgfx::createUniform("u_stipple",    bgfx::UniformType::Uniform3fv);
-	bgfx::UniformHandle u_texStipple = bgfx::createUniform("u_texStipple", bgfx::UniformType::Uniform1iv);
+	bgfx::UniformHandle s_texColor   = bgfx::createUniform("s_texColor",   bgfx::UniformType::Int1);
+	bgfx::UniformHandle s_texStipple = bgfx::createUniform("s_texStipple", bgfx::UniformType::Int1);
+	bgfx::UniformHandle u_stipple    = bgfx::createUniform("u_stipple",    bgfx::UniformType::Vec4);
 
 	bgfx::ProgramHandle program = loadProgram("vs_tree", "fs_tree");
 
@@ -55,15 +55,19 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 	bgfx::TextureHandle textureStipple;
 
-	const bgfx::Memory* stipple = bgfx::alloc(8*4);
-	memset(stipple->data, 0, stipple->size);
+	const bgfx::Memory* stippleTex = bgfx::alloc(8*4);
+	memset(stippleTex->data, 0, stippleTex->size);
 
 	for (uint32_t ii = 0; ii < 32; ++ii)
 	{
-		stipple->data[knightTour[ii].m_y * 8 + knightTour[ii].m_x] = ii*4;
+		stippleTex->data[knightTour[ii].m_y * 8 + knightTour[ii].m_x] = ii*4;
 	}
 
-	textureStipple = bgfx::createTexture2D(8, 4, 1, bgfx::TextureFormat::R8, BGFX_TEXTURE_MAG_POINT|BGFX_TEXTURE_MIN_POINT, stipple);
+	textureStipple = bgfx::createTexture2D(8, 4, 1
+			, bgfx::TextureFormat::R8
+			, BGFX_TEXTURE_MAG_POINT|BGFX_TEXTURE_MIN_POINT
+			, stippleTex
+			);
 
 	Mesh* meshTop[3] =
 	{
@@ -115,7 +119,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 			, mouseState.m_my
 			, (mouseState.m_buttons[entry::MouseButton::Left  ] ? IMGUI_MBUT_LEFT  : 0)
 			| (mouseState.m_buttons[entry::MouseButton::Right ] ? IMGUI_MBUT_RIGHT : 0)
-			, 0
+			, mouseState.m_mz
 			, width
 			, height
 			);
@@ -159,7 +163,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 		// Set view and projection matrix for view 0.
 		const bgfx::HMD* hmd = bgfx::getHMD();
-		if (NULL != hmd)
+		if (NULL != hmd && 0 != (hmd->flags & BGFX_HMD_RENDERING))
 		{
 			float view[16];
 			bx::mtxQuatTranslationHMD(view, hmd->eye[0].rotation, eye);
@@ -205,26 +209,26 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		stippleInv[1] = 1.0f;
 		stippleInv[2] = (float(transitionFrame)*4.0f/255.0f) - (1.0f/255.0f);
 
-		bgfx::setTexture(0, u_texColor, textureBark);
-		bgfx::setTexture(1, u_texStipple, textureStipple);
+		bgfx::setTexture(0, s_texColor, textureBark);
+		bgfx::setTexture(1, s_texStipple, textureStipple);
 		bgfx::setUniform(u_stipple, stipple);
 		meshSubmit(meshTrunk[mainLOD], 0, program, mtx, stateOpaque);
 
-		bgfx::setTexture(0, u_texColor, textureLeafs);
-		bgfx::setTexture(1, u_texStipple, textureStipple);
+		bgfx::setTexture(0, s_texColor, textureLeafs);
+		bgfx::setTexture(1, s_texStipple, textureStipple);
 		bgfx::setUniform(u_stipple, stipple);
 		meshSubmit(meshTop[mainLOD], 0, program, mtx, stateTransparent);
 
 		if (transitions
 		&& (transitionFrame != 0) )
 		{
-			bgfx::setTexture(0, u_texColor, textureBark);
-			bgfx::setTexture(1, u_texStipple, textureStipple);
+			bgfx::setTexture(0, s_texColor, textureBark);
+			bgfx::setTexture(1, s_texStipple, textureStipple);
 			bgfx::setUniform(u_stipple, stippleInv);
 			meshSubmit(meshTrunk[targetLOD], 0, program, mtx, stateOpaque);
 
-			bgfx::setTexture(0, u_texColor, textureLeafs);
-			bgfx::setTexture(1, u_texStipple, textureStipple);
+			bgfx::setTexture(0, s_texColor, textureLeafs);
+			bgfx::setTexture(1, s_texStipple, textureStipple);
 			bgfx::setUniform(u_stipple, stippleInv);
 			meshSubmit(meshTop[targetLOD], 0, program, mtx, stateTransparent);
 		}
@@ -275,9 +279,9 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 	// Cleanup.
 	bgfx::destroyProgram(program);
 
-	bgfx::destroyUniform(u_texColor);
+	bgfx::destroyUniform(s_texColor);
+	bgfx::destroyUniform(s_texStipple);
 	bgfx::destroyUniform(u_stipple);
-	bgfx::destroyUniform(u_texStipple);
 
 	bgfx::destroyTexture(textureStipple);
 	bgfx::destroyTexture(textureLeafs);

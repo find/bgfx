@@ -274,17 +274,17 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 	bgfx::IndexBufferHandle ibh = bgfx::createIndexBuffer(bgfx::makeRef(s_cubeIndices, sizeof(s_cubeIndices) ) );
 
 	// Create texture sampler uniforms.
-	bgfx::UniformHandle s_texColor  = bgfx::createUniform("s_texColor",  bgfx::UniformType::Uniform1iv);
-	bgfx::UniformHandle s_texNormal = bgfx::createUniform("s_texNormal", bgfx::UniformType::Uniform1iv);
+	bgfx::UniformHandle s_texColor  = bgfx::createUniform("s_texColor",  bgfx::UniformType::Int1);
+	bgfx::UniformHandle s_texNormal = bgfx::createUniform("s_texNormal", bgfx::UniformType::Int1);
 
-	bgfx::UniformHandle s_albedo = bgfx::createUniform("s_albedo", bgfx::UniformType::Uniform1iv);
-	bgfx::UniformHandle s_normal = bgfx::createUniform("s_normal", bgfx::UniformType::Uniform1iv);
-	bgfx::UniformHandle s_depth  = bgfx::createUniform("s_depth",  bgfx::UniformType::Uniform1iv);
-	bgfx::UniformHandle s_light  = bgfx::createUniform("s_light",  bgfx::UniformType::Uniform1iv);
+	bgfx::UniformHandle s_albedo = bgfx::createUniform("s_albedo", bgfx::UniformType::Int1);
+	bgfx::UniformHandle s_normal = bgfx::createUniform("s_normal", bgfx::UniformType::Int1);
+	bgfx::UniformHandle s_depth  = bgfx::createUniform("s_depth",  bgfx::UniformType::Int1);
+	bgfx::UniformHandle s_light  = bgfx::createUniform("s_light",  bgfx::UniformType::Int1);
 
-	bgfx::UniformHandle u_mtx            = bgfx::createUniform("u_mtx",            bgfx::UniformType::Uniform4x4fv);
-	bgfx::UniformHandle u_lightPosRadius = bgfx::createUniform("u_lightPosRadius", bgfx::UniformType::Uniform4fv);
-	bgfx::UniformHandle u_lightRgbInnerR = bgfx::createUniform("u_lightRgbInnerR", bgfx::UniformType::Uniform4fv);
+	bgfx::UniformHandle u_mtx            = bgfx::createUniform("u_mtx",            bgfx::UniformType::Mat4);
+	bgfx::UniformHandle u_lightPosRadius = bgfx::createUniform("u_lightPosRadius", bgfx::UniformType::Vec4);
+	bgfx::UniformHandle u_lightRgbInnerR = bgfx::createUniform("u_lightRgbInnerR", bgfx::UniformType::Vec4);
 
 	// Create program from shaders.
 	bgfx::ProgramHandle geomProgram    = loadProgram("vs_deferred_geom",       "fs_deferred_geom");
@@ -407,7 +407,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 				, mouseState.m_my
 				, (mouseState.m_buttons[entry::MouseButton::Left  ] ? IMGUI_MBUT_LEFT  : 0)
 				| (mouseState.m_buttons[entry::MouseButton::Right ] ? IMGUI_MBUT_RIGHT : 0)
-				, 0
+				, mouseState.m_mz
 				, width
 				, height
 				);
@@ -529,10 +529,10 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 			{
 				Sphere lightPosRadius;
 
-				float lightTime = time * lightAnimationSpeed * (sin(light/float(numLights) * bx::piHalf ) * 0.5f + 0.5f);
-				lightPosRadius.m_center[0] = sin( ( (lightTime + light*0.47f) + bx::piHalf*1.37f ) )*offset;
-				lightPosRadius.m_center[1] = cos( ( (lightTime + light*0.69f) + bx::piHalf*1.49f ) )*offset;
-				lightPosRadius.m_center[2] = sin( ( (lightTime + light*0.37f) + bx::piHalf*1.57f ) )*2.0f;
+				float lightTime = time * lightAnimationSpeed * (sinf(light/float(numLights) * bx::piHalf ) * 0.5f + 0.5f);
+				lightPosRadius.m_center[0] = sinf( ( (lightTime + light*0.47f) + bx::piHalf*1.37f ) )*offset;
+				lightPosRadius.m_center[1] = cosf( ( (lightTime + light*0.69f) + bx::piHalf*1.49f ) )*offset;
+				lightPosRadius.m_center[2] = sinf( ( (lightTime + light*0.37f) + bx::piHalf*1.57f ) )*2.0f;
 				lightPosRadius.m_radius = 2.0f;
 
 				Aabb aabb;

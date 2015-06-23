@@ -174,7 +174,12 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 	bgfx::setViewName(8, "Blur vertical");
 	bgfx::setViewName(9, "Blur horizontal + tonemap");
 
-	bgfx::TextureHandle uffizi = loadTexture("uffizi.dds", BGFX_TEXTURE_U_CLAMP|BGFX_TEXTURE_V_CLAMP|BGFX_TEXTURE_W_CLAMP);
+	bgfx::TextureHandle uffizi = loadTexture("uffizi.dds"
+			, 0
+			| BGFX_TEXTURE_U_CLAMP
+			| BGFX_TEXTURE_V_CLAMP
+			| BGFX_TEXTURE_W_CLAMP
+			);
 
 	bgfx::ProgramHandle skyProgram     = loadProgram("vs_hdr_skybox",  "fs_hdr_skybox");
 	bgfx::ProgramHandle lumProgram     = loadProgram("vs_hdr_lum",     "fs_hdr_lum");
@@ -184,14 +189,13 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 	bgfx::ProgramHandle meshProgram    = loadProgram("vs_hdr_mesh",    "fs_hdr_mesh");
 	bgfx::ProgramHandle tonemapProgram = loadProgram("vs_hdr_tonemap", "fs_hdr_tonemap");
 
-	bgfx::UniformHandle u_time      = bgfx::createUniform("u_time",     bgfx::UniformType::Uniform1f);
-	bgfx::UniformHandle u_texCube   = bgfx::createUniform("u_texCube",  bgfx::UniformType::Uniform1i);
-	bgfx::UniformHandle u_texColor  = bgfx::createUniform("u_texColor", bgfx::UniformType::Uniform1i);
-	bgfx::UniformHandle u_texLum    = bgfx::createUniform("u_texLum",   bgfx::UniformType::Uniform1i);
-	bgfx::UniformHandle u_texBlur   = bgfx::createUniform("u_texBlur",  bgfx::UniformType::Uniform1i);
-	bgfx::UniformHandle u_mtx       = bgfx::createUniform("u_mtx",      bgfx::UniformType::Uniform4x4fv);
-	bgfx::UniformHandle u_tonemap   = bgfx::createUniform("u_tonemap",  bgfx::UniformType::Uniform4fv);
-	bgfx::UniformHandle u_offset    = bgfx::createUniform("u_offset",   bgfx::UniformType::Uniform4fv, 16);
+	bgfx::UniformHandle s_texCube   = bgfx::createUniform("s_texCube",  bgfx::UniformType::Int1);
+	bgfx::UniformHandle s_texColor  = bgfx::createUniform("s_texColor", bgfx::UniformType::Int1);
+	bgfx::UniformHandle s_texLum    = bgfx::createUniform("s_texLum",   bgfx::UniformType::Int1);
+	bgfx::UniformHandle s_texBlur   = bgfx::createUniform("s_texBlur",  bgfx::UniformType::Int1);
+	bgfx::UniformHandle u_mtx       = bgfx::createUniform("u_mtx",      bgfx::UniformType::Mat4);
+	bgfx::UniformHandle u_tonemap   = bgfx::createUniform("u_tonemap",  bgfx::UniformType::Vec4);
+	bgfx::UniformHandle u_offset    = bgfx::createUniform("u_offset",   bgfx::UniformType::Vec4, 16);
 
 	Mesh* mesh = meshLoad("meshes/bunny.bin");
 
@@ -211,10 +215,10 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 	lum[4] = bgfx::createFrameBuffer(  1,   1, bgfx::TextureFormat::BGRA8);
 
 	bgfx::FrameBufferHandle bright;
-	bright = bgfx::createFrameBuffer(width/2, height/2, bgfx::TextureFormat::BGRA8);
+	bright = bgfx::createFrameBuffer(bgfx::BackbufferRatio::Half, bgfx::TextureFormat::BGRA8);
 
 	bgfx::FrameBufferHandle blur;
-	blur = bgfx::createFrameBuffer(width/8, height/8, bgfx::TextureFormat::BGRA8);
+	blur = bgfx::createFrameBuffer(bgfx::BackbufferRatio::Eighth, bgfx::TextureFormat::BGRA8);
 
 	// Imgui.
 	imguiCreate();
@@ -251,22 +255,17 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 			uint32_t msaa = (reset&BGFX_RESET_MSAA_MASK)>>BGFX_RESET_MSAA_SHIFT;
 
 			bgfx::destroyFrameBuffer(fbh);
-			bgfx::destroyFrameBuffer(bright);
-			bgfx::destroyFrameBuffer(blur);
 
 			fbtextures[0] = bgfx::createTexture2D(width, height, 1, bgfx::TextureFormat::BGRA8, ( (msaa+1)<<BGFX_TEXTURE_RT_MSAA_SHIFT)|BGFX_TEXTURE_U_CLAMP|BGFX_TEXTURE_V_CLAMP);
 			fbtextures[1] = bgfx::createTexture2D(width, height, 1, bgfx::TextureFormat::D16, BGFX_TEXTURE_RT_BUFFER_ONLY|( (msaa+1)<<BGFX_TEXTURE_RT_MSAA_SHIFT) );
 			fbh = bgfx::createFrameBuffer(BX_COUNTOF(fbtextures), fbtextures, true);
-
-			bright = bgfx::createFrameBuffer(width/2, height/2, bgfx::TextureFormat::BGRA8);
-			blur   = bgfx::createFrameBuffer(width/8, height/8, bgfx::TextureFormat::BGRA8);
 		}
 
 		imguiBeginFrame(mouseState.m_mx
 			, mouseState.m_my
 			, (mouseState.m_buttons[entry::MouseButton::Left  ] ? IMGUI_MBUT_LEFT  : 0)
 			| (mouseState.m_buttons[entry::MouseButton::Right ] ? IMGUI_MBUT_RIGHT : 0)
-			, 0
+			, mouseState.m_mz
 			, width
 			, height
 			);
@@ -296,8 +295,6 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		const double toMs = 1000.0/freq;
 
 		time += (float)(frameTime*speed/freq);
-
-		bgfx::setUniform(u_time, &time);
 
 		// Use debug font to print information about this example.
 		bgfx::dbgTextClear();
@@ -370,19 +367,20 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		bgfx::setUniform(u_mtx, mtx);
 
 		// Render skybox into view 0.
-		bgfx::setTexture(0, u_texCube, uffizi);
+		bgfx::setTexture(0, s_texCube, uffizi);
+
 		bgfx::setProgram(skyProgram);
 		bgfx::setState(BGFX_STATE_RGB_WRITE|BGFX_STATE_ALPHA_WRITE);
 		screenSpaceQuad( (float)width, (float)height, true);
 		bgfx::submit(0);
 
 		// Render mesh into view 1
-		bgfx::setTexture(0, u_texCube, uffizi);
+		bgfx::setTexture(0, s_texCube, uffizi);
 		meshSubmit(mesh, 1, meshProgram, NULL);
 
 		// Calculate luminance.
 		setOffsets2x2Lum(u_offset, 128, 128);
-		bgfx::setTexture(0, u_texColor, fbtextures[0]);
+		bgfx::setTexture(0, s_texColor, fbtextures[0]);
 		bgfx::setProgram(lumProgram);
 		bgfx::setState(BGFX_STATE_RGB_WRITE|BGFX_STATE_ALPHA_WRITE);
 		screenSpaceQuad(128.0f, 128.0f, s_originBottomLeft);
@@ -390,7 +388,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 		// Downscale luminance 0.
 		setOffsets4x4Lum(u_offset, 128, 128);
-		bgfx::setTexture(0, u_texColor, lum[0]);
+		bgfx::setTexture(0, s_texColor, lum[0]);
 		bgfx::setProgram(lumAvgProgram);
 		bgfx::setState(BGFX_STATE_RGB_WRITE|BGFX_STATE_ALPHA_WRITE);
 		screenSpaceQuad(64.0f, 64.0f, s_originBottomLeft);
@@ -398,7 +396,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 		// Downscale luminance 1.
 		setOffsets4x4Lum(u_offset, 64, 64);
-		bgfx::setTexture(0, u_texColor, lum[1]);
+		bgfx::setTexture(0, s_texColor, lum[1]);
 		bgfx::setProgram(lumAvgProgram);
 		bgfx::setState(BGFX_STATE_RGB_WRITE|BGFX_STATE_ALPHA_WRITE);
 		screenSpaceQuad(16.0f, 16.0f, s_originBottomLeft);
@@ -406,7 +404,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 		// Downscale luminance 2.
 		setOffsets4x4Lum(u_offset, 16, 16);
-		bgfx::setTexture(0, u_texColor, lum[2]);
+		bgfx::setTexture(0, s_texColor, lum[2]);
 		bgfx::setProgram(lumAvgProgram);
 		bgfx::setState(BGFX_STATE_RGB_WRITE|BGFX_STATE_ALPHA_WRITE);
 		screenSpaceQuad(4.0f, 4.0f, s_originBottomLeft);
@@ -414,35 +412,35 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 		// Downscale luminance 3.
 		setOffsets4x4Lum(u_offset, 4, 4);
-		bgfx::setTexture(0, u_texColor, lum[3]);
+		bgfx::setTexture(0, s_texColor, lum[3]);
 		bgfx::setProgram(lumAvgProgram);
 		bgfx::setState(BGFX_STATE_RGB_WRITE|BGFX_STATE_ALPHA_WRITE);
 		screenSpaceQuad(1.0f, 1.0f, s_originBottomLeft);
 		bgfx::submit(6);
 
-		float tonemap[4] = { middleGray, square(white), threshold, 0.0f };
+		float tonemap[4] = { middleGray, square(white), threshold, time };
 		bgfx::setUniform(u_tonemap, tonemap);
 
 		// Bright pass threshold is tonemap[3].
 		setOffsets4x4Lum(u_offset, width/2, height/2);
-		bgfx::setTexture(0, u_texColor, fbtextures[0]);
-		bgfx::setTexture(1, u_texLum, lum[4]);
+		bgfx::setTexture(0, s_texColor, fbtextures[0]);
+		bgfx::setTexture(1, s_texLum, lum[4]);
 		bgfx::setProgram(brightProgram);
 		bgfx::setState(BGFX_STATE_RGB_WRITE|BGFX_STATE_ALPHA_WRITE);
 		screenSpaceQuad( (float)width/2.0f, (float)height/2.0f, s_originBottomLeft);
 		bgfx::submit(7);
 
 		// Blur bright pass vertically.
-		bgfx::setTexture(0, u_texColor, bright);
+		bgfx::setTexture(0, s_texColor, bright);
 		bgfx::setProgram(blurProgram);
 		bgfx::setState(BGFX_STATE_RGB_WRITE|BGFX_STATE_ALPHA_WRITE);
 		screenSpaceQuad( (float)width/8.0f, (float)height/8.0f, s_originBottomLeft);
 		bgfx::submit(8);
 
 		// Blur bright pass horizontally, do tonemaping and combine.
-		bgfx::setTexture(0, u_texColor, fbtextures[0]);
-		bgfx::setTexture(1, u_texLum, lum[4]);
-		bgfx::setTexture(2, u_texBlur, blur);
+		bgfx::setTexture(0, s_texColor, fbtextures[0]);
+		bgfx::setTexture(1, s_texLum, lum[4]);
+		bgfx::setTexture(2, s_texBlur, blur);
 		bgfx::setProgram(tonemapProgram);
 		bgfx::setState(BGFX_STATE_RGB_WRITE|BGFX_STATE_ALPHA_WRITE);
 		screenSpaceQuad( (float)width, (float)height, s_originBottomLeft);
@@ -475,11 +473,10 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 	bgfx::destroyProgram(brightProgram);
 	bgfx::destroyTexture(uffizi);
 
-	bgfx::destroyUniform(u_time);
-	bgfx::destroyUniform(u_texCube);
-	bgfx::destroyUniform(u_texColor);
-	bgfx::destroyUniform(u_texLum);
-	bgfx::destroyUniform(u_texBlur);
+	bgfx::destroyUniform(s_texCube);
+	bgfx::destroyUniform(s_texColor);
+	bgfx::destroyUniform(s_texLum);
+	bgfx::destroyUniform(s_texBlur);
 	bgfx::destroyUniform(u_mtx);
 	bgfx::destroyUniform(u_tonemap);
 	bgfx::destroyUniform(u_offset);

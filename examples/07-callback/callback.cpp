@@ -139,7 +139,7 @@ struct BgfxCallback : public bgfx::CallbackI
 	virtual uint32_t cacheReadSize(uint64_t _id) BX_OVERRIDE
 	{
 		char filePath[256];
-		bx::snprintf(filePath, sizeof(filePath), "%016" PRIx64, _id);
+		bx::snprintf(filePath, sizeof(filePath), "temp/%016" PRIx64, _id);
 
 		// Use cache id as filename.
 		FILE* file = fopen(filePath, "rb");
@@ -372,6 +372,8 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 	bgfx::init(
 		  renderers[bx::getHPCounter() % numRenderers] /* randomize renderer */
+		, BGFX_PCI_ID_NONE
+		, 0
 		, &callback  // custom callback handler
 		, &allocator // custom allocator
 		);
@@ -442,7 +444,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 		float at[3] = { 0.0f, 0.0f, 0.0f };
 		float eye[3] = { 0.0f, 0.0f, -35.0f };
-		
+
 		float view[16];
 		float proj[16];
 		bx::mtxLookAt(view, eye, at);
@@ -488,7 +490,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 			bgfx::saveScreenShot("temp/frame150");
 		}
 
-		// Advance to next frame. Rendering thread will be kicked to 
+		// Advance to next frame. Rendering thread will be kicked to
 		// process submitted rendering primitives.
 		bgfx::frame();
 	}

@@ -548,7 +548,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 		// Set view and projection matrix for view 0.
 		const bgfx::HMD* hmd = bgfx::getHMD();
-		if (NULL != hmd)
+		if (NULL != hmd && 0 != (hmd->flags & BGFX_HMD_RENDERING))
 		{
 			float view[16];
 			bx::mtxQuatTranslationHMD(view, hmd->eye[0].rotation, eye);
@@ -592,10 +592,10 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		float sphere[numSpheres][4];
 		for (uint32_t ii = 0; ii < numSpheres; ++ii)
 		{
-			sphere[ii][0] = sin(time*(ii*0.21f)+ii*0.37f) * (DIMS * 0.5f - 8.0f);
-			sphere[ii][1] = sin(time*(ii*0.37f)+ii*0.67f) * (DIMS * 0.5f - 8.0f);
-			sphere[ii][2] = cos(time*(ii*0.11f)+ii*0.13f) * (DIMS * 0.5f - 8.0f);
-			sphere[ii][3] = 1.0f/(2.0f + (sin(time*(ii*0.13f) )*0.5f+0.5f)*2.0f);
+			sphere[ii][0] = sinf(time*(ii*0.21f)+ii*0.37f) * (DIMS * 0.5f - 8.0f);
+			sphere[ii][1] = sinf(time*(ii*0.37f)+ii*0.67f) * (DIMS * 0.5f - 8.0f);
+			sphere[ii][2] = cosf(time*(ii*0.11f)+ii*0.13f) * (DIMS * 0.5f - 8.0f);
+			sphere[ii][3] = 1.0f/(2.0f + (sinf(time*(ii*0.13f) )*0.5f+0.5f)*2.0f);
 		}
 
 		profUpdate = bx::getHPCounter();

@@ -448,34 +448,34 @@ struct Uniforms
 		m_XOffset = 10.0f/512.0f;
 		m_YOffset = 10.0f/512.0f;
 
-		u_params0          = bgfx::createUniform("u_params0",          bgfx::UniformType::Uniform4fv);
-		u_params1          = bgfx::createUniform("u_params1",          bgfx::UniformType::Uniform4fv);
-		u_params2          = bgfx::createUniform("u_params2",          bgfx::UniformType::Uniform4fv);
-		u_color            = bgfx::createUniform("u_color",            bgfx::UniformType::Uniform4fv);
-		u_smSamplingParams = bgfx::createUniform("u_smSamplingParams", bgfx::UniformType::Uniform4fv);
-		u_csmFarDistances  = bgfx::createUniform("u_csmFarDistances",  bgfx::UniformType::Uniform4fv);
-		u_lightMtx         = bgfx::createUniform("u_lightMtx",         bgfx::UniformType::Uniform4x4fv);
+		u_params0          = bgfx::createUniform("u_params0",          bgfx::UniformType::Vec4);
+		u_params1          = bgfx::createUniform("u_params1",          bgfx::UniformType::Vec4);
+		u_params2          = bgfx::createUniform("u_params2",          bgfx::UniformType::Vec4);
+		u_color            = bgfx::createUniform("u_color",            bgfx::UniformType::Vec4);
+		u_smSamplingParams = bgfx::createUniform("u_smSamplingParams", bgfx::UniformType::Vec4);
+		u_csmFarDistances  = bgfx::createUniform("u_csmFarDistances",  bgfx::UniformType::Vec4);
+		u_lightMtx         = bgfx::createUniform("u_lightMtx",         bgfx::UniformType::Mat4);
 
-		u_tetraNormalGreen  = bgfx::createUniform("u_tetraNormalGreen",  bgfx::UniformType::Uniform3fv);
-		u_tetraNormalYellow = bgfx::createUniform("u_tetraNormalYellow", bgfx::UniformType::Uniform3fv);
-		u_tetraNormalBlue   = bgfx::createUniform("u_tetraNormalBlue",   bgfx::UniformType::Uniform3fv);
-		u_tetraNormalRed    = bgfx::createUniform("u_tetraNormalRed",    bgfx::UniformType::Uniform3fv);
+		u_tetraNormalGreen  = bgfx::createUniform("u_tetraNormalGreen",  bgfx::UniformType::Vec4);
+		u_tetraNormalYellow = bgfx::createUniform("u_tetraNormalYellow", bgfx::UniformType::Vec4);
+		u_tetraNormalBlue   = bgfx::createUniform("u_tetraNormalBlue",   bgfx::UniformType::Vec4);
+		u_tetraNormalRed    = bgfx::createUniform("u_tetraNormalRed",    bgfx::UniformType::Vec4);
 
-		u_shadowMapMtx0 = bgfx::createUniform("u_shadowMapMtx0", bgfx::UniformType::Uniform4x4fv);
-		u_shadowMapMtx1 = bgfx::createUniform("u_shadowMapMtx1", bgfx::UniformType::Uniform4x4fv);
-		u_shadowMapMtx2 = bgfx::createUniform("u_shadowMapMtx2", bgfx::UniformType::Uniform4x4fv);
-		u_shadowMapMtx3 = bgfx::createUniform("u_shadowMapMtx3", bgfx::UniformType::Uniform4x4fv);
+		u_shadowMapMtx0 = bgfx::createUniform("u_shadowMapMtx0", bgfx::UniformType::Mat4);
+		u_shadowMapMtx1 = bgfx::createUniform("u_shadowMapMtx1", bgfx::UniformType::Mat4);
+		u_shadowMapMtx2 = bgfx::createUniform("u_shadowMapMtx2", bgfx::UniformType::Mat4);
+		u_shadowMapMtx3 = bgfx::createUniform("u_shadowMapMtx3", bgfx::UniformType::Mat4);
 
-		u_lightPosition             = bgfx::createUniform("u_lightPosition",              bgfx::UniformType::Uniform4fv);
-		u_lightAmbientPower         = bgfx::createUniform("u_lightAmbientPower",          bgfx::UniformType::Uniform4fv);
-		u_lightDiffusePower         = bgfx::createUniform("u_lightDiffusePower",          bgfx::UniformType::Uniform4fv);
-		u_lightSpecularPower        = bgfx::createUniform("u_lightSpecularPower",         bgfx::UniformType::Uniform4fv);
-		u_lightSpotDirectionInner   = bgfx::createUniform("u_lightSpotDirectionInner",    bgfx::UniformType::Uniform4fv);
-		u_lightAttenuationSpotOuter = bgfx::createUniform("u_lightAttenuationSpotOuter",  bgfx::UniformType::Uniform4fv);
+		u_lightPosition             = bgfx::createUniform("u_lightPosition",              bgfx::UniformType::Vec4);
+		u_lightAmbientPower         = bgfx::createUniform("u_lightAmbientPower",          bgfx::UniformType::Vec4);
+		u_lightDiffusePower         = bgfx::createUniform("u_lightDiffusePower",          bgfx::UniformType::Vec4);
+		u_lightSpecularPower        = bgfx::createUniform("u_lightSpecularPower",         bgfx::UniformType::Vec4);
+		u_lightSpotDirectionInner   = bgfx::createUniform("u_lightSpotDirectionInner",    bgfx::UniformType::Vec4);
+		u_lightAttenuationSpotOuter = bgfx::createUniform("u_lightAttenuationSpotOuter",  bgfx::UniformType::Vec4);
 
-		u_materialKa = bgfx::createUniform("u_materialKa", bgfx::UniformType::Uniform4fv);
-		u_materialKd = bgfx::createUniform("u_materialKd", bgfx::UniformType::Uniform4fv);
-		u_materialKs = bgfx::createUniform("u_materialKs", bgfx::UniformType::Uniform4fv);
+		u_materialKa = bgfx::createUniform("u_materialKa", bgfx::UniformType::Vec4);
+		u_materialKd = bgfx::createUniform("u_materialKd", bgfx::UniformType::Vec4);
+		u_materialKs = bgfx::createUniform("u_materialKs", bgfx::UniformType::Vec4);
 
 	}
 
@@ -1350,11 +1350,11 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 	// Uniforms.
 	s_uniforms.init();
-	u_texColor = bgfx::createUniform("u_texColor",  bgfx::UniformType::Uniform1iv);
-	u_shadowMap[0] = bgfx::createUniform("u_shadowMap0", bgfx::UniformType::Uniform1iv);
-	u_shadowMap[1] = bgfx::createUniform("u_shadowMap1", bgfx::UniformType::Uniform1iv);
-	u_shadowMap[2] = bgfx::createUniform("u_shadowMap2", bgfx::UniformType::Uniform1iv);
-	u_shadowMap[3] = bgfx::createUniform("u_shadowMap3", bgfx::UniformType::Uniform1iv);
+	u_texColor = bgfx::createUniform("u_texColor",  bgfx::UniformType::Int1);
+	u_shadowMap[0] = bgfx::createUniform("u_shadowMap0", bgfx::UniformType::Int1);
+	u_shadowMap[1] = bgfx::createUniform("u_shadowMap1", bgfx::UniformType::Int1);
+	u_shadowMap[2] = bgfx::createUniform("u_shadowMap2", bgfx::UniformType::Int1);
+	u_shadowMap[3] = bgfx::createUniform("u_shadowMap3", bgfx::UniformType::Int1);
 
 	// Programs.
 	s_programs.init();
@@ -1974,7 +1974,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 			, mouseState.m_my
 			, (mouseState.m_buttons[entry::MouseButton::Left  ] ? IMGUI_MBUT_LEFT  : 0)
 			| (mouseState.m_buttons[entry::MouseButton::Right ] ? IMGUI_MBUT_RIGHT : 0)
-			, 0
+			, mouseState.m_mz
 			, viewState.m_width
 			, viewState.m_height
 			);
@@ -2165,16 +2165,16 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		if (settings.m_updateScene)  { timeAccumulatorScene += deltaTime; }
 
 		// Setup lights.
-		pointLight.m_position.m_x = cos(timeAccumulatorLight) * 20.0f;
+		pointLight.m_position.m_x = cosf(timeAccumulatorLight) * 20.0f;
 		pointLight.m_position.m_y = 26.0f;
-		pointLight.m_position.m_z = sin(timeAccumulatorLight) * 20.0f;
+		pointLight.m_position.m_z = sinf(timeAccumulatorLight) * 20.0f;
 		pointLight.m_spotDirectionInner.m_x = -pointLight.m_position.m_x;
 		pointLight.m_spotDirectionInner.m_y = -pointLight.m_position.m_y;
 		pointLight.m_spotDirectionInner.m_z = -pointLight.m_position.m_z;
 
-		directionalLight.m_position.m_x = -cos(timeAccumulatorLight);
+		directionalLight.m_position.m_x = -cosf(timeAccumulatorLight);
 		directionalLight.m_position.m_y = -1.0f;
-		directionalLight.m_position.m_z = -sin(timeAccumulatorLight);
+		directionalLight.m_position.m_z = -sinf(timeAccumulatorLight);
 
 		// Setup instance matrices.
 		float mtxFloor[16];
@@ -2452,10 +2452,10 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		}
 
 		// Determine on-screen rectangle size where depth buffer will be drawn.
-		const uint16_t depthRectHeight = uint16_t(float(viewState.m_height) / 2.5f);
-		const uint16_t depthRectWidth  = depthRectHeight;
-		const uint16_t depthRectX = 0;
-		const uint16_t depthRectY = viewState.m_height - depthRectHeight;
+		uint16_t depthRectHeight = uint16_t(float(viewState.m_height) / 2.5f);
+		uint16_t depthRectWidth  = depthRectHeight;
+		uint16_t depthRectX = 0;
+		uint16_t depthRectY = viewState.m_height - depthRectHeight;
 
 		// Setup views and render targets.
 		bgfx::setViewRect(0, 0, 0, viewState.m_width, viewState.m_height);
@@ -2583,10 +2583,10 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 			 * RENDERVIEW_DRAWDEPTH_3_ID - Draw depth buffer for fourth split.
 			 */
 
-			const uint16_t depthRectHeight = viewState.m_height / 3;
-			const uint16_t depthRectWidth  = depthRectHeight;
-			const uint16_t depthRectX = 0;
-			const uint16_t depthRectY = viewState.m_height - depthRectHeight;
+			depthRectHeight = viewState.m_height / 3;
+			depthRectWidth  = depthRectHeight;
+			depthRectX = 0;
+			depthRectY = viewState.m_height - depthRectHeight;
 
 			bgfx::setViewRect(RENDERVIEW_SHADOWMAP_1_ID, 0, 0, currentShadowMapSize, currentShadowMapSize);
 			bgfx::setViewRect(RENDERVIEW_SHADOWMAP_2_ID, 0, 0, currentShadowMapSize, currentShadowMapSize);
@@ -2795,10 +2795,10 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 						);
 
 				// Trees.
-				for (uint8_t ii = 0; ii < numTrees; ++ii)
+				for (uint8_t jj = 0; jj < numTrees; ++jj)
 				{
 					treeMesh.submit(viewId
-							, mtxTrees[ii]
+							, mtxTrees[jj]
 							, *currentSmSettings->m_progPack
 							, s_renderStates[renderStateIndex]
 							);
@@ -2851,7 +2851,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 			float mtxShadow[16];
 
 			const float ymul = (s_flipV) ? 0.5f : -0.5f;
-			const float zadd = (DepthImpl::Linear == settings.m_depthImpl) ? 0.0f : 0.5f;
+			float zadd = (DepthImpl::Linear == settings.m_depthImpl) ? 0.0f : 0.5f;
 
 			const float mtxBias[16] =
 			{
@@ -2870,7 +2870,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 			else if (LightType::PointLight == settings.m_lightType)
 			{
 				const float s = (s_flipV) ? 1.0f : -1.0f; //sign
-				const float zadd = (DepthImpl::Linear == settings.m_depthImpl) ? 0.0f : 0.5f;
+				zadd = (DepthImpl::Linear == settings.m_depthImpl) ? 0.0f : 0.5f;
 
 				const float mtxCropBias[2][TetrahedronFaces::Count][16] =
 				{
