@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2014 Branimir Karadzic. All rights reserved.
+ * Copyright 2011-2015 Branimir Karadzic. All rights reserved.
  * License: http://www.opensource.org/licenses/BSD-2-Clause
  */
 
@@ -13,106 +13,119 @@
 #	define BGFX_CONFIG_DEBUG_PIX 0
 #endif // !USE_D3D11_DYNAMIC_LIB
 
+BX_PRAGMA_DIAGNOSTIC_PUSH();
+BX_PRAGMA_DIAGNOSTIC_IGNORED_CLANG("-Wunknown-pragmas" );
+BX_PRAGMA_DIAGNOSTIC_IGNORED_GCC("-Wpragmas");
+BX_PRAGMA_DIAGNOSTIC_IGNORED_MSVC(4005) // warning C4005: '' : macro redefinition
 #define D3D11_NO_HELPERS
-#if BX_COMPILER_MSVC
-#	pragma warning(push)
-//  winerror.h and dxgitypes.h both define DXGI_ERRORs.
-#	pragma warning(disable:4005) // warning C4005: '' : macro redefinition
-#	include <d3d11.h>
-#	pragma warning(pop)
+#if BX_PLATFORM_WINRT
+#	include <d3d11_2.h>
 #else
 #	include <d3d11.h>
-#endif // BX_COMPILER_MSVC
+#endif // BX_PLATFORM_WINRT
+BX_PRAGMA_DIAGNOSTIC_POP()
+
+#include "renderer.h"
 #include "renderer_d3d.h"
+#include "ovr.h"
+#include "renderdoc.h"
 
-#define D3DCOLOR_ARGB(_a, _r, _g, _b) ( (DWORD)( ( ( (_a)&0xff)<<24)|( ( (_r)&0xff)<<16)|( ( (_g)&0xff)<<8)|( (_b)&0xff) ) )
-#define D3DCOLOR_RGBA(_r, _g, _b, _a) D3DCOLOR_ARGB(_a, _r, _g, _b)
+#ifndef D3DCOLOR_ARGB
+#	define D3DCOLOR_ARGB(_a, _r, _g, _b) ( (DWORD)( ( ( (_a)&0xff)<<24)|( ( (_r)&0xff)<<16)|( ( (_g)&0xff)<<8)|( (_b)&0xff) ) )
+#endif // D3DCOLOR_ARGB
 
-namespace bgfx
+#ifndef D3DCOLOR_RGBA
+#	define D3DCOLOR_RGBA(_r, _g, _b, _a) D3DCOLOR_ARGB(_a, _r, _g, _b)
+#endif // D3DCOLOR_RGBA
+
+#ifndef DXGI_FORMAT_B4G4R4A4_UNORM
+// Win8 only BS
+// https://blogs.msdn.com/b/chuckw/archive/2012/11/14/directx-11-1-and-windows-7.aspx?Redirected=true
+// http://msdn.microsoft.com/en-us/library/windows/desktop/bb173059%28v=vs.85%29.aspx
+#	define DXGI_FORMAT_B4G4R4A4_UNORM DXGI_FORMAT(115)
+#endif // DXGI_FORMAT_B4G4R4A4_UNORM
+
+#ifndef D3D_FEATURE_LEVEL_11_1
+#	define D3D_FEATURE_LEVEL_11_1 D3D_FEATURE_LEVEL(0xb100)
+#endif // D3D_FEATURE_LEVEL_11_1
+
+#if defined(__MINGW32__)
+// MinGW Linux/Wine missing defines...
+#	ifndef D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT
+#		define D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT 8
+#	endif // D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT
+
+#	ifndef D3D11_PS_CS_UAV_REGISTER_COUNT
+#		define D3D11_PS_CS_UAV_REGISTER_COUNT 8
+#	endif // D3D11_PS_CS_UAV_REGISTER_COUNT
+
+#	ifndef D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT
+#		define D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT 8
+#	endif
+
+#	ifndef D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT
+#		define D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT 8
+#	endif // D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT
+
+#	ifndef D3D11_APPEND_ALIGNED_ELEMENT
+#		define D3D11_APPEND_ALIGNED_ELEMENT UINT32_MAX
+#	endif // D3D11_APPEND_ALIGNED_ELEMENT
+
+#	ifndef D3D11_REQ_MAXANISOTROPY
+#		define	D3D11_REQ_MAXANISOTROPY	16
+#	endif // D3D11_REQ_MAXANISOTROPY
+
+typedef void ID3D11InfoQueue;
+
+#endif // __MINGW32__
+
+#ifndef D3D_FL9_1_REQ_TEXTURE2D_U_OR_V_DIMENSION
+#	define D3D_FL9_1_REQ_TEXTURE2D_U_OR_V_DIMENSION 2048
+#endif // D3D_FL9_1_REQ_TEXTURE2D_U_OR_V_DIMENSION
+
+#ifndef D3D_FL9_3_REQ_TEXTURE2D_U_OR_V_DIMENSION
+#	define D3D_FL9_3_REQ_TEXTURE2D_U_OR_V_DIMENSION 4096
+#endif // D3D_FL9_3_REQ_TEXTURE2D_U_OR_V_DIMENSION
+
+#ifndef D3D_FL9_1_SIMULTANEOUS_RENDER_TARGET_COUNT
+#	define D3D_FL9_1_SIMULTANEOUS_RENDER_TARGET_COUNT 1
+#endif // D3D_FL9_1_SIMULTANEOUS_RENDER_TARGET_COUNT
+
+#ifndef D3D_FL9_3_SIMULTANEOUS_RENDER_TARGET_COUNT
+#	define D3D_FL9_3_SIMULTANEOUS_RENDER_TARGET_COUNT 4
+#endif // D3D_FL9_3_SIMULTANEOUS_RENDER_TARGET_COUNT
+
+#ifndef D3D_FL9_1_DEFAULT_MAX_ANISOTROPY
+#	define D3D_FL9_1_DEFAULT_MAX_ANISOTROPY 2
+#endif // D3D_FL9_1_DEFAULT_MAX_ANISOTROPY
+
+#define BGFX_D3D11_BLEND_STATE_MASK (0 \
+			| BGFX_STATE_BLEND_MASK \
+			| BGFX_STATE_BLEND_EQUATION_MASK \
+			| BGFX_STATE_BLEND_INDEPENDENT \
+			| BGFX_STATE_ALPHA_WRITE \
+			| BGFX_STATE_RGB_WRITE \
+			)
+
+#define BGFX_D3D11_DEPTH_STENCIL_MASK (0 \
+			| BGFX_STATE_DEPTH_WRITE \
+			| BGFX_STATE_DEPTH_TEST_MASK \
+			)
+
+namespace bgfx { namespace d3d11
 {
-	typedef HRESULT (WINAPI * PFN_CREATEDXGIFACTORY)(REFIID _riid, void** _factory);
-
-	template <typename Ty>
-	class StateCacheT
+	struct BufferD3D11
 	{
-	public:
-		void add(uint64_t _id, Ty* _item)
-		{
-			invalidate(_id);
-			m_hashMap.insert(stl::make_pair(_id, _item) );
-		}
-
-		Ty* find(uint64_t _id)
-		{
-			HashMap::iterator it = m_hashMap.find(_id);
-			if (it != m_hashMap.end() )
-			{
-				return it->second;
-			}
-
-			return NULL;
-		}
-
-		void invalidate(uint64_t _id)
-		{
-			HashMap::iterator it = m_hashMap.find(_id);
-			if (it != m_hashMap.end() )
-			{
-				DX_RELEASE_WARNONLY(it->second, 0);
-				m_hashMap.erase(it);
-			}
-		}
-
-		void invalidate()
-		{
-			for (HashMap::iterator it = m_hashMap.begin(), itEnd = m_hashMap.end(); it != itEnd; ++it)
-			{
-				DX_CHECK_REFCOUNT(it->second, 1);
-				it->second->Release();
-			}
-
-			m_hashMap.clear();
-		}
-
-	private:
-		typedef stl::unordered_map<uint64_t, Ty*> HashMap;
-		HashMap m_hashMap;
-	};
-
-	struct IndexBufferD3D11
-	{
-		IndexBufferD3D11()
+		BufferD3D11()
 			: m_ptr(NULL)
+			, m_srv(NULL)
+			, m_uav(NULL)
+			, m_flags(BGFX_BUFFER_NONE)
 			, m_dynamic(false)
 		{
 		}
 
-		void create(uint32_t _size, void* _data);
-		void update(uint32_t _offset, uint32_t _size, void* _data);
-
-		void destroy()
-		{
-			if (NULL != m_ptr)
-			{
-				DX_RELEASE(m_ptr, 0);
-				m_dynamic = false;
-			}
-		}
-
-		ID3D11Buffer* m_ptr;
-		uint32_t m_size;
-		bool m_dynamic;
-	};
-
-	struct VertexBufferD3D11
-	{
-		VertexBufferD3D11()
-			: m_ptr(NULL)
-			, m_dynamic(false)
-		{
-		}
-
-		void create(uint32_t _size, void* _data, VertexDeclHandle _declHandle);
+		void create(uint32_t _size, void* _data, uint16_t _flags, uint16_t _stride = 0, bool _vertex = false);
 		void update(uint32_t _offset, uint32_t _size, void* _data, bool _discard = false);
 
 		void destroy()
@@ -122,12 +135,31 @@ namespace bgfx
 				DX_RELEASE(m_ptr, 0);
 				m_dynamic = false;
 			}
+
+			DX_RELEASE(m_srv, 0);
+			DX_RELEASE(m_uav, 0);
 		}
 
 		ID3D11Buffer* m_ptr;
+		ID3D11ShaderResourceView*  m_srv;
+		ID3D11UnorderedAccessView* m_uav;
 		uint32_t m_size;
-		VertexDeclHandle m_decl;
+		uint16_t m_flags;
 		bool m_dynamic;
+	};
+
+	typedef BufferD3D11 IndexBufferD3D11;
+
+	struct VertexBufferD3D11 : public BufferD3D11
+	{
+		VertexBufferD3D11()
+			: BufferD3D11()
+		{
+		}
+
+		void create(uint32_t _size, void* _data, VertexDeclHandle _declHandle, uint16_t _flags);
+
+		VertexDeclHandle m_decl;
 	};
 
 	struct ShaderD3D11
@@ -273,14 +305,18 @@ namespace bgfx
 	struct FrameBufferD3D11
 	{
 		FrameBufferD3D11()
-			: m_denseIdx(UINT16_MAX)
+			: m_dsv(NULL)
+			, m_denseIdx(UINT16_MAX)
 			, m_num(0)
+			, m_numTh(0)
 		{
 		}
 
 		void create(uint8_t _num, const TextureHandle* _handles);
 		void create(uint16_t _denseIdx, void* _nwh, uint32_t _width, uint32_t _height, TextureFormat::Enum _depthFormat);
 		uint16_t destroy();
+		void preReset();
+		void postReset();
 		void resolve();
 		void clear(const Clear& _clear, const float _palette[][4]);
 
@@ -290,8 +326,37 @@ namespace bgfx
 		IDXGISwapChain* m_swapChain;
 		uint16_t m_denseIdx;
 		uint8_t m_num;
+		uint8_t m_numTh;
+		TextureHandle m_th[BGFX_CONFIG_MAX_FRAME_BUFFER_ATTACHMENTS];
 	};
 
-} // namespace bgfx
+	struct TimerQueryD3D11
+	{
+		TimerQueryD3D11()
+			: m_control(BX_COUNTOF(m_frame) )
+		{
+		}
+
+		void postReset();
+		void preReset();
+		void begin();
+		void end();
+		bool get();
+
+		struct Frame
+		{
+			ID3D11Query* m_disjoint;
+			ID3D11Query* m_start;
+			ID3D11Query* m_end;
+		};
+
+		uint64_t m_elapsed;
+		uint64_t m_frequency;
+
+		Frame m_frame[4];
+		bx::RingBufferControl m_control;
+	};
+
+} /*  namespace d3d11 */ } // namespace bgfx
 
 #endif // BGFX_RENDERER_D3D11_H_HEADER_GUARD

@@ -1,5 +1,5 @@
 --
--- Copyright 2010-2014 Branimir Karadzic. All rights reserved.
+-- Copyright 2010-2015 Branimir Karadzic. All rights reserved.
 -- License: http://www.opensource.org/licenses/BSD-2-Clause
 --
 
@@ -8,19 +8,21 @@ project "geometryc"
 	kind "ConsoleApp"
 
 	includedirs {
-		BX_DIR   .. "include",
-		BGFX_DIR .. "include",
-		BGFX_DIR .. "3rdparty/forsyth-too",
-		BGFX_DIR .. "examples/common",
+		path.join(BX_DIR, "include"),
+		path.join(BGFX_DIR, "include"),
+		path.join(BGFX_DIR, "3rdparty"),
+		path.join(BGFX_DIR, "examples/common"),
 	}
 
 	files {
-		BGFX_DIR .. "3rdparty/forsyth-too/**.cpp",
-		BGFX_DIR .. "3rdparty/forsyth-too/**.h",
-		BGFX_DIR .. "src/vertexdecl.**",
-		BGFX_DIR .. "tools/geometryc/**.cpp",
-		BGFX_DIR .. "tools/geometryc/**.h",
-		BGFX_DIR .. "examples/common/bounds.**",
+		path.join(BGFX_DIR, "3rdparty/forsyth-too/**.cpp"),
+		path.join(BGFX_DIR, "3rdparty/forsyth-too/**.h"),
+		path.join(BGFX_DIR, "3rdparty/ib-compress/**.cpp"),
+		path.join(BGFX_DIR, "3rdparty/ib-compress/**.h"),
+		path.join(BGFX_DIR, "src/vertexdecl.**"),
+		path.join(BGFX_DIR, "tools/geometryc/**.cpp"),
+		path.join(BGFX_DIR, "tools/geometryc/**.h"),
+		path.join(BGFX_DIR, "examples/common/bounds.**"),
 	}
 
 	configuration { "osx" }

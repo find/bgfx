@@ -1,5 +1,5 @@
 --
--- Copyright 2010-2014 Branimir Karadzic. All rights reserved.
+-- Copyright 2010-2015 Branimir Karadzic. All rights reserved.
 -- License: http://www.opensource.org/licenses/BSD-2-Clause
 --
 
@@ -8,13 +8,12 @@ project "makedisttex"
 	kind "ConsoleApp"
 
 	includedirs {
-		BX_DIR .. "include",
-		BGFX_DIR .. "3rdparty/edtaa3",
-		BGFX_DIR .. "3rdparty/stb_image",
+		path.join(BX_DIR, "include"),
+		path.join(BGFX_DIR, "3rdparty"),
 	}
 
 	files {
-		BGFX_DIR .. "3rdparty/edtaa3/**.cpp",
-		BGFX_DIR .. "3rdparty/edtaa3/**.h",
-		BGFX_DIR .. "tools/makedisttex.cpp",
+		path.join(BGFX_DIR, "3rdparty/edtaa3/**.cpp"),
+		path.join(BGFX_DIR, "3rdparty/edtaa3/**.h"),
+		path.join(BGFX_DIR, "tools/makedisttex.cpp"),
 	}

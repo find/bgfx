@@ -60,8 +60,8 @@ private:
 		int32_t width; //< The line _width. The ending coordinate (inclusive) will be x+width-1.
 	};
 
-	
-	uint32_t m_width;            //< width (in pixels) of the underlying texture	
+
+	uint32_t m_width;            //< width (in pixels) of the underlying texture
 	uint32_t m_height;           //< height (in pixels) of the underlying texture
 	uint32_t m_usedSpace;        //< Surface used in squared pixel
 	std::vector<Node> m_skyline; //< node of the skyline algorithm
@@ -318,7 +318,7 @@ void Atlas::init()
 {
 	m_texelSize = float(UINT16_MAX) / float(m_textureSize);
 	float texelHalf = m_texelSize/2.0f;
-	switch (bgfx::getRendererType())
+	switch (bgfx::getRendererType() )
 	{
 	case bgfx::RendererType::Direct3D9:
 		m_texelOffset[0] = 0.0f;
@@ -326,6 +326,7 @@ void Atlas::init()
 		break;
 
 	case bgfx::RendererType::Direct3D11:
+	case bgfx::RendererType::Direct3D12:
 		m_texelOffset[0] = texelHalf;
 		m_texelOffset[1] = texelHalf;
 		break;

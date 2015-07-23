@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2014 Branimir Karadzic. All rights reserved.
+ * Copyright 2011-2015 Branimir Karadzic. All rights reserved.
  * License: http://www.opensource.org/licenses/BSD-2-Clause
  */
 
@@ -21,13 +21,13 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 	// Set view 0 clear state.
 	bgfx::setViewClear(0
-		, BGFX_CLEAR_COLOR_BIT|BGFX_CLEAR_DEPTH_BIT
+		, BGFX_CLEAR_COLOR|BGFX_CLEAR_DEPTH
 		, 0x303030ff
 		, 1.0f
 		, 0
 		);
 
-	bgfx::UniformHandle u_time = bgfx::createUniform("u_time", bgfx::UniformType::Uniform1f);
+	bgfx::UniformHandle u_time = bgfx::createUniform("u_time", bgfx::UniformType::Vec4);
 
 	// Create program from shaders.
 	bgfx::ProgramHandle program = loadProgram("vs_mesh", "fs_mesh");
@@ -43,7 +43,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 		// This dummy draw call is here to make sure that view 0 is cleared
 		// if no other draw calls are submitted to view 0.
-		bgfx::submit(0);
+		bgfx::touch(0);
 
 		int64_t now = bx::getHPCounter();
 		static int64_t last = now;
@@ -60,26 +60,49 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		bgfx::dbgTextPrintf(0, 2, 0x6f, "Description: Loading meshes.");
 		bgfx::dbgTextPrintf(0, 3, 0x0f, "Frame: % 7.3f[ms]", double(frameTime)*toMs);
 
-		float at[3] = { 0.0f, 1.0f, 0.0f };
+		float at[3]  = { 0.0f, 1.0f,  0.0f };
 		float eye[3] = { 0.0f, 1.0f, -2.5f };
 
-		float view[16];
-		float proj[16];
-		bx::mtxLookAt(view, eye, at);
-		bx::mtxProj(proj, 60.0f, float(width)/float(height), 0.1f, 100.0f);
-
 		// Set view and projection matrix for view 0.
-		bgfx::setViewTransform(0, view, proj);
+		const bgfx::HMD* hmd = bgfx::getHMD();
+		if (NULL != hmd && 0 != (hmd->flags & BGFX_HMD_RENDERING) )
+		{
+			float view[16];
+			bx::mtxQuatTranslationHMD(view, hmd->eye[0].rotation, eye);
+
+			float proj[16];
+			bx::mtxProj(proj, hmd->eye[0].fov, 0.1f, 100.0f);
+
+			bgfx::setViewTransform(0, view, proj);
+
+			// Set view 0 default viewport.
+			//
+			// Use HMD's width/height since HMD's internal frame buffer size
+			// might be much larger than window size.
+			bgfx::setViewRect(0, 0, 0, hmd->width, hmd->height);
+		}
+		else
+		{
+			float view[16];
+			bx::mtxLookAt(view, eye, at);
+
+			float proj[16];
+			bx::mtxProj(proj, 60.0f, float(width)/float(height), 0.1f, 100.0f);
+			bgfx::setViewTransform(0, view, proj);
+
+			// Set view 0 default viewport.
+			bgfx::setViewRect(0, 0, 0, width, height);
+		}
 
 		float mtx[16];
 		bx::mtxRotateXY(mtx
 			, 0.0f
 			, time*0.37f
-			); 
+			);
 
 		meshSubmit(mesh, 0, program, mtx);
 
-		// Advance to next frame. Rendering thread will be kicked to 
+		// Advance to next frame. Rendering thread will be kicked to
 		// process submitted rendering primitives.
 		bgfx::frame();
 	}

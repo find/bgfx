@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2014 Branimir Karadzic. All rights reserved.
+ * Copyright 2011-2015 Branimir Karadzic. All rights reserved.
  * License: http://www.opensource.org/licenses/BSD-2-Clause
  */
 
@@ -29,17 +29,27 @@
 #include <bx/fpumath.h>
 #include <bx/handlealloc.h>
 
-#include "../entry/dbg.h"
 #include "imgui.h"
+#include "ocornut_imgui.h"
 #include "../nanovg/nanovg.h"
 
+// embedded shaders
 #include "vs_imgui_color.bin.h"
 #include "fs_imgui_color.bin.h"
 #include "vs_imgui_texture.bin.h"
 #include "fs_imgui_texture.bin.h"
+#include "vs_imgui_cubemap.bin.h"
+#include "fs_imgui_cubemap.bin.h"
+#include "vs_imgui_latlong.bin.h"
+#include "fs_imgui_latlong.bin.h"
 #include "vs_imgui_image.bin.h"
 #include "fs_imgui_image.bin.h"
 #include "fs_imgui_image_swizz.bin.h"
+
+// embedded font
+#include "droidsans.ttf.h"
+
+BX_PRAGMA_DIAGNOSTIC_IGNORED_MSVC(4244); // warning C4244: '=' : conversion from '' to '', possible loss of data
 
 #define USE_NANOVG_FONT 0
 
@@ -56,26 +66,42 @@ static const int32_t DEFAULT_SPACING = 4;
 static const int32_t TEXT_HEIGHT = 8;
 static const int32_t SCROLL_AREA_PADDING = 6;
 static const int32_t AREA_HEADER = 20;
-static const int32_t COLOR_WHEEL_PADDING = 60;
 static const float s_tabStops[4] = {150, 210, 270, 330};
 
-static void* imguiMalloc(size_t size, void* /*_userptr*/)
-{
-	return malloc(size);
-}
+void* imguiMalloc(size_t _size, void*);
+void  imguiFree(void* _ptr, void*);
 
-static void imguiFree(void* _ptr, void* /*_userptr*/)
-{
-	free(_ptr);
-}
+#define IMGUI_MIN(_a, _b) (_a)<(_b)?(_a):(_b)
+#define IMGUI_MAX(_a, _b) (_a)>(_b)?(_a):(_b)
+#define IMGUI_CLAMP(_a, _min, _max) IMGUI_MIN(IMGUI_MAX(_a, _min), _max)
 
-#define STBTT_malloc(_x, _y) imguiMalloc(_x, _y)
-#define STBTT_free(_x, _y) imguiFree(_x, _y)
+BX_PRAGMA_DIAGNOSTIC_IGNORED_MSVC(4505); // error C4505: '' : unreferenced local function has been removed
+BX_PRAGMA_DIAGNOSTIC_IGNORED_CLANG_GCC("-Wunused-function"); // warning: ‘int rect_width_compare(const void*, const void*)’ defined but not used
+BX_PRAGMA_DIAGNOSTIC_PUSH();
+BX_PRAGMA_DIAGNOSTIC_IGNORED_CLANG_GCC("-Wtype-limits"); // warning: comparison is always true due to limited range of data type
+#define STBTT_malloc(_size, _userData) imguiMalloc(_size, _userData)
+#define STBTT_free(_ptr, _userData) imguiFree(_ptr, _userData)
+#define STB_RECT_PACK_IMPLEMENTATION
+#include <stb/stb_rect_pack.h>
 #define STB_TRUETYPE_IMPLEMENTATION
-#include <stb_truetype/stb_truetype.h>
+#include <stb/stb_truetype.h>
+BX_PRAGMA_DIAGNOSTIC_POP();
 
 namespace
 {
+	static uint32_t addQuad(uint16_t* _indices, uint16_t _idx0, uint16_t _idx1, uint16_t _idx2, uint16_t _idx3)
+	{
+		_indices[0] = _idx0;
+		_indices[1] = _idx3;
+		_indices[2] = _idx1;
+
+		_indices[3] = _idx1;
+		_indices[4] = _idx3;
+		_indices[5] = _idx2;
+
+		return 6;
+	}
+
 	float sign(float px, float py, float ax, float ay, float bx, float by)
 	{
 		return (px - bx) * (ay - by) - (ax - bx) * (py - by);
@@ -252,7 +278,79 @@ namespace
 
 	bgfx::VertexDecl PosUvVertex::ms_decl;
 
+	struct PosNormalVertex
+	{
+		float m_x;
+		float m_y;
+		float m_z;
+		float m_nx;
+		float m_ny;
+		float m_nz;
+
+		static void init()
+		{
+			ms_decl.begin()
+				   .add(bgfx::Attrib::Position,  3, bgfx::AttribType::Float)
+				   .add(bgfx::Attrib::Normal,    3, bgfx::AttribType::Float)
+				   .end();
+		}
+
+		void set(float _x, float _y, float _z, float _nx, float _ny, float _nz)
+		{
+			m_x = _x;
+			m_y = _y;
+			m_z = _z;
+			m_nx = _nx;
+			m_ny = _ny;
+			m_nz = _nz;
+		}
+
+		static bgfx::VertexDecl ms_decl;
+	};
+
+	bgfx::VertexDecl PosNormalVertex::ms_decl;
+
 } // namespace
+
+#if !USE_NANOVG_FONT
+static float getTextLength(stbtt_bakedchar* _chardata, const char* _text, uint32_t& _numVertices)
+{
+	float xpos = 0;
+	float len = 0;
+	uint32_t numVertices = 0;
+
+	while (*_text)
+	{
+		int32_t ch = (uint8_t)*_text;
+		if (ch == '\t')
+		{
+			for (int32_t ii = 0; ii < 4; ++ii)
+			{
+				if (xpos < s_tabStops[ii])
+				{
+					xpos = s_tabStops[ii];
+					break;
+				}
+			}
+		}
+		else if (ch >= ' '
+			 &&  ch < 128)
+		{
+			stbtt_bakedchar* b = _chardata + ch - ' ';
+			int32_t round_x = STBTT_ifloor( (xpos + b->xoff) + 0.5);
+			len = round_x + b->x1 - b->x0 + 0.5f;
+			xpos += b->xadvance;
+			numVertices += 6;
+		}
+
+		++_text;
+	}
+
+	_numVertices = numVertices;
+
+	return len;
+}
+#endif // !USE_NANOVG_FONT
 
 struct Imgui
 {
@@ -266,49 +364,41 @@ struct Imgui
 		, m_dragX(0)
 		, m_dragY(0)
 		, m_dragOrig(0)
-		, m_widgetX(0)
-		, m_widgetY(0)
-		, m_widgetW(100)
 		, m_left(false)
 		, m_leftPressed(false)
 		, m_leftReleased(false)
 		, m_isHot(false)
-		, m_isActive(false)
 		, m_wentActive(false)
-		, m_insideCurrentScroll(false)
-		, m_areaId(0)
+		, m_insideArea(false)
+		, m_isActivePresent(false)
+		, m_checkActivePresence(false)
 		, m_widgetId(0)
 		, m_enabledAreaIds(0)
-		, m_scissor(UINT16_MAX)
-		, m_scrollTop(0)
-		, m_scrollHeight(0)
-		, m_scrollRight(0)
-		, m_scrollAreaTop(0)
-		, m_scrollAreaWidth(0)
-		, m_scrollAreaInnerWidth(0)
-		, m_scrollAreaX(0)
-		, m_scrollVal(NULL)
-		, m_scrollId(0)
-		, m_insideScrollArea(false)
 		, m_textureWidth(512)
 		, m_textureHeight(512)
 		, m_halfTexel(0.0f)
 		, m_nvg(NULL)
-		, m_view(31)
+		, m_view(255)
+		, m_surfaceWidth(0)
+		, m_surfaceHeight(0)
 		, m_viewWidth(0)
 		, m_viewHeight(0)
 		, m_currentFontIdx(0)
 	{
+		m_areaId.reset();
+
 		m_invTextureWidth  = 1.0f/m_textureWidth;
 		m_invTextureHeight = 1.0f/m_textureHeight;
 
-		u_imageLod.idx       = bgfx::invalidHandle;
-		u_imageSwizzle.idx   = bgfx::invalidHandle;
-		s_texColor.idx       = bgfx::invalidHandle;
-		m_missingTexture.idx = bgfx::invalidHandle;
+		u_imageLodEnabled.idx = bgfx::invalidHandle;
+		u_imageSwizzle.idx    = bgfx::invalidHandle;
+		s_texColor.idx        = bgfx::invalidHandle;
+		m_missingTexture.idx  = bgfx::invalidHandle;
 
 		m_colorProgram.idx      = bgfx::invalidHandle;
 		m_textureProgram.idx    = bgfx::invalidHandle;
+		m_cubeMapProgram.idx    = bgfx::invalidHandle;
+		m_latlongProgram.idx    = bgfx::invalidHandle;
 		m_imageProgram.idx      = bgfx::invalidHandle;
 		m_imageSwizzProgram.idx = bgfx::invalidHandle;
 	}
@@ -357,19 +447,35 @@ struct Imgui
 			}
 		}
 
-		return bgfx::createTexture2D(_width, _height, 0, bgfx::TextureFormat::BGRA8, 0, mem);
+		return bgfx::createTexture2D(uint16_t(_width), uint16_t(_height), 0, bgfx::TextureFormat::BGRA8, 0, mem);
 	}
 
-	ImguiFontHandle create(const void* _data, float _fontSize)
+	ImguiFontHandle create(const void* _data, uint32_t _size, float _fontSize, bx::AllocatorI* _allocator)
 	{
-		m_nvg = nvgCreate(512, 512, 1, m_view);
-		nvgCreateFontMem(m_nvg, "default", (unsigned char*)_data, INT32_MAX, 0);
-		nvgFontSize(m_nvg, _fontSize);
-		nvgFontFace(m_nvg, "default");
+		m_allocator = _allocator;
+
+		if (NULL == m_allocator)
+		{
+			static bx::CrtAllocator allocator;
+			m_allocator = &allocator;
+		}
+
+		if (NULL == _data)
+		{
+			_data = s_droidSansTtf;
+			_size = sizeof(s_droidSansTtf);
+		}
+
+		IMGUI_create(_data, _size, _fontSize, _allocator);
+
+		m_nvg = nvgCreate(1, m_view);
+ 		nvgCreateFontMem(m_nvg, "default", (unsigned char*)_data, INT32_MAX, 0);
+ 		nvgFontSize(m_nvg, _fontSize);
+ 		nvgFontFace(m_nvg, "default");
 
 		for (int32_t ii = 0; ii < NUM_CIRCLE_VERTS; ++ii)
 		{
-			float a = (float)ii / (float)NUM_CIRCLE_VERTS * (float)(M_PI * 2.0);
+			float a = (float)ii / (float)NUM_CIRCLE_VERTS * (float)(bx::pi * 2.0);
 			m_circleVerts[ii * 2 + 0] = cosf(a);
 			m_circleVerts[ii * 2 + 1] = sinf(a);
 		}
@@ -377,15 +483,20 @@ struct Imgui
 		PosColorVertex::init();
 		PosColorUvVertex::init();
 		PosUvVertex::init();
+		PosNormalVertex::init();
 
-		u_imageLod     = bgfx::createUniform("u_imageLod", bgfx::UniformType::Uniform1f);
-		u_imageSwizzle = bgfx::createUniform("u_swizzle",  bgfx::UniformType::Uniform4fv);
-		s_texColor     = bgfx::createUniform("s_texColor", bgfx::UniformType::Uniform1i);
+		u_imageLodEnabled = bgfx::createUniform("u_imageLodEnabled", bgfx::UniformType::Vec4);
+		u_imageSwizzle    = bgfx::createUniform("u_swizzle",         bgfx::UniformType::Vec4);
+		s_texColor        = bgfx::createUniform("s_texColor",        bgfx::UniformType::Int1);
 
 		const bgfx::Memory* vs_imgui_color;
 		const bgfx::Memory* fs_imgui_color;
 		const bgfx::Memory* vs_imgui_texture;
 		const bgfx::Memory* fs_imgui_texture;
+		const bgfx::Memory* vs_imgui_cubemap;
+		const bgfx::Memory* fs_imgui_cubemap;
+		const bgfx::Memory* vs_imgui_latlong;
+		const bgfx::Memory* fs_imgui_latlong;
 		const bgfx::Memory* vs_imgui_image;
 		const bgfx::Memory* fs_imgui_image;
 		const bgfx::Memory* fs_imgui_image_swizz;
@@ -397,6 +508,10 @@ struct Imgui
 			fs_imgui_color       = bgfx::makeRef(fs_imgui_color_dx9, sizeof(fs_imgui_color_dx9) );
 			vs_imgui_texture     = bgfx::makeRef(vs_imgui_texture_dx9, sizeof(vs_imgui_texture_dx9) );
 			fs_imgui_texture     = bgfx::makeRef(fs_imgui_texture_dx9, sizeof(fs_imgui_texture_dx9) );
+			vs_imgui_cubemap     = bgfx::makeRef(vs_imgui_cubemap_dx9, sizeof(vs_imgui_cubemap_dx9) );
+			fs_imgui_cubemap     = bgfx::makeRef(fs_imgui_cubemap_dx9, sizeof(fs_imgui_cubemap_dx9) );
+			vs_imgui_latlong     = bgfx::makeRef(vs_imgui_latlong_dx9, sizeof(vs_imgui_latlong_dx9) );
+			fs_imgui_latlong     = bgfx::makeRef(fs_imgui_latlong_dx9, sizeof(fs_imgui_latlong_dx9) );
 			vs_imgui_image       = bgfx::makeRef(vs_imgui_image_dx9, sizeof(vs_imgui_image_dx9) );
 			fs_imgui_image       = bgfx::makeRef(fs_imgui_image_dx9, sizeof(fs_imgui_image_dx9) );
 			fs_imgui_image_swizz = bgfx::makeRef(fs_imgui_image_swizz_dx9, sizeof(fs_imgui_image_swizz_dx9) );
@@ -404,10 +519,15 @@ struct Imgui
 			break;
 
 		case bgfx::RendererType::Direct3D11:
+		case bgfx::RendererType::Direct3D12:
 			vs_imgui_color       = bgfx::makeRef(vs_imgui_color_dx11, sizeof(vs_imgui_color_dx11) );
 			fs_imgui_color       = bgfx::makeRef(fs_imgui_color_dx11, sizeof(fs_imgui_color_dx11) );
 			vs_imgui_texture     = bgfx::makeRef(vs_imgui_texture_dx11, sizeof(vs_imgui_texture_dx11) );
 			fs_imgui_texture     = bgfx::makeRef(fs_imgui_texture_dx11, sizeof(fs_imgui_texture_dx11) );
+			vs_imgui_cubemap     = bgfx::makeRef(vs_imgui_cubemap_dx11, sizeof(vs_imgui_cubemap_dx11) );
+			fs_imgui_cubemap     = bgfx::makeRef(fs_imgui_cubemap_dx11, sizeof(fs_imgui_cubemap_dx11) );
+			vs_imgui_latlong     = bgfx::makeRef(vs_imgui_latlong_dx11, sizeof(vs_imgui_latlong_dx11) );
+			fs_imgui_latlong     = bgfx::makeRef(fs_imgui_latlong_dx11, sizeof(fs_imgui_latlong_dx11) );
 			vs_imgui_image       = bgfx::makeRef(vs_imgui_image_dx11, sizeof(vs_imgui_image_dx11) );
 			fs_imgui_image       = bgfx::makeRef(fs_imgui_image_dx11, sizeof(fs_imgui_image_dx11) );
 			fs_imgui_image_swizz = bgfx::makeRef(fs_imgui_image_swizz_dx11, sizeof(fs_imgui_image_swizz_dx11) );
@@ -418,6 +538,10 @@ struct Imgui
 			fs_imgui_color       = bgfx::makeRef(fs_imgui_color_glsl, sizeof(fs_imgui_color_glsl) );
 			vs_imgui_texture     = bgfx::makeRef(vs_imgui_texture_glsl, sizeof(vs_imgui_texture_glsl) );
 			fs_imgui_texture     = bgfx::makeRef(fs_imgui_texture_glsl, sizeof(fs_imgui_texture_glsl) );
+			vs_imgui_cubemap     = bgfx::makeRef(vs_imgui_cubemap_glsl, sizeof(vs_imgui_cubemap_glsl) );
+			fs_imgui_cubemap     = bgfx::makeRef(fs_imgui_cubemap_glsl, sizeof(fs_imgui_cubemap_glsl) );
+			vs_imgui_latlong     = bgfx::makeRef(vs_imgui_latlong_glsl, sizeof(vs_imgui_latlong_glsl) );
+			fs_imgui_latlong     = bgfx::makeRef(fs_imgui_latlong_glsl, sizeof(fs_imgui_latlong_glsl) );
 			vs_imgui_image       = bgfx::makeRef(vs_imgui_image_glsl, sizeof(vs_imgui_image_glsl) );
 			fs_imgui_image       = bgfx::makeRef(fs_imgui_image_glsl, sizeof(fs_imgui_image_glsl) );
 			fs_imgui_image_swizz = bgfx::makeRef(fs_imgui_image_swizz_glsl, sizeof(fs_imgui_image_swizz_glsl) );
@@ -436,6 +560,18 @@ struct Imgui
 		vsh = bgfx::createShader(vs_imgui_texture);
 		fsh = bgfx::createShader(fs_imgui_texture);
 		m_textureProgram = bgfx::createProgram(vsh, fsh);
+		bgfx::destroyShader(vsh);
+		bgfx::destroyShader(fsh);
+
+		vsh = bgfx::createShader(vs_imgui_cubemap);
+		fsh = bgfx::createShader(fs_imgui_cubemap);
+		m_cubeMapProgram = bgfx::createProgram(vsh, fsh);
+		bgfx::destroyShader(vsh);
+		bgfx::destroyShader(fsh);
+
+		vsh = bgfx::createShader(vs_imgui_latlong);
+		fsh = bgfx::createShader(fs_imgui_latlong);
+		m_latlongProgram = bgfx::createProgram(vsh, fsh);
 		bgfx::destroyShader(vsh);
 		bgfx::destroyShader(fsh);
 
@@ -463,29 +599,47 @@ struct Imgui
 
 	void destroy()
 	{
-		bgfx::destroyUniform(u_imageLod);
+		bgfx::destroyUniform(u_imageLodEnabled);
 		bgfx::destroyUniform(u_imageSwizzle);
 		bgfx::destroyUniform(s_texColor);
 #if !USE_NANOVG_FONT
-		for (uint16_t ii = 0; ii < IMGUI_CONFIG_MAX_FONTS; ++ii)
+		for (uint16_t ii = 0, num = m_fontHandle.getNumHandles(); ii < num; ++ii)
 		{
-			if (bgfx::isValid(m_fonts[ii].m_texture) )
-			{
-				bgfx::destroyTexture(m_fonts[ii].m_texture);
-			}
+			uint16_t idx = m_fontHandle.getHandleAt(0);
+			bgfx::destroyTexture(m_fonts[idx].m_texture);
+			m_fontHandle.free(idx);
 		}
 #endif // !USE_NANOVG_FONT
 		bgfx::destroyTexture(m_missingTexture);
 		bgfx::destroyProgram(m_colorProgram);
 		bgfx::destroyProgram(m_textureProgram);
+		bgfx::destroyProgram(m_cubeMapProgram);
+		bgfx::destroyProgram(m_latlongProgram);
 		bgfx::destroyProgram(m_imageProgram);
 		bgfx::destroyProgram(m_imageSwizzProgram);
 		nvgDelete(m_nvg);
+
+		IMGUI_destroy();
 	}
 
 	bool anyActive() const
 	{
 		return m_active != 0;
+	}
+
+	inline void updatePresence(uint32_t _id)
+	{
+		if (m_checkActivePresence && m_active == _id)
+		{
+			m_isActivePresent = true;
+		}
+	}
+
+	uint32_t getId()
+	{
+		const uint32_t id = (m_areaId << 16) | m_widgetId++;
+		updatePresence(id);
+		return id;
 	}
 
 	bool isActive(uint32_t _id) const
@@ -505,19 +659,19 @@ struct Imgui
 
 	bool inRect(int32_t _x, int32_t _y, int32_t _width, int32_t _height, bool _checkScroll = true) const
 	{
-		return (!_checkScroll || m_insideCurrentScroll)
+		return (!_checkScroll || m_areas[m_areaId].m_inside)
 			&& m_mx >= _x
 			&& m_mx <= _x + _width
 			&& m_my >= _y
 			&& m_my <= _y + _height;
 	}
 
-	bool isEnabled(uint8_t _areaId)
+	bool isEnabled(uint16_t _areaId)
 	{
 		return (m_enabledAreaIds>>_areaId)&0x1;
 	}
 
-	void setEnabled(uint8_t _areaId)
+	void setEnabled(uint16_t _areaId)
 	{
 		m_enabledAreaIds |= (UINT64_C(1)<<_areaId);
 	}
@@ -579,7 +733,6 @@ struct Imgui
 		// if button is active, then react on left up
 		if (isActive(_id) )
 		{
-			m_isActive = true;
 			if (_over)
 			{
 				setHot(_id);
@@ -617,7 +770,7 @@ struct Imgui
 			&& m_leftPressed)
 			{
 				// Toggle active input.
-				if (isActiveInputField(_id))
+				if (isActiveInputField(_id) )
 				{
 					clearActiveInputField();
 				}
@@ -652,54 +805,324 @@ struct Imgui
 		m_left = left;
 		m_scroll = _scroll;
 
-		_inputChar = _inputChar & 0x7f; // ASCII of GTFO! :)
+		_inputChar = _inputChar & 0x7f; // ASCII or GTFO! :)
 		m_lastChar = m_char;
 		m_char = _inputChar;
 	}
 
-	void beginFrame(int32_t _mx, int32_t _my, uint8_t _button, int32_t _scroll, uint16_t _width, uint16_t _height, char _inputChar, uint8_t _view)
+	void beginFrame(int32_t _mx, int32_t _my, uint8_t _button, int32_t _scroll, uint16_t _width, uint16_t _height, uint16_t _surfaceWidth, uint16_t _surfaceHeight, char _inputChar, uint8_t _view)
 	{
-		nvgBeginFrame(m_nvg, _width, _height, 1.0f, NVG_STRAIGHT_ALPHA);
-
 		m_view = _view;
 		m_viewWidth = _width;
 		m_viewHeight = _height;
+		m_surfaceWidth = _surfaceWidth;
+		m_surfaceHeight = _surfaceHeight;
+
+		const float xscale = float(m_surfaceWidth) /float(m_viewWidth);
+		const float yscale = float(m_surfaceHeight)/float(m_viewHeight);
+		const int32_t mx = int32_t(float(_mx)*xscale);
+		const int32_t my = int32_t(float(_my)*yscale);
+
+		IMGUI_beginFrame(mx, my, _button, _scroll, _width, _height, _inputChar, _view);
+		nvgBeginFrameScaled(m_nvg, m_viewWidth, m_viewHeight, m_surfaceWidth, m_surfaceHeight, 1.0f);
+		nvgViewId(m_nvg, _view);
+
+		bgfx::setViewName(_view, "IMGUI");
 		bgfx::setViewSeq(_view, true);
-		bgfx::setViewRect(_view, 0, 0, _width, _height);
 
-		float proj[16];
-		bx::mtxOrtho(proj, 0.0f, (float)_width, (float)_height, 0.0f, 0.0f, 1000.0f);
-		bgfx::setViewTransform(_view, NULL, proj);
+		const bgfx::HMD* hmd = bgfx::getHMD();
+		if (NULL != hmd && 0 != (hmd->flags & BGFX_HMD_RENDERING) )
+		{
+			m_viewWidth = _width / 2;
+			m_surfaceWidth = _surfaceWidth / 2;
 
-		updateInput(_mx, _my, _button, _scroll, _inputChar);
+			float proj[16];
+			bx::mtxProj(proj, hmd->eye[0].fov, 0.1f, 100.0f);
+
+			static float time = 0.0f;
+			time += 0.05f;
+
+			const float dist = 10.0f;
+			const float offset0 = -proj[8] + (hmd->eye[0].viewOffset[0] / dist * proj[0]);
+			const float offset1 = -proj[8] + (hmd->eye[1].viewOffset[0] / dist * proj[0]);
+
+			float ortho[2][16];
+			const float viewOffset = _surfaceWidth/4.0f;
+			const float viewWidth  = _surfaceWidth/2.0f;
+			bx::mtxOrtho(ortho[0], viewOffset, viewOffset + viewWidth, (float)m_surfaceHeight, 0.0f, 0.0f, 1000.0f, offset0);
+			bx::mtxOrtho(ortho[1], viewOffset, viewOffset + viewWidth, (float)m_surfaceHeight, 0.0f, 0.0f, 1000.0f, offset1);
+			bgfx::setViewTransform(_view, NULL, ortho[0], BGFX_VIEW_STEREO, ortho[1]);
+			bgfx::setViewRect(_view, 0, 0, hmd->width, hmd->height);
+		}
+		else
+		{
+			float ortho[16];
+			bx::mtxOrtho(ortho, 0.0f, (float)m_surfaceWidth, (float)m_surfaceHeight, 0.0f, 0.0f, 1000.0f);
+			bgfx::setViewTransform(_view, NULL, ortho);
+			bgfx::setViewRect(_view, 0, 0, _width, _height);
+		}
+
+		updateInput(mx, my, _button, _scroll, _inputChar);
 
 		m_hot = m_hotToBe;
 		m_hotToBe = 0;
 
 		m_wentActive = false;
-		m_isActive = false;
 		m_isHot = false;
 
-		m_widgetX = 0;
-		m_widgetY = 0;
-		m_widgetW = 0;
+		Area& area = getCurrentArea();
+		area.m_widgetX = 0;
+		area.m_widgetY = 0;
+		area.m_widgetW = 0;
 
-		m_areaId = 0;
+		m_areaId.reset();
 		m_widgetId = 0;
 		m_enabledAreaIds = 0;
+		m_insideArea = false;
+
+		m_isActivePresent = false;
 	}
 
 	void endFrame()
 	{
+		if (m_checkActivePresence && !m_isActivePresent)
+		{
+			// The ui element is not present any more, reset active field.
+			m_active = 0;
+		}
+		m_checkActivePresence = (0 != m_active);
+
 		clearInput();
+
 		nvgEndFrame(m_nvg);
+		IMGUI_endFrame();
 	}
 
-	bool beginScrollArea(const char* _name, int32_t _x, int32_t _y, int32_t _width, int32_t _height, int32_t* _scroll, bool _enabled, int32_t _r)
+	bool beginScroll(int32_t _height, int32_t* _scroll, bool _enabled)
 	{
-		m_areaId++;
-		m_widgetId = 0;
-		m_scrollId = (m_areaId << 8) | m_widgetId;
+		Area& parentArea = getCurrentArea();
+
+		m_areaId.next();
+		const uint32_t scrollId = getId();
+
+		Area& area = getCurrentArea();
+
+		const uint16_t parentBottom = parentArea.m_scissorY + parentArea.m_scissorHeight;
+		const uint16_t childBottom  = parentArea.m_widgetY + _height;
+		const uint16_t bottom = IMGUI_MIN(childBottom, parentBottom);
+
+		const uint16_t top = IMGUI_MAX(parentArea.m_widgetY, parentArea.m_scissorY);
+
+		area.m_contentX      = parentArea.m_contentX;
+		area.m_contentY      = parentArea.m_widgetY;
+		area.m_contentWidth  = parentArea.m_contentWidth - (SCROLL_AREA_PADDING*3);
+		area.m_contentHeight = _height;
+		area.m_widgetX       = parentArea.m_widgetX;
+		area.m_widgetY       = parentArea.m_widgetY + (*_scroll);
+		area.m_widgetW       = parentArea.m_widgetW - (SCROLL_AREA_PADDING*3);
+
+		area.m_scissorX     = area.m_contentX;
+		area.m_scissorWidth = area.m_contentWidth;
+
+		area.m_scissorY       = top - 1;
+		area.m_scissorHeight  = bottom - top;
+		area.m_scissorEnabled = true;
+
+		area.m_height = _height;
+
+		area.m_scrollVal = _scroll;
+		area.m_scrollId = scrollId;
+
+		area.m_inside = inRect(parentArea.m_scissorX
+							 , area.m_scissorY
+							 , parentArea.m_scissorWidth
+							 , area.m_scissorHeight
+							 , false
+							 );
+		area.m_didScroll = false;
+
+		parentArea.m_widgetY += (_height + DEFAULT_SPACING);
+
+		if (_enabled)
+		{
+			setEnabled(m_areaId);
+		}
+
+		nvgScissor(m_nvg, area);
+
+		m_insideArea |= area.m_inside;
+
+		return area.m_inside;
+	}
+
+	void endScroll(int32_t _r)
+	{
+		Area& area = getCurrentArea();
+		area.m_scissorEnabled = false;
+
+		const int32_t xx     = area.m_contentX + area.m_contentWidth - 1;
+		const int32_t yy     = area.m_contentY;
+		const int32_t width  = SCROLL_AREA_PADDING * 2;
+		const int32_t height = area.m_height;
+
+		const int32_t aa = area.m_contentY+area.m_height;
+		const int32_t bb = area.m_widgetY-DEFAULT_SPACING;
+		const int32_t sbot = IMGUI_MAX(aa, bb);
+		const int32_t stop = area.m_contentY + (*area.m_scrollVal);
+		const int32_t sh   = IMGUI_MAX(1, sbot - stop); // The scrollable area height.
+
+		const uint32_t hid = area.m_scrollId;
+		const float barHeight = (float)height / (float)sh;
+		const bool hasScrollBar = (barHeight < 1.0f);
+
+		// Handle mouse scrolling.
+		if (area.m_inside && !area.m_didScroll && !anyActive() )
+		{
+			if (m_scroll)
+			{
+				const int32_t diff = height - sh;
+
+				const int32_t val = *area.m_scrollVal + 20*m_scroll;
+				const int32_t min = (diff < 0) ? diff : *area.m_scrollVal;
+				const int32_t max = 0;
+				const int32_t newVal = IMGUI_CLAMP(val, min, max);
+				*area.m_scrollVal = newVal;
+
+				if (hasScrollBar)
+				{
+					area.m_didScroll = true;
+				}
+			}
+		}
+
+		area.m_inside = false;
+
+		int32_t* scroll = area.m_scrollVal;
+
+		// This must be called here before drawing scroll bars
+		// so that scissor of parrent area applies.
+		m_areaId.pop();
+
+		// Propagate 'didScroll' to parrent area to avoid scrolling multiple areas at once.
+		Area& parentArea = getCurrentArea();
+		parentArea.m_didScroll = (parentArea.m_didScroll || area.m_didScroll);
+
+		// Draw and handle scroll click.
+		if (hasScrollBar)
+		{
+			const float barY = bx::fsaturate( (float)(-(*scroll) ) / (float)sh);
+
+			// Handle scroll bar logic.
+			const int32_t hx = xx;
+			const int32_t hy = yy + (int)(barY * height);
+			const int32_t hw = width;
+			const int32_t hh = (int)(barHeight * height);
+
+			const int32_t range = height - (hh - 1);
+			const bool over = inRect(hx, hy, hw, hh);
+			buttonLogic(hid, over);
+			if (isActive(hid) )
+			{
+				float uu = (float)(hy - yy) / (float)range;
+				if (m_wentActive)
+				{
+					m_dragY = m_my;
+					m_dragOrig = uu;
+				}
+
+				if (m_dragY != m_my)
+				{
+					const int32_t diff = height - sh;
+
+					const int32_t drag = m_my - m_dragY;
+					const float dragFactor = float(sh)/float(height);
+
+					const int32_t val = *scroll - int32_t(drag*dragFactor);
+					const int32_t min = (diff < 0) ? diff : *scroll;
+					const int32_t max = 0;
+					*scroll = IMGUI_CLAMP(val, min, max);
+
+					m_dragY = m_my;
+				}
+			}
+
+			// BG
+			drawRoundedRect( (float)xx
+						   , (float)yy
+						   , (float)width
+						   , (float)height
+						   , (float)_r
+						   , imguiRGBA(0, 0, 0, 196)
+						   );
+
+			// Bar
+			if (isActive(hid) )
+			{
+				drawRoundedRect( (float)hx
+							   , (float)hy
+							   , (float)hw
+							   , (float)hh
+							   , (float)_r
+							   , imguiRGBA(255, 196, 0, 196)
+							   );
+			}
+			else
+			{
+				drawRoundedRect( (float)hx
+							   , (float)hy
+							   , (float)hw
+							   , (float)hh
+							   , (float)_r
+							   , isHot(hid) ? imguiRGBA(255, 196, 0, 96) : imguiRGBA(255, 255, 255, 64)
+							   );
+			}
+		}
+		else
+		{
+			// Clear active if scroll is selected but not visible any more.
+			if (isActive(hid) )
+			{
+				clearActive();
+			}
+		}
+
+		nvgScissor(m_nvg, parentArea);
+	}
+
+	bool beginArea(const char* _name, int32_t _x, int32_t _y, int32_t _width, int32_t _height, bool _enabled, int32_t _r)
+	{
+		m_areaId.next();
+		const uint32_t scrollId = getId();
+
+		const bool hasTitle = (NULL != _name && '\0' != _name[0]);
+		const int32_t header = hasTitle ? AREA_HEADER : 0;
+
+		Area& area = getCurrentArea();
+		area.m_x = _x;
+		area.m_y = _y;
+		area.m_width = _width;
+		area.m_height = _height;
+
+		area.m_contentX      = area.m_x      + SCROLL_AREA_PADDING;
+		area.m_contentY      = area.m_y      + SCROLL_AREA_PADDING + header;
+		area.m_contentWidth  = area.m_width  - SCROLL_AREA_PADDING;
+		area.m_contentHeight = area.m_height - SCROLL_AREA_PADDING*2 - header;
+
+		area.m_scissorX      = area.m_contentX;
+		area.m_scissorY      = area.m_y      + SCROLL_AREA_PADDING + header;
+		area.m_scissorHeight = area.m_height - SCROLL_AREA_PADDING*2 - header;
+		area.m_scissorWidth  = area.m_contentWidth;
+		area.m_scissorEnabled = false;
+
+		area.m_widgetX = area.m_contentX;
+		area.m_widgetY = area.m_contentY;
+		area.m_widgetW = area.m_width - SCROLL_AREA_PADDING*2;
+
+		static int32_t s_zeroScroll = 0;
+		area.m_scrollVal = &s_zeroScroll;
+		area.m_scrollId = scrollId;
+		area.m_inside = inRect(area.m_scissorX, area.m_scissorY, area.m_scissorWidth, area.m_scissorHeight, false);
+		area.m_didScroll = false;
 
 		if (_enabled)
 		{
@@ -726,9 +1149,6 @@ struct Imgui
 						   );
 		}
 
-		const bool hasTitle = (NULL != _name && '\0' != _name[0]);
-
-		int32_t header = 0;
 		if (hasTitle)
 		{
 			drawText(_x + 10
@@ -737,222 +1157,63 @@ struct Imgui
 				   , _name
 				   , imguiRGBA(255, 255, 255, 128)
 				   );
-			header = AREA_HEADER;
 		}
+		area.m_scissorEnabled = true;
 
-		const int32_t contentX = _x + SCROLL_AREA_PADDING;
-		const int32_t contentY = _y + SCROLL_AREA_PADDING + header;
-		const int32_t contentWidth = _width - SCROLL_AREA_PADDING * 3;
-		const int32_t contentHeight = _height - 2*SCROLL_AREA_PADDING - header;
+		nvgScissor(m_nvg, area);
 
-		nvgScissor(m_nvg
-				 , float(contentX)
-				 , float(contentY-1)
-				 , float(contentWidth)
-				 , float(contentHeight+1)
-				 );
-
-		m_scissor = bgfx::setScissor(uint16_t(contentX)
-								   , uint16_t(contentY-1)
-								   , uint16_t(contentWidth)
-								   , uint16_t(contentHeight+1)
-								   );
-
-		m_widgetX = contentX;
-		m_widgetY = contentY + (*_scroll);
-		m_widgetW = _width - SCROLL_AREA_PADDING * 4 - 2;
-
-		m_scrollTop    = contentY;
-		m_scrollHeight = contentHeight;
-		m_scrollRight  = _x + _width - SCROLL_AREA_PADDING * 3;
-
-		m_scrollVal = _scroll;
-		m_scrollAreaX = _x;
-		m_scrollAreaWidth = _width;
-		m_scrollAreaInnerWidth = m_widgetW;
-		m_scrollAreaTop = m_widgetY;
-
-		m_insideScrollArea = inRect(_x, _y, _width, _height, false);
-		m_insideCurrentScroll = m_insideScrollArea;
-
-		return m_insideScrollArea;
+		m_insideArea |= area.m_inside;
+		return area.m_inside;
 	}
 
-	void endScrollArea(int32_t _r)
+	void endArea()
 	{
-		// Disable scissoring.
-		m_scissor = UINT16_MAX;
+		m_areaId.pop();
 		nvgResetScissor(m_nvg);
-
-		// Draw scroll bar
-		int32_t xx     = m_scrollRight + SCROLL_AREA_PADDING / 2;
-		int32_t yy     = m_scrollTop;
-		int32_t width  = SCROLL_AREA_PADDING * 2;
-		int32_t height = m_scrollHeight;
-
-		int32_t stop = m_scrollAreaTop;
-		int32_t sbot = m_widgetY - DEFAULT_SPACING;
-		int32_t sh   = sbot - stop; // The scrollable area height.
-
-		float barHeight = (float)height / (float)sh;
-
-		// Handle m_scrollVal properly on variable scrollable area height.
-		const int32_t diff = height - sh;
-		if (diff < 0)
-		{
-			*m_scrollVal = (*m_scrollVal > diff) ? *m_scrollVal : diff; // m_scrollVal = max(diff, m_scrollVal).
-		}
-		else
-		{
-			*m_scrollVal = 0;
-		}
-
-		if (barHeight < 1.0f)
-		{
-			float barY = bx::fsaturate( (float)(yy - stop) / (float)sh);
-
-			// Handle scroll bar logic.
-			uint32_t hid = m_scrollId;
-			int32_t hx = xx;
-			int32_t hy = yy + (int)(barY * height);
-			int32_t hw = width;
-			int32_t hh = (int)(barHeight * height);
-
-			const int32_t range = height - (hh - 1);
-			bool over = inRect(hx, hy, hw, hh);
-			buttonLogic(hid, over);
-			if (isActive(hid) )
-			{
-				float uu = (float)(hy - yy) / (float)range;
-				if (m_wentActive)
-				{
-					m_dragY = m_my;
-					m_dragOrig = uu;
-				}
-
-				if (m_dragY != m_my)
-				{
-					uu = bx::fsaturate(m_dragOrig + (m_my - m_dragY) / (float)range);
-					*m_scrollVal = (int)(uu * (height - sh) );
-				}
-			}
-
-			// BG
-			if (0 == _r)
-			{
-				drawRect( (float)xx
-					, (float)yy
-					, (float)width
-					, (float)height
-					, imguiRGBA(0, 0, 0, 196)
-					);
-			}
-			else
-			{
-				drawRoundedRect( (float)xx
-					, (float)yy
-					, (float)width
-					, (float)height
-					, (float)_r
-					, imguiRGBA(0, 0, 0, 196)
-					);
-			}
-
-			// Bar
-			if (isActive(hid) )
-			{
-				if (0 == _r)
-				{
-					drawRect( (float)hx
-						, (float)hy
-						, (float)hw
-						, (float)hh
-						, imguiRGBA(255, 196, 0, 196)
-						);
-				}
-				else
-				{
-					drawRoundedRect( (float)hx
-						, (float)hy
-						, (float)hw
-						, (float)hh
-						, (float)_r
-						, imguiRGBA(255, 196, 0, 196)
-						);
-				}
-			}
-			else
-			{
-				if (0 == _r)
-				{
-					drawRect( (float)hx
-						, (float)hy
-						, (float)hw
-						, (float)hh
-						, isHot(hid) ? imguiRGBA(255, 196, 0, 96) : imguiRGBA(255, 255, 255, 64)
-						);
-				}
-				else
-				{
-					drawRoundedRect( (float)hx
-						, (float)hy
-						, (float)hw
-						, (float)hh
-						, (float)_r
-						, isHot(hid) ? imguiRGBA(255, 196, 0, 96) : imguiRGBA(255, 255, 255, 64)
-						);
-				}
-			}
-
-			// Handle mouse scrolling.
-			if (m_insideScrollArea) // && !anyActive() )
-			{
-				if (m_scroll)
-				{
-					*m_scrollVal += bx::uint32_clamp(20 * m_scroll, 0, sh - height);
-				}
-			}
-		}
-
-		m_insideCurrentScroll = false;
 	}
 
-	bool button(const char* _text, bool _enabled, uint32_t _rgb0, int32_t _r)
+	bool button(const char* _text, bool _enabled, ImguiAlign::Enum _align, uint32_t _rgb0, int32_t _r)
 	{
-		m_widgetId++;
-		uint16_t id = (m_areaId << 8) | m_widgetId;
+		const uint32_t id = getId();
 
-		int32_t xx = m_widgetX;
-		int32_t yy = m_widgetY;
-		int32_t width = m_widgetW;
-		int32_t height = BUTTON_HEIGHT;
-		m_widgetY += BUTTON_HEIGHT + DEFAULT_SPACING;
+		Area& area = getCurrentArea();
+		const int32_t yy = area.m_widgetY;
+		const int32_t height = BUTTON_HEIGHT;
+		area.m_widgetY += BUTTON_HEIGHT + DEFAULT_SPACING;
 
-		bool enabled = _enabled && isEnabled(m_areaId);
-		bool over = enabled	&& inRect(xx, yy, width, height);
-		bool res = buttonLogic(id, over);
+		int32_t xx;
+		int32_t width;
+		if (ImguiAlign::Left == _align)
+		{
+			xx = area.m_contentX + SCROLL_AREA_PADDING;
+			width = area.m_widgetW;
+		}
+		else if (ImguiAlign::LeftIndented == _align
+			 ||  ImguiAlign::Right        == _align)
+		{
+			xx = area.m_widgetX;
+			width = area.m_widgetW-1; //TODO: -1 !
+		}
+		else //if (ImguiAlign::Center         == _align
+			 //||  ImguiAlign::CenterIndented == _align).
+		{
+			xx = area.m_widgetX;
+			width = area.m_widgetW - (area.m_widgetX-area.m_contentX);
+		}
+
+		const bool enabled = _enabled && isEnabled(m_areaId);
+		const bool over = enabled && inRect(xx, yy, width, height);
+		const bool res = buttonLogic(id, over);
 
 		const uint32_t rgb0 = _rgb0&0x00ffffff;
 
-		if (0 == _r)
-		{
-			drawRect( (float)xx
-				, (float)yy
-				, (float)width
-				, (float)height
-				, rgb0 | imguiRGBA(0, 0, 0, isActive(id) ? 196 : 96)
-				);
-		}
-		else
-		{
-			drawRoundedRect( (float)xx
-				, (float)yy
-				, (float)width
-				, (float)height
-				, (float)_r
-				, rgb0 | imguiRGBA(0, 0, 0, isActive(id) ? 196 : 96)
-				);
-		}
+		drawRoundedRect( (float)xx
+					   , (float)yy
+					   , (float)width
+					   , (float)height
+					   , (float)_r
+					   , rgb0 | imguiRGBA(0, 0, 0, isActive(id) ? 196 : 96)
+					   );
 
 		if (enabled)
 		{
@@ -978,18 +1239,18 @@ struct Imgui
 
 	bool item(const char* _text, bool _enabled)
 	{
-		m_widgetId++;
-		uint16_t id = (m_areaId << 8) | m_widgetId;
+		const uint32_t id = getId();
 
-		int32_t xx = m_widgetX;
-		int32_t yy = m_widgetY;
-		int32_t width = m_widgetW;
-		int32_t height = BUTTON_HEIGHT;
-		m_widgetY += BUTTON_HEIGHT + DEFAULT_SPACING;
+		Area& area = getCurrentArea();
+		const int32_t xx = area.m_widgetX;
+		const int32_t yy = area.m_widgetY;
+		const int32_t width = area.m_widgetW;
+		const int32_t height = BUTTON_HEIGHT;
+		area.m_widgetY += BUTTON_HEIGHT + DEFAULT_SPACING;
 
-		bool enabled = _enabled && isEnabled(m_areaId);
-		bool over = enabled && inRect(xx, yy, width, height);
-		bool res = buttonLogic(id, over);
+		const bool enabled = _enabled && isEnabled(m_areaId);
+		const bool over = enabled && inRect(xx, yy, width, height);
+		const bool res = buttonLogic(id, over);
 
 		if (isHot(id) )
 		{
@@ -1026,18 +1287,18 @@ struct Imgui
 
 	bool check(const char* _text, bool _checked, bool _enabled)
 	{
-		m_widgetId++;
-		uint16_t id = (m_areaId << 8) | m_widgetId;
+		const uint32_t id = getId();
 
-		int32_t xx = m_widgetX;
-		int32_t yy = m_widgetY;
-		int32_t width = m_widgetW;
-		int32_t height = BUTTON_HEIGHT;
-		m_widgetY += BUTTON_HEIGHT + DEFAULT_SPACING;
+		Area& area = getCurrentArea();
+		const int32_t xx = area.m_widgetX;
+		const int32_t yy = area.m_widgetY;
+		const int32_t width = area.m_widgetW;
+		const int32_t height = BUTTON_HEIGHT;
+		area.m_widgetY += BUTTON_HEIGHT + DEFAULT_SPACING;
 
-		bool enabled = _enabled && isEnabled(m_areaId);
-		bool over = enabled && inRect(xx, yy, width, height);
-		bool res = buttonLogic(id, over);
+		const bool enabled = _enabled && isEnabled(m_areaId);
+		const bool over = enabled && inRect(xx, yy, width, height);
+		const bool res = buttonLogic(id, over);
 
 		const int32_t cx = xx + BUTTON_HEIGHT / 2 - CHECK_SIZE / 2;
 		const int32_t cy = yy + BUTTON_HEIGHT / 2 - CHECK_SIZE / 2;
@@ -1095,13 +1356,33 @@ struct Imgui
 		return res;
 	}
 
-	void input(const char* _label, char* _str, uint32_t _len, bool _enabled, int32_t _r)
+	void input(const char* _label, char* _str, uint32_t _len, bool _enabled, ImguiAlign::Enum _align, int32_t _r)
 	{
-		m_widgetId++;
-		const uint16_t id = (m_areaId << 8) | m_widgetId;
-		int32_t xx = m_widgetX;
-		int32_t yy = m_widgetY;
-		m_widgetY += BUTTON_HEIGHT + DEFAULT_SPACING;
+		const uint32_t id = getId();
+
+		Area& area = getCurrentArea();
+		const int32_t yy = area.m_widgetY;
+		area.m_widgetY += BUTTON_HEIGHT + DEFAULT_SPACING;
+
+		int32_t xx;
+		int32_t width;
+		if (ImguiAlign::Left == _align)
+		{
+			xx = area.m_contentX + SCROLL_AREA_PADDING;
+			width = area.m_widgetW;
+		}
+		else if (ImguiAlign::LeftIndented == _align
+			 ||  ImguiAlign::Right        == _align)
+		{
+			xx = area.m_widgetX;
+			width = area.m_widgetW-1; //TODO: -1 !
+		}
+		else //if (ImguiAlign::Center         == _align
+			 //||  ImguiAlign::CenterIndented == _align).
+		{
+			xx = area.m_widgetX;
+			width = area.m_widgetW - (area.m_widgetX-area.m_contentX);
+		}
 
 		const bool drawLabel = (NULL != _label && _label[0] != '\0');
 
@@ -1118,9 +1399,9 @@ struct Imgui
 		// Handle input.
 		if (isActiveInputField(id) )
 		{
-			const size_t cursor = size_t(strlen(_str));
+			const size_t cursor = size_t(strlen(_str) );
 
-			if (m_char == 0x08) //backspace
+			if (m_char == 0x08 || m_char == 0x7f) //backspace or delete
 			{
 				_str[cursor-1] = '\0';
 			}
@@ -1137,12 +1418,11 @@ struct Imgui
 		}
 
 		// Draw input area.
-		int32_t height = BUTTON_HEIGHT;
-		int32_t width = m_widgetW;
+		const int32_t height = BUTTON_HEIGHT;
 		if (drawLabel)
 		{
 			uint32_t numVertices = 0; //unused
-			const int32_t labelWidth = int32_t(getTextLength(m_fonts[m_currentFontIdx].m_cdata, _label, numVertices));
+			const int32_t labelWidth = int32_t(getTextLength(m_fonts[m_currentFontIdx].m_cdata, _label, numVertices) );
 			xx    += (labelWidth + 6);
 			width -= (labelWidth + 6);
 		}
@@ -1150,25 +1430,13 @@ struct Imgui
 		const bool over = enabled && inRect(xx, yy, width, height);
 		inputLogic(id, over);
 
-		if (0 == _r)
-		{
-			drawRect( (float)xx
-				, (float)yy
-				, (float)width
-				, (float)height
-				, isActiveInputField(id)?imguiRGBA(255,196,0,255):imguiRGBA(128,128,128,96)
-				);
-		}
-		else
-		{
-			drawRoundedRect( (float)xx
-				, (float)yy
-				, (float)width
-				, (float)height
-				, (float)_r
-				, isActiveInputField(id)?imguiRGBA(255,196,0,255):imguiRGBA(128,128,128,96)
-				);
-		}
+		drawRoundedRect( (float)xx
+					   , (float)yy
+					   , (float)width
+					   , (float)height
+					   , (float)_r
+					   , isActiveInputField(id)?imguiRGBA(255,196,0,255):imguiRGBA(128,128,128,96)
+					   );
 
 		if (isActiveInputField(id) )
 		{
@@ -1190,89 +1458,119 @@ struct Imgui
 		}
 	}
 
-	uint8_t tabs(uint8_t _selected, bool _enabled, int32_t _height, int32_t _r, va_list _argList)
+	uint8_t tabs(uint8_t _selected, bool _enabled, ImguiAlign::Enum _align, int32_t _height, int32_t _r, uint8_t _nTabs, uint8_t _nEnabled, va_list _argList)
 	{
-		uint8_t count;
 		const char* titles[16];
-		const char* str = va_arg(_argList, const char*);
-		for (count = 0; str != NULL || count >= 16; ++count, str = va_arg(_argList, const char*) )
+		bool tabEnabled[16];
+		const uint8_t tabCount = IMGUI_MIN(_nTabs, 16);
+		const uint8_t enabledCount = IMGUI_MIN(_nEnabled, 16);
+
+		// Read titles.
 		{
-			titles[count] = str;
+			uint8_t ii = 0;
+			for (; ii < tabCount; ++ii)
+			{
+				const char* str = va_arg(_argList, const char*);
+				titles[ii] = str;
+			}
+			for (; ii < _nTabs; ++ii)
+			{
+				const char* str = va_arg(_argList, const char*);
+				BX_UNUSED(str);
+			}
 		}
 
-		const int32_t yy = m_widgetY;
-		m_widgetY += _height + DEFAULT_SPACING;
+		// Read enabled tabs.
+		{
+			uint8_t ii = 0;
+			for (; ii < enabledCount; ++ii)
+			{
+				const bool enabled = (0 != va_arg(_argList, int) );
+				tabEnabled[ii] = enabled;
+			}
+			for (; ii < _nEnabled; ++ii)
+			{
+				const int enabled = va_arg(_argList, int);
+				BX_UNUSED(enabled);
+			}
+			for (; ii < _nTabs; ++ii)
+			{
+				tabEnabled[ii] = true;
+			}
+		}
+
+		Area& area = getCurrentArea();
+		const int32_t yy = area.m_widgetY;
+		area.m_widgetY += _height + DEFAULT_SPACING;
+
+		int32_t xx;
+		int32_t width;
+		if (ImguiAlign::Left == _align)
+		{
+			xx = area.m_contentX + SCROLL_AREA_PADDING;
+			width = area.m_widgetW;
+		}
+		else if (ImguiAlign::LeftIndented == _align
+			 ||  ImguiAlign::Right        == _align)
+		{
+			xx = area.m_widgetX;
+			width = area.m_widgetW-1; //TODO: -1 !
+		}
+		else //if (ImguiAlign::Center         == _align
+			 //||  ImguiAlign::CenterIndented == _align).
+		{
+			xx = area.m_widgetX;
+			width = area.m_widgetW - (area.m_widgetX-area.m_contentX);
+		}
 
 		uint8_t selected = _selected;
-		const int32_t tabWidth     = m_widgetW / count;
-		const int32_t tabWidthHalf = m_widgetW / (count*2);
+		const int32_t tabWidth     = width / tabCount;
+		const int32_t tabWidthHalf = width / (tabCount*2);
 		const int32_t textY = yy + _height/2 + int32_t(m_fonts[m_currentFontIdx].m_size)/2 - 2;
 
-		if (0 == _r)
-		{
-			drawRect( (float)m_widgetX
-				    , (float)yy
-				    , (float)m_widgetW
-				    , (float)_height
-				    , imguiRGBA(128, 128, 128, 96)
-				    );
-		}
-		else
-		{
-			drawRoundedRect( (float)m_widgetX
-						   , (float)yy
-						   , (float)m_widgetW
-						   , (float)_height
-						   , (float)_r
-						   , imguiRGBA(128, 128, 128, 96)
-						   );
-		}
+		drawRoundedRect( (float)xx
+					   , (float)yy
+					   , (float)width
+					   , (float)_height
+					   , (float)_r
+					   , _enabled?imguiRGBA(128,128,128,96):imguiRGBA(128,128,128,64)
+					   );
 
-		for (uint8_t ii = 0; ii < count; ++ii)
+		for (uint8_t ii = 0; ii < tabCount; ++ii)
 		{
-			m_widgetId++;
-			const uint16_t id = (m_areaId << 8) | m_widgetId;
+			const uint32_t id = getId();
 
-			int32_t xx = m_widgetX + ii*tabWidth;
-			int32_t textX = xx + tabWidthHalf;
+			int32_t buttonX = xx + ii*width/tabCount;
+			int32_t textX = buttonX + tabWidthHalf;
 
-			const bool enabled = _enabled && isEnabled(m_areaId);
-			const bool over = enabled && inRect(xx, yy, tabWidth, _height);
+			const bool enabled = _enabled && tabEnabled[ii] && isEnabled(m_areaId);
+			const bool over = enabled && inRect(buttonX, yy, tabWidth, _height);
 			const bool res = buttonLogic(id, over);
 
-			if (res)
-			{
-				selected = ii;
-			}
+			const uint32_t textColor = (ii == selected)
+									 ? (enabled   ? imguiRGBA(0,0,0,255)                 : imguiRGBA(255,255,255,100)             )
+									 : (isHot(id) ? imguiRGBA(255,196,0,enabled?255:100) : imguiRGBA(255,255,255,enabled?200:100) )
+									 ;
 
-			uint32_t textColor;
 			if (ii == selected)
 			{
-				textColor = enabled?imguiRGBA(0,0,0,255):imguiRGBA(255,255,255,100);
-
-				if (0 == _r)
-				{
-					drawRect( (float)xx
-						    , (float)yy
-						    , (float)tabWidth
-						    , (float)_height
-						    , enabled?imguiRGBA(255,196,0,200):imguiRGBA(128,128,128,96)
-						    );
-				}
-				else
-				{
-					drawRoundedRect( (float)xx
-								   , (float)yy
-								   , (float)tabWidth
-								   , (float)_height
-								   , (float)_r
-								   , enabled?imguiRGBA(255,196,0,200):imguiRGBA(128,128,128,96)
-								   );
-				}
+				drawRoundedRect( (float)buttonX
+							   , (float)yy
+							   , (float)tabWidth
+							   , (float)_height
+							   , (float)_r
+							   , enabled?imguiRGBA(255,196,0,200):imguiRGBA(128,128,128,32)
+							   );
 			}
-			else
+			else if (isActive(id) )
 			{
-				textColor = isHot(id) ? imguiRGBA(255, 196, 0, enabled?255:100) : imguiRGBA(255, 255, 255, enabled?200:100);
+				drawRoundedRect( (float)buttonX
+							   , (float)yy
+							   , (float)tabWidth
+							   , (float)_height
+							   , (float)_r
+							   , imguiRGBA(128,128,128,196)
+							   );
 			}
 
 			drawText(textX
@@ -1281,125 +1579,365 @@ struct Imgui
 				   , titles[ii]
 				   , textColor
 				   );
+
+			if (res)
+			{
+				selected = ii;
+			}
 		}
 
 		return selected;
 	}
 
-	void image(bgfx::TextureHandle _image, float _lod, int32_t _width, int32_t _height, ImguiImageAlign::Enum _align)
+	bool image(bgfx::TextureHandle _image, float _lod, int32_t _width, int32_t _height, ImguiAlign::Enum _align, bool _enabled, bool _originBottomLeft)
 	{
+		const uint32_t id = getId();
+		Area& area = getCurrentArea();
+
 		int32_t xx;
-		if (ImguiImageAlign::Left == _align)
+		if (ImguiAlign::Left == _align)
 		{
-			xx = m_scrollAreaX + SCROLL_AREA_PADDING;
+			xx = area.m_contentX + SCROLL_AREA_PADDING;
 		}
-		else if (ImguiImageAlign::LeftIndented == _align)
+		else if (ImguiAlign::LeftIndented == _align)
 		{
-			xx = m_widgetX;
+			xx = area.m_widgetX;
 		}
-		else if (ImguiImageAlign::Center == _align)
+		else if (ImguiAlign::Center == _align)
 		{
-			xx = m_scrollAreaX + (m_scrollAreaInnerWidth-_width)/2;
+			xx = area.m_contentX + (area.m_widgetW-_width)/2;
 		}
-		else if (ImguiImageAlign::CenterIndented == _align)
+		else if (ImguiAlign::CenterIndented == _align)
 		{
-			xx = (m_widgetX + m_scrollAreaInnerWidth + m_scrollAreaX - _width)/2;
+			xx = (area.m_widgetX + area.m_widgetW + area.m_contentX - _width)/2;
 		}
-		else //if (ImguiImageAlign::Right == _align).
+		else //if (ImguiAlign::Right == _align).
 		{
-			xx = m_scrollAreaX + m_scrollAreaInnerWidth - _width;
+			xx = area.m_contentX + area.m_widgetW - _width;
 		}
 
-		const int32_t yy = m_widgetY;
-		m_widgetY += _height + DEFAULT_SPACING;
+		const int32_t yy = area.m_widgetY;
+		area.m_widgetY += _height + DEFAULT_SPACING;
 
-		screenQuad(xx, yy, _width, _height);
-		bgfx::setUniform(u_imageLod, &_lod);
-		bgfx::setTexture(0, s_texColor, bgfx::isValid(_image) ? _image : m_missingTexture);
-		bgfx::setState(BGFX_STATE_RGB_WRITE|BGFX_STATE_ALPHA_WRITE);
-		bgfx::setProgram(m_imageProgram);
-		bgfx::setScissor(m_scissor);
-		bgfx::submit(m_view);
+		if (screenQuad(xx, yy, _width, _height, _originBottomLeft) )
+		{
+			const bool enabled = _enabled && isEnabled(m_areaId);
+			const bool over = enabled && inRect(xx, yy, _width, _height);
+			const bool res = buttonLogic(id, over);
+
+			const float lodEnabled[4] = { _lod, float(enabled), 0.0f, 0.0f };
+			bgfx::setUniform(u_imageLodEnabled, lodEnabled);
+			bgfx::setTexture(0, s_texColor, bgfx::isValid(_image) ? _image : m_missingTexture);
+			bgfx::setState(BGFX_STATE_RGB_WRITE
+						   |BGFX_STATE_ALPHA_WRITE
+						   |BGFX_STATE_BLEND_FUNC(BGFX_STATE_BLEND_SRC_ALPHA, BGFX_STATE_BLEND_INV_SRC_ALPHA)
+						  );
+			setCurrentScissor();
+			bgfx::submit(m_view, m_imageProgram);
+
+			return res;
+		}
+
+		return false;
 	}
 
-	void image(bgfx::TextureHandle _image, float _lod, float _width, float _aspect, ImguiImageAlign::Enum _align)
+	bool image(bgfx::TextureHandle _image, float _lod, float _width, float _aspect, ImguiAlign::Enum _align, bool _enabled, bool _originBottomLeft)
 	{
-		const float width = _width*float(m_scrollAreaInnerWidth);
+		const float width = _width*float(getCurrentArea().m_widgetW);
 		const float height = width/_aspect;
 
-		image(_image, _lod, int32_t(width), int32_t(height), _align);
+		return image(_image, _lod, int32_t(width), int32_t(height), _align, _enabled, _originBottomLeft);
 	}
 
-	void imageChannel(bgfx::TextureHandle _image, uint8_t _channel, float _lod, int32_t _width, int32_t _height, ImguiImageAlign::Enum _align)
+	bool imageChannel(bgfx::TextureHandle _image, uint8_t _channel, float _lod, int32_t _width, int32_t _height, ImguiAlign::Enum _align, bool _enabled)
 	{
 		BX_CHECK(_channel < 4, "Channel param must be from 0 to 3!");
 
+		const uint32_t id = getId();
+		Area& area = getCurrentArea();
+
 		int32_t xx;
-		if (ImguiImageAlign::Left == _align)
+		if (ImguiAlign::Left == _align)
 		{
-			xx = m_scrollAreaX + SCROLL_AREA_PADDING;
+			xx = area.m_contentX + SCROLL_AREA_PADDING;
 		}
-		else if (ImguiImageAlign::LeftIndented == _align)
+		else if (ImguiAlign::LeftIndented == _align)
 		{
-			xx = m_widgetX;
+			xx = area.m_widgetX;
 		}
-		else if (ImguiImageAlign::Center == _align)
+		else if (ImguiAlign::Center == _align)
 		{
-			xx = m_scrollAreaX + (m_scrollAreaInnerWidth-_width)/2;
+			xx = area.m_contentX + (area.m_widgetW-_width)/2;
 		}
-		else if (ImguiImageAlign::CenterIndented == _align)
+		else if (ImguiAlign::CenterIndented == _align)
 		{
-			xx = (m_widgetX + m_scrollAreaInnerWidth + m_scrollAreaX - _width)/2;
+			xx = (area.m_widgetX + area.m_widgetW + area.m_contentX - _width)/2;
 		}
-		else //if (ImguiImageAlign::Right == _align).
+		else //if (ImguiAlign::Right == _align).
 		{
-			xx = m_scrollAreaX + m_scrollAreaInnerWidth - _width;
+			xx = area.m_contentX + area.m_widgetW - _width;
 		}
 
-		const int32_t yy = m_widgetY;
-		m_widgetY += _height + DEFAULT_SPACING;
+		const int32_t yy = area.m_widgetY;
+		area.m_widgetY += _height + DEFAULT_SPACING;
 
-		screenQuad(xx, yy, _width, _height);
-		bgfx::setUniform(u_imageLod, &_lod);
+		if (screenQuad(xx, yy, _width, _height) )
+		{
+			const bool enabled = _enabled && isEnabled(m_areaId);
+			const bool over = enabled && inRect(xx, yy, _width, _height);
+			const bool res = buttonLogic(id, over);
 
-		float swizz[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-		swizz[_channel] = 1.0f;
-		bgfx::setUniform(u_imageSwizzle, swizz);
+			const float lodEnabled[4] = { _lod, float(enabled), 0.0f, 0.0f };
+			bgfx::setUniform(u_imageLodEnabled, lodEnabled);
 
-		bgfx::setTexture(0, s_texColor, bgfx::isValid(_image) ? _image : m_missingTexture);
-		bgfx::setState(BGFX_STATE_RGB_WRITE|BGFX_STATE_ALPHA_WRITE);
-		bgfx::setProgram(m_imageSwizzProgram);
-		bgfx::setScissor(m_scissor);
-		bgfx::submit(m_view);
+			float swizz[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+			swizz[_channel] = 1.0f;
+			bgfx::setUniform(u_imageSwizzle, swizz);
+
+			bgfx::setTexture(0, s_texColor, bgfx::isValid(_image) ? _image : m_missingTexture);
+			bgfx::setState(BGFX_STATE_RGB_WRITE
+						  |BGFX_STATE_ALPHA_WRITE
+						  |BGFX_STATE_BLEND_FUNC(BGFX_STATE_BLEND_SRC_ALPHA, BGFX_STATE_BLEND_INV_SRC_ALPHA)
+						  );
+			setCurrentScissor();
+			bgfx::submit(m_view, m_imageSwizzProgram);
+
+			return res;
+		}
+
+		return false;
 	}
 
-	void imageChannel(bgfx::TextureHandle _image, uint8_t _channel, float _lod, float _width, float _aspect, ImguiImageAlign::Enum _align)
+	bool imageChannel(bgfx::TextureHandle _image, uint8_t _channel, float _lod, float _width, float _aspect, ImguiAlign::Enum _align, bool _enabled)
 	{
-		const float width = _width*float(m_scrollAreaInnerWidth);
+		const float width = _width*float(getCurrentArea().m_widgetW);
 		const float height = width/_aspect;
 
-		imageChannel(_image, _channel, _lod, int32_t(width), int32_t(height), _align);
+		return imageChannel(_image, _channel, _lod, int32_t(width), int32_t(height), _align, _enabled);
+	}
+
+	bool latlong(bgfx::TextureHandle _cubemap, float _lod, ImguiAlign::Enum _align, bool _enabled)
+	{
+		const uint32_t id = getId();
+
+		Area& area = getCurrentArea();
+		int32_t xx;
+		int32_t width;
+		if (ImguiAlign::Left == _align)
+		{
+			xx = area.m_contentX + SCROLL_AREA_PADDING;
+			width = area.m_widgetW;
+		}
+		else if (ImguiAlign::LeftIndented == _align
+			 ||  ImguiAlign::Right        == _align)
+		{
+			xx = area.m_widgetX;
+			width = area.m_widgetW;
+		}
+		else //if (ImguiAlign::Center         == _align
+			 //||  ImguiAlign::CenterIndented == _align).
+		{
+			xx = area.m_widgetX;
+			width = area.m_widgetW - (area.m_widgetX-area.m_contentX);
+		}
+
+		const int32_t height = width/2;
+		const int32_t yy = area.m_widgetY;
+		area.m_widgetY += height + DEFAULT_SPACING;
+
+		if (screenQuad(xx, yy, width, height, false) )
+		{
+			const bool enabled = _enabled && isEnabled(m_areaId);
+			const bool over = enabled && inRect(xx, yy, width, height);
+			const bool res = buttonLogic(id, over);
+
+			const float lodEnabled[4] = { _lod, float(enabled), 0.0f, 0.0f };
+			bgfx::setUniform(u_imageLodEnabled, lodEnabled);
+
+			bgfx::setTexture(0, s_texColor, _cubemap);
+			bgfx::setState(BGFX_STATE_RGB_WRITE
+						  |BGFX_STATE_ALPHA_WRITE
+						  |BGFX_STATE_BLEND_FUNC(BGFX_STATE_BLEND_SRC_ALPHA, BGFX_STATE_BLEND_INV_SRC_ALPHA)
+						  );
+			setCurrentScissor();
+			bgfx::submit(m_view, m_latlongProgram);
+
+			return res;
+		}
+
+		return false;
+	}
+
+	bool cubeMap(bgfx::TextureHandle _cubemap, float _lod, bool _cross, bool _sameHeight, ImguiAlign::Enum _align, bool _enabled)
+	{
+		const uint32_t id = getId();
+
+		Area& area = getCurrentArea();
+		int32_t xx;
+		int32_t width;
+		if (ImguiAlign::Left == _align)
+		{
+			xx = area.m_contentX + SCROLL_AREA_PADDING;
+			width = area.m_widgetW;
+		}
+		else if (ImguiAlign::LeftIndented == _align
+			 ||  ImguiAlign::Right        == _align)
+		{
+			xx = area.m_widgetX;
+			width = area.m_widgetW;
+		}
+		else //if (ImguiAlign::Center         == _align
+			 //||  ImguiAlign::CenterIndented == _align).
+		{
+			xx = area.m_widgetX;
+			width = area.m_widgetW - (area.m_widgetX-area.m_contentX);
+		}
+
+		const bool adjustHeight = (_cross && _sameHeight);
+		const bool fullHeight   = (_cross && !_sameHeight);
+
+		if (adjustHeight)
+		{
+			xx += width/6;
+		}
+
+		const int32_t height = fullHeight ? (width*3)/4 : (width/2);
+		const int32_t yy = area.m_widgetY;
+		area.m_widgetY += height + DEFAULT_SPACING;
+
+		const uint32_t numVertices = 14;
+		const uint32_t numIndices  = 36;
+		if (bgfx::checkAvailTransientBuffers(numVertices, PosNormalVertex::ms_decl, numIndices) )
+		{
+			bgfx::TransientVertexBuffer tvb;
+			bgfx::allocTransientVertexBuffer(&tvb, numVertices, PosNormalVertex::ms_decl);
+
+			bgfx::TransientIndexBuffer tib;
+			bgfx::allocTransientIndexBuffer(&tib, numIndices);
+
+			PosNormalVertex* vertex = (PosNormalVertex*)tvb.data;
+			uint16_t* indices = (uint16_t*)tib.data;
+
+			if (_cross)
+			{
+				vertex->set(0.0f, 0.5f, 0.0f, -1.0f,  1.0f, -1.0f); ++vertex;
+				vertex->set(0.0f, 1.0f, 0.0f, -1.0f, -1.0f, -1.0f); ++vertex;
+
+				vertex->set(0.5f, 0.0f, 0.0f, -1.0f,  1.0f, -1.0f); ++vertex;
+				vertex->set(0.5f, 0.5f, 0.0f, -1.0f,  1.0f,  1.0f); ++vertex;
+				vertex->set(0.5f, 1.0f, 0.0f, -1.0f, -1.0f,  1.0f); ++vertex;
+				vertex->set(0.5f, 1.5f, 0.0f, -1.0f, -1.0f, -1.0f); ++vertex;
+
+				vertex->set(1.0f, 0.0f, 0.0f,  1.0f,  1.0f, -1.0f); ++vertex;
+				vertex->set(1.0f, 0.5f, 0.0f,  1.0f,  1.0f,  1.0f); ++vertex;
+				vertex->set(1.0f, 1.0f, 0.0f,  1.0f, -1.0f,  1.0f); ++vertex;
+				vertex->set(1.0f, 1.5f, 0.0f,  1.0f, -1.0f, -1.0f); ++vertex;
+
+				vertex->set(1.5f, 0.5f, 0.0f,  1.0f,  1.0f, -1.0f); ++vertex;
+				vertex->set(1.5f, 1.0f, 0.0f,  1.0f, -1.0f, -1.0f); ++vertex;
+
+				vertex->set(2.0f, 0.5f, 0.0f, -1.0f,  1.0f, -1.0f); ++vertex;
+				vertex->set(2.0f, 1.0f, 0.0f, -1.0f, -1.0f, -1.0f); ++vertex;
+
+				indices += addQuad(indices,  0,  3,  4,  1);
+				indices += addQuad(indices,  2,  6,  7,  3);
+				indices += addQuad(indices,  3,  7,  8,  4);
+				indices += addQuad(indices,  4,  8,  9,  5);
+				indices += addQuad(indices,  7, 10, 11,  8);
+				indices += addQuad(indices, 10, 12, 13, 11);
+			}
+			else
+			{
+				vertex->set(0.0f, 0.25f, 0.0f, -1.0f,  1.0f, -1.0f); ++vertex;
+				vertex->set(0.0f, 0.75f, 0.0f, -1.0f, -1.0f, -1.0f); ++vertex;
+
+				vertex->set(0.5f, 0.00f, 0.0f, -1.0f,  1.0f,  1.0f); ++vertex;
+				vertex->set(0.5f, 0.50f, 0.0f, -1.0f, -1.0f,  1.0f); ++vertex;
+				vertex->set(0.5f, 1.00f, 0.0f,  1.0f, -1.0f, -1.0f); ++vertex;
+
+				vertex->set(1.0f, 0.25f, 0.0f,  1.0f,  1.0f,  1.0f); ++vertex;
+				vertex->set(1.0f, 0.75f, 0.0f,  1.0f, -1.0f,  1.0f); ++vertex;
+
+				vertex->set(1.0f, 0.25f, 0.0f,  1.0f,  1.0f,  1.0f); ++vertex;
+				vertex->set(1.0f, 0.75f, 0.0f,  1.0f, -1.0f,  1.0f); ++vertex;
+
+				vertex->set(1.5f, 0.00f, 0.0f, -1.0f,  1.0f,  1.0f); ++vertex;
+				vertex->set(1.5f, 0.50f, 0.0f,  1.0f,  1.0f, -1.0f); ++vertex;
+				vertex->set(1.5f, 1.00f, 0.0f,  1.0f, -1.0f, -1.0f); ++vertex;
+
+				vertex->set(2.0f, 0.25f, 0.0f, -1.0f,  1.0f, -1.0f); ++vertex;
+				vertex->set(2.0f, 0.75f, 0.0f, -1.0f, -1.0f, -1.0f); ++vertex;
+
+				indices += addQuad(indices,  0,  2,  3,  1);
+				indices += addQuad(indices,  1,  3,  6,  4);
+				indices += addQuad(indices,  2,  5,  6,  3);
+				indices += addQuad(indices,  7,  9, 12, 10);
+				indices += addQuad(indices,  7, 10, 11,  8);
+				indices += addQuad(indices, 10, 12, 13, 11);
+			}
+
+			const bool enabled = _enabled && isEnabled(m_areaId);
+			const bool over = enabled && inRect(xx, yy, width, height);
+			const bool res = buttonLogic(id, over);
+
+			const float widthf = float(width);
+			const float scale = adjustHeight ? (widthf+0.5f)/3.0f : (widthf*0.5f + 0.25f);
+
+			float mtx[16];
+			bx::mtxSRT(mtx, scale, scale, 1.0f, 0.0f, 0.0f, 0.0f, float(xx), float(yy), 0.0f);
+
+			const float lodEnabled[4] = { _lod, float(enabled), 0.0f, 0.0f };
+			bgfx::setUniform(u_imageLodEnabled, lodEnabled);
+
+			bgfx::setTransform(mtx);
+			bgfx::setTexture(0, s_texColor, _cubemap);
+			bgfx::setVertexBuffer(&tvb);
+			bgfx::setIndexBuffer(&tib);
+			bgfx::setState(BGFX_STATE_RGB_WRITE
+						  |BGFX_STATE_ALPHA_WRITE
+						  |BGFX_STATE_BLEND_FUNC(BGFX_STATE_BLEND_SRC_ALPHA, BGFX_STATE_BLEND_INV_SRC_ALPHA)
+						  );
+			setCurrentScissor();
+			bgfx::submit(m_view, m_cubeMapProgram);
+
+			return res;
+		}
+
+		return false;
+	}
+
+	bool cubeMap(bgfx::TextureHandle _cubemap, float _lod, ImguiCubemap::Enum _display, bool _sameHeight, ImguiAlign::Enum _align, bool _enabled)
+	{
+		if (ImguiCubemap::Cross == _display
+		||  ImguiCubemap::Hex   == _display)
+		{
+			return cubeMap(_cubemap, _lod, (ImguiCubemap::Cross == _display), _sameHeight, _align, _enabled);
+		}
+		else //(ImguiCubemap::Latlong == _display).
+		{
+			return latlong(_cubemap, _lod, _align, _enabled);
+		}
 	}
 
 	bool collapse(const char* _text, const char* _subtext, bool _checked, bool _enabled)
 	{
-		m_widgetId++;
-		uint16_t id = (m_areaId << 8) | m_widgetId;
+		const uint32_t id = getId();
 
-		int32_t xx = m_widgetX;
-		int32_t yy = m_widgetY;
-		int32_t width = m_widgetW;
-		int32_t height = BUTTON_HEIGHT;
-		m_widgetY += BUTTON_HEIGHT + DEFAULT_SPACING;
+		Area& area = getCurrentArea();
+		const int32_t xx = area.m_widgetX;
+		const int32_t yy = area.m_widgetY;
+		const int32_t width = area.m_widgetW;
+		const int32_t height = BUTTON_HEIGHT;
+		area.m_widgetY += BUTTON_HEIGHT + DEFAULT_SPACING;
 
 		const int32_t cx = xx + BUTTON_HEIGHT/2 - CHECK_SIZE/2;
 		const int32_t cy = yy + BUTTON_HEIGHT/2 - CHECK_SIZE/2 + DEFAULT_SPACING/2;
 
 		const int32_t textY = yy + BUTTON_HEIGHT/2 + TEXT_HEIGHT/2 + DEFAULT_SPACING/2;
 
-		bool enabled = _enabled && isEnabled(m_areaId);
-		bool over = enabled && inRect(xx, yy, width, height);
-		bool res = buttonLogic(id, over);
+		const bool enabled = _enabled && isEnabled(m_areaId);
+		const bool over = enabled && inRect(xx, yy, width, height);
+		const bool res = buttonLogic(id, over);
 
 		if (_checked)
 		{
@@ -1413,7 +1951,7 @@ struct Imgui
 		}
 		else
 		{
-			drawTriangle(cx
+			drawTriangle(cx-1 // With -1 is more aesthetically pleasing.
 				, cy
 				, CHECK_SIZE
 				, CHECK_SIZE
@@ -1456,8 +1994,10 @@ struct Imgui
 
 	bool borderButton(ImguiBorder::Enum _border, bool _checked, bool _enabled)
 	{
-		m_widgetId++;
-		uint16_t id = (m_areaId << 8) | m_widgetId;
+		// Since border button isn't part of any area, just use this custom/unique areaId.
+		const uint16_t areaId = UINT16_MAX-1;
+		const uint32_t id = (areaId << 16) | m_widgetId++;
+		updatePresence(id);
 
 		const int32_t triSize = 12;
 		const int32_t borderSize = 15;
@@ -1473,54 +2013,53 @@ struct Imgui
 		if (ImguiBorder::Left == _border)
 		{
 			xx = -borderSize;
-			yy = 0;
-			width = 2*borderSize;
-			height = m_viewHeight;
+			yy = -1;
+			width = 2*borderSize+1;
+			height = m_surfaceHeight+1;
 			triX = 0;
-			triY = (m_viewHeight-triSize)/2;
+			triY = (m_surfaceHeight-triSize)/2;
 			orientation = _checked ? TriangleOrientation::Left : TriangleOrientation::Right;
 		}
 		else if (ImguiBorder::Right == _border)
 		{
-			xx = m_viewWidth - borderSize;
-			yy = 0;
-			width = 2*borderSize;
-			height = m_viewHeight;
-			triX = m_viewWidth - triSize - 2;
-			triY = (m_viewHeight-width)/2;
+			xx = m_surfaceWidth - borderSize;
+			yy = -1;
+			width = 2*borderSize+1;
+			height = m_surfaceHeight+1;
+			triX = m_surfaceWidth - triSize - 2;
+			triY = (m_surfaceHeight-width)/2;
 			orientation = _checked ? TriangleOrientation::Right : TriangleOrientation::Left;
 		}
 		else if (ImguiBorder::Top == _border)
 		{
 			xx = 0;
 			yy = -borderSize;
-			width = m_viewWidth;
+			width = m_surfaceWidth;
 			height = 2*borderSize;
-			triX = (m_viewWidth-triSize)/2;
+			triX = (m_surfaceWidth-triSize)/2;
 			triY = 0;
 			orientation = _checked ? TriangleOrientation::Up : TriangleOrientation::Down;
 		}
 		else //if (ImguiBorder::Bottom == _border).
 		{
 			xx = 0;
-			yy = m_viewHeight - borderSize;
-			width = m_viewWidth;
+			yy = m_surfaceHeight - borderSize;
+			width = m_surfaceWidth;
 			height = 2*borderSize;
-			triX = (m_viewWidth-triSize)/2;
-			triY = m_viewHeight-triSize;
+			triX = (m_surfaceWidth-triSize)/2;
+			triY = m_surfaceHeight-triSize;
 			orientation = _checked ? TriangleOrientation::Down : TriangleOrientation::Up;
 		}
 
 		const bool over = _enabled && inRect(xx, yy, width, height, false);
 		const bool res = buttonLogic(id, over);
 
-		drawRoundedRect( (float)xx
-					   , (float)yy
-					   , (float)width
-					   , (float)height
-					   , 0.0f
-					   , isActive(id) ? imguiRGBA(23, 23, 23, 192) : imguiRGBA(0, 0, 0, 222)
-					   );
+		drawRect( (float)xx
+				, (float)yy
+				, (float)width
+				, (float)height
+				, isActive(id) ? imguiRGBA(23, 23, 23, 192) : imguiRGBA(0, 0, 0, 222)
+				);
 
 		drawTriangle( triX
 					, triY
@@ -1533,7 +2072,7 @@ struct Imgui
 		return res;
 	}
 
-	void labelVargs(const char* _format, va_list _argList, bool _enabled)
+	void labelVargs(const char* _format, va_list _argList, uint32_t _rgba)
 	{
 		char temp[8192];
 		char* out = temp;
@@ -1545,23 +2084,25 @@ struct Imgui
 		}
 		out[len] = '\0';
 
-		int32_t xx = m_widgetX;
-		int32_t yy = m_widgetY;
-		m_widgetY += BUTTON_HEIGHT;
+		Area& area = getCurrentArea();
+		const int32_t xx = area.m_widgetX;
+		const int32_t yy = area.m_widgetY;
+		area.m_widgetY += BUTTON_HEIGHT;
 		drawText(xx
 			, yy + BUTTON_HEIGHT/2 + TEXT_HEIGHT/2
 			, ImguiTextAlign::Left
 			, out
-			, _enabled?imguiRGBA(255, 255, 255, 255):imguiRGBA(255, 255, 255, 128)
+			, _rgba
 			);
 	}
 
 	void value(const char* _text)
 	{
-		const int32_t xx = m_widgetX;
-		const int32_t yy = m_widgetY;
-		const int32_t ww = m_widgetW;
-		m_widgetY += BUTTON_HEIGHT;
+		Area& area = getCurrentArea();
+		const int32_t xx = area.m_widgetX;
+		const int32_t yy = area.m_widgetY;
+		const int32_t ww = area.m_widgetW;
+		area.m_widgetY += BUTTON_HEIGHT;
 
 		drawText(xx + ww - BUTTON_HEIGHT / 2
 			, yy + BUTTON_HEIGHT / 2 + TEXT_HEIGHT / 2
@@ -1571,16 +2112,34 @@ struct Imgui
 			);
 	}
 
-	bool slider(const char* _text, float& _val, float _vmin, float _vmax, float _vinc, bool _enabled)
+	bool slider(const char* _text, float& _val, float _vmin, float _vmax, float _vinc, bool _enabled, ImguiAlign::Enum _align)
 	{
-		m_widgetId++;
-		uint16_t id = (m_areaId << 8) | m_widgetId;
+		const uint32_t id = getId();
 
-		int32_t xx = m_widgetX;
-		int32_t yy = m_widgetY;
-		int32_t width = m_widgetW;
-		int32_t height = SLIDER_HEIGHT;
-		m_widgetY += SLIDER_HEIGHT + DEFAULT_SPACING;
+		Area& area = getCurrentArea();
+		const int32_t yy = area.m_widgetY;
+		const int32_t height = SLIDER_HEIGHT;
+		area.m_widgetY += SLIDER_HEIGHT + DEFAULT_SPACING;
+
+		int32_t xx;
+		int32_t width;
+		if (ImguiAlign::Left == _align)
+		{
+			xx = area.m_contentX + SCROLL_AREA_PADDING;
+			width = area.m_widgetW;
+		}
+		else if (ImguiAlign::LeftIndented == _align
+			 ||  ImguiAlign::Right        == _align)
+		{
+			xx = area.m_widgetX;
+			width = area.m_widgetW;
+		}
+		else //if (ImguiAlign::Center         == _align
+			 //||  ImguiAlign::CenterIndented == _align).
+		{
+			xx = area.m_widgetX;
+			width = area.m_widgetW - (area.m_widgetX-area.m_contentX);
+		}
 
 		drawRoundedRect( (float)xx, (float)yy, (float)width, (float)height, 4.0f, imguiRGBA(0, 0, 0, 128) );
 
@@ -1588,11 +2147,11 @@ struct Imgui
 
 		float uu = bx::fsaturate( (_val - _vmin) / (_vmax - _vmin) );
 		int32_t m = (int)(uu * range);
-
-		bool enabled = _enabled && isEnabled(m_areaId);
-		bool over = enabled && inRect(xx + m, yy, SLIDER_MARKER_WIDTH, SLIDER_HEIGHT);
-		bool res = buttonLogic(id, over);
 		bool valChanged = false;
+
+		const bool enabled = _enabled && isEnabled(m_areaId);
+		const bool over = enabled && inRect(xx + m, yy, SLIDER_MARKER_WIDTH, SLIDER_HEIGHT);
+		const bool res = buttonLogic(id, over);
 
 		if (isActive(id) )
 		{
@@ -1679,33 +2238,58 @@ struct Imgui
 
 	void indent(uint16_t _width)
 	{
-		m_widgetX += _width;
-		m_widgetW -= _width;
+		Area& area = getCurrentArea();
+		area.m_widgetX += _width;
+		area.m_widgetW -= _width;
 	}
 
 	void unindent(uint16_t _width)
 	{
-		m_widgetX -= _width;
-		m_widgetW += _width;
+		Area& area = getCurrentArea();
+		area.m_widgetX -= _width;
+		area.m_widgetW += _width;
 	}
 
 	void separator(uint16_t _height)
 	{
-		m_widgetY += _height;
+		Area& area = getCurrentArea();
+		area.m_widgetY += _height;
 	}
 
-	void separatorLine(uint16_t _height)
+	void separatorLine(uint16_t _height, ImguiAlign::Enum _align)
 	{
-		const int32_t rectWidth = m_widgetW;
-		const int32_t rectHeight = 1;
-		const int32_t xx = m_widgetX;
-		const int32_t yy = m_widgetY + _height/2 - rectHeight;
-		m_widgetY += _height;
+		Area& area = getCurrentArea();
+		//const int32_t width = area.m_widgetW;
+		const int32_t height = 1;
+		//const int32_t xx = area.m_widgetX;
+		const int32_t yy = area.m_widgetY + _height/2 - height;
+
+		int32_t xx;
+		int32_t width;
+		if (ImguiAlign::Left == _align)
+		{
+			xx = area.m_contentX + SCROLL_AREA_PADDING;
+			width = area.m_widgetW;
+		}
+		else if (ImguiAlign::LeftIndented == _align
+			 ||  ImguiAlign::Right        == _align)
+		{
+			xx = area.m_widgetX;
+			width = area.m_widgetW;
+		}
+		else //if (ImguiAlign::Center         == _align
+			 //||  ImguiAlign::CenterIndented == _align).
+		{
+			xx = area.m_widgetX;
+			width = area.m_widgetW - (area.m_widgetX-area.m_contentX) + 1;
+		}
+
+		area.m_widgetY += _height;
 
 		drawRect( (float)xx
 				, (float)yy
-				, (float)rectWidth
-				, (float)rectHeight
+				, (float)width
+				, (float)height
 				, imguiRGBA(255, 255, 255, 32)
 				);
 	}
@@ -1822,27 +2406,31 @@ struct Imgui
 				| BGFX_STATE_ALPHA_WRITE
 				| BGFX_STATE_BLEND_FUNC(BGFX_STATE_BLEND_SRC_ALPHA, BGFX_STATE_BLEND_INV_SRC_ALPHA)
 				);
-			bgfx::setProgram(m_colorProgram);
-			bgfx::setScissor(m_scissor);
-			bgfx::submit(m_view);
+			setCurrentScissor();
+			bgfx::submit(m_view, m_colorProgram);
 		}
 	}
 
-	void drawRect(float _x, float _y, float w, float h, uint32_t _argb, float _fth = 1.0f)
+	void drawRect(float _x, float _y, float _w, float _h, uint32_t _argb, float _fth = 1.0f)
 	{
 		float verts[4 * 2] =
 		{
-			_x + 0.5f,     _y + 0.5f,
-			_x + w - 0.5f, _y + 0.5f,
-			_x + w - 0.5f, _y + h - 0.5f,
-			_x + 0.5f,     _y + h - 0.5f,
+			_x + 0.5f,      _y + 0.5f,
+			_x + _w - 0.5f, _y + 0.5f,
+			_x + _w - 0.5f, _y + _h - 0.5f,
+			_x + 0.5f,      _y + _h - 0.5f,
 		};
 
 		drawPolygon(verts, 4, _fth, _argb);
 	}
 
-	void drawRoundedRect(float _x, float _y, float w, float h, float r, uint32_t _argb, float _fth = 1.0f)
+	void drawRoundedRect(float _x, float _y, float _w, float _h, float _r, uint32_t _argb, float _fth = 1.0f)
 	{
+		if (0.0f == _r)
+		{
+			return drawRect(_x, _y, _w, _h, _argb, _fth);
+		}
+
 		const uint32_t num = NUM_CIRCLE_VERTS / 4;
 		const float* cverts = m_circleVerts;
 		float verts[(num + 1) * 4 * 2];
@@ -1850,30 +2438,30 @@ struct Imgui
 
 		for (uint32_t ii = 0; ii <= num; ++ii)
 		{
-			*vv++ = _x + w - r + cverts[ii * 2] * r;
-			*vv++ = _y + h - r + cverts[ii * 2 + 1] * r;
+			*vv++ = _x + _w - _r + cverts[ii * 2] * _r;
+			*vv++ = _y + _h - _r + cverts[ii * 2 + 1] * _r;
 		}
 
 		for (uint32_t ii = num; ii <= num * 2; ++ii)
 		{
-			*vv++ = _x + r + cverts[ii * 2] * r;
-			*vv++ = _y + h - r + cverts[ii * 2 + 1] * r;
+			*vv++ = _x + _r + cverts[ii * 2] * _r;
+			*vv++ = _y + _h - _r + cverts[ii * 2 + 1] * _r;
 		}
 
 		for (uint32_t ii = num * 2; ii <= num * 3; ++ii)
 		{
-			*vv++ = _x + r + cverts[ii * 2] * r;
-			*vv++ = _y + r + cverts[ii * 2 + 1] * r;
+			*vv++ = _x + _r + cverts[ii * 2] * _r;
+			*vv++ = _y + _r + cverts[ii * 2 + 1] * _r;
 		}
 
 		for (uint32_t ii = num * 3; ii < num * 4; ++ii)
 		{
-			*vv++ = _x + w - r + cverts[ii * 2] * r;
-			*vv++ = _y + r + cverts[ii * 2 + 1] * r;
+			*vv++ = _x + _w - _r + cverts[ii * 2] * _r;
+			*vv++ = _y + _r + cverts[ii * 2 + 1] * _r;
 		}
 
-		*vv++ = _x + w - r + cverts[0] * r;
-		*vv++ = _y + r + cverts[1] * r;
+		*vv++ = _x + _w - _r + cverts[0] * _r;
+		*vv++ = _y + _r + cverts[1] * _r;
 
 		drawPolygon(verts, (num + 1) * 4, _fth, _argb);
 	}
@@ -1997,44 +2585,6 @@ struct Imgui
 		_quad->t1 = (b->y1 + m_halfTexel) * m_invTextureHeight;
 
 		*_xpos += b->xadvance;
-	}
-
-	float getTextLength(stbtt_bakedchar* _chardata, const char* _text, uint32_t& _numVertices)
-	{
-		float xpos = 0;
-		float len = 0;
-		uint32_t numVertices = 0;
-
-		while (*_text)
-		{
-			int32_t ch = (uint8_t)*_text;
-			if (ch == '\t')
-			{
-				for (int32_t ii = 0; ii < 4; ++ii)
-				{
-					if (xpos < s_tabStops[ii])
-					{
-						xpos = s_tabStops[ii];
-						break;
-					}
-				}
-			}
-			else if (ch >= ' '
-				 &&  ch < 128)
-			{
-				stbtt_bakedchar* b = _chardata + ch - ' ';
-				int32_t round_x = STBTT_ifloor( (xpos + b->xoff) + 0.5);
-				len = round_x + b->x1 - b->x0 + 0.5f;
-				xpos += b->xadvance;
-				numVertices += 6;
-			}
-
-			++_text;
-		}
-
-		_numVertices = numVertices;
-
-		return len;
 	}
 #endif // !USE_NANOVG_FONT
 
@@ -2161,14 +2711,13 @@ struct Imgui
 				| BGFX_STATE_ALPHA_WRITE
 				| BGFX_STATE_BLEND_FUNC(BGFX_STATE_BLEND_SRC_ALPHA, BGFX_STATE_BLEND_INV_SRC_ALPHA)
 				);
-			bgfx::setProgram(m_textureProgram);
-			bgfx::setScissor(m_scissor);
-			bgfx::submit(m_view);
+			setCurrentScissor();
+			bgfx::submit(m_view, m_textureProgram);
 		}
 #endif // USE_NANOVG_FONT
 	}
 
-	void screenQuad(int32_t _x, int32_t _y, int32_t _width, uint32_t _height)
+	bool screenQuad(int32_t _x, int32_t _y, int32_t _width, uint32_t _height, bool _originBottomLeft = false)
 	{
 		if (bgfx::checkAvailTransientVertexBuffer(6, PosUvVertex::ms_decl) )
 		{
@@ -2188,8 +2737,8 @@ struct Imgui
 			const float texelHalfH = m_halfTexel/heightf;
 			const float minu = texelHalfW;
 			const float maxu = 1.0f - texelHalfW;
-			const float minv = texelHalfH;
-			const float maxv = texelHalfH + 1.0f;
+			const float minv = _originBottomLeft ? texelHalfH+1.0f : texelHalfH     ;
+			const float maxv = _originBottomLeft ? texelHalfH      : texelHalfH+1.0f;
 
 			vertex[0].m_x = minx;
 			vertex[0].m_y = miny;
@@ -2222,29 +2771,34 @@ struct Imgui
 			vertex[5].m_v = minv;
 
 			bgfx::setVertexBuffer(&vb);
+
+			return true;
 		}
+
+		return false;
 	}
 
-	void colorWheelWidget(float _rgb[3], bool _respectIndentation, bool _enabled)
+	void colorWheelWidget(float _rgb[3], bool _respectIndentation, float _size, bool _enabled)
 	{
-		m_widgetId++;
-		const uint16_t wheelId = (m_areaId << 8) | m_widgetId;
-		m_widgetId++;
-		const uint16_t triangleId = (m_areaId << 8) | m_widgetId;
+		const uint32_t wheelId = getId();
+		const uint32_t triangleId = getId();
 
-		const int32_t height = m_scrollAreaWidth - COLOR_WHEEL_PADDING;
-		const float heightf = float(height);
-		const float widthf = float(m_scrollAreaWidth - COLOR_WHEEL_PADDING);
-		const float xx = float( (_respectIndentation ? m_widgetX-SCROLL_AREA_PADDING : m_scrollAreaX) + COLOR_WHEEL_PADDING/2);
-		const float yy = float(m_widgetY);
+		Area& area = getCurrentArea();
 
-		m_widgetY += height + DEFAULT_SPACING;
+		const float areaX = float(_respectIndentation ? area.m_widgetX : area.m_contentX);
+		const float areaW = float(_respectIndentation ? area.m_widgetW : area.m_contentWidth);
 
-		const float ro = (widthf < heightf ? widthf : heightf) * 0.5f - 5.0f; // radiusOuter.
-		const float rd = 20.0f; // radiusDelta.
+		const float width = areaW*_size;
+		const float xx = areaX + areaW*0.5f;
+		const float yy = float(area.m_widgetY) + width*0.5f;
+		const float center[2] = { xx, yy };
+
+		area.m_widgetY += int32_t(width) + DEFAULT_SPACING;
+
+		const float ro = width*0.5f - 5.0f; // radiusOuter.
+		const float rd = _size*25.0f; // radiusDelta.
 		const float ri = ro - rd; // radiusInner.
 		const float aeps = 0.5f / ro; // Half a pixel arc length in radians (2pi cancels out).
-		const float center[2] = { xx + widthf*0.5f, yy + heightf*0.5f };
 		const float cmx = float(m_mx) - center[0];
 		const float cmy = float(m_my) - center[1];
 
@@ -2262,7 +2816,7 @@ struct Imgui
 		float hsv[3];
 		bx::rgbToHsv(hsv, _rgb);
 
-		bool enabled = _enabled && isEnabled(m_areaId);
+		const bool enabled = _enabled && isEnabled(m_areaId);
 		if (enabled)
 		{
 			if (m_leftPressed)
@@ -2470,6 +3024,123 @@ struct Imgui
 		nvgRestore(m_nvg);
 	}
 
+	struct Area
+	{
+		int32_t m_x;
+		int32_t m_y;
+		int32_t m_width;
+		int32_t m_height;
+		int16_t m_contentX;
+		int16_t m_contentY;
+		int16_t m_contentWidth;
+		int16_t m_contentHeight;
+		int16_t m_scissorX;
+		int16_t m_scissorY;
+		int16_t m_scissorHeight;
+		int16_t m_scissorWidth;
+		int32_t m_widgetX;
+		int32_t m_widgetY;
+		int32_t m_widgetW;
+		int32_t* m_scrollVal;
+		uint32_t m_scrollId;
+		bool m_inside;
+		bool m_didScroll;
+		bool m_scissorEnabled;
+	};
+
+	inline Area& getCurrentArea()
+	{
+		return m_areas[m_areaId];
+	}
+
+	inline void setCurrentScissor()
+	{
+		const Area& area = getCurrentArea();
+		if (area.m_scissorEnabled)
+		{
+			const float xscale = float(m_viewWidth) /float(m_surfaceWidth);
+			const float yscale = float(m_viewHeight)/float(m_surfaceHeight);
+			const int16_t scissorX      = int16_t(float(area.m_scissorX)*xscale);
+			const int16_t scissorY      = int16_t(float(area.m_scissorY)*yscale);
+			const int16_t scissorWidth  = int16_t(float(area.m_scissorWidth)*xscale);
+			const int16_t scissorHeight = int16_t(float(area.m_scissorHeight)*yscale);
+			bgfx::setScissor(uint16_t(IMGUI_MAX(0, scissorX) )
+						   , uint16_t(IMGUI_MAX(0, scissorY-1) )
+						   , scissorWidth
+						   , scissorHeight+1
+						   );
+		}
+		else
+		{
+			bgfx::setScissor(UINT16_MAX);
+		}
+	}
+
+	inline void nvgScissor(NVGcontext* _ctx, const Area& _area)
+	{
+		if (_area.m_scissorEnabled)
+		{
+			::nvgScissor(_ctx
+						, float(IMGUI_MAX(0, _area.m_scissorX) )
+						, float(IMGUI_MAX(0, _area.m_scissorY-1) )
+						, float(_area.m_scissorWidth)
+						, float(_area.m_scissorHeight+1)
+						);
+		}
+		else
+		{
+			nvgResetScissor(_ctx);
+		}
+	}
+
+	template <typename Ty, uint16_t Max=64>
+	struct IdStack
+	{
+		IdStack()
+		{
+			reset();
+		}
+
+		void reset()
+		{
+			m_current = 0;
+			m_idGen   = 0;
+			m_ids[0]  = 0;
+		}
+
+		void next()
+		{
+			BX_CHECK(Max > (m_current+1), "Param out of bounds!");
+
+			m_ids[++m_current] = ++m_idGen;
+		}
+
+		void pop()
+		{
+			m_current = m_current > 0 ? m_current-1 : 0;
+		}
+
+		Ty current() const
+		{
+			BX_CHECK(Max > (m_current), "Param out of bounds!");
+
+			return m_ids[m_current];
+		}
+
+		operator Ty() const
+		{
+			BX_CHECK(Max > (m_current), "Param out of bounds!");
+
+			return m_ids[m_current];
+		}
+
+	private:
+		uint16_t m_current;
+		Ty m_idGen;
+		Ty m_ids[Max];
+	};
+
+	bx::AllocatorI* m_allocator;
 	int32_t m_mx;
 	int32_t m_my;
 	int32_t m_scroll;
@@ -2482,37 +3153,24 @@ struct Imgui
 	int32_t m_dragX;
 	int32_t m_dragY;
 	float m_dragOrig;
-	int32_t m_widgetX;
-	int32_t m_widgetY;
-	int32_t m_widgetW;
 	bool m_left;
 	bool m_leftPressed;
 	bool m_leftReleased;
 	bool m_isHot;
-	bool m_isActive;
 	bool m_wentActive;
-	bool m_insideCurrentScroll;
+	bool m_insideArea;
+	bool m_isActivePresent;
+	bool m_checkActivePresence;
 
-	uint8_t m_areaId;
-	uint8_t m_widgetId;
+	IdStack<uint16_t> m_areaId;
+	uint16_t m_widgetId;
 	uint64_t m_enabledAreaIds;
-	uint16_t m_scissor;
+	Area m_areas[64];
 
 	float m_tempCoords[MAX_TEMP_COORDS * 2];
 	float m_tempNormals[MAX_TEMP_COORDS * 2];
 
 	float m_circleVerts[NUM_CIRCLE_VERTS * 2];
-
-	int32_t m_scrollTop;
-	int32_t m_scrollHeight;
-	int32_t m_scrollRight;
-	int32_t m_scrollAreaTop;
-	int32_t m_scrollAreaWidth;
-	int32_t m_scrollAreaInnerWidth;
-	int32_t m_scrollAreaX;
-	int32_t* m_scrollVal;
-	uint16_t m_scrollId;
-	bool m_insideScrollArea;
 
 	uint16_t m_textureWidth;
 	uint16_t m_textureHeight;
@@ -2523,6 +3181,8 @@ struct Imgui
 	NVGcontext* m_nvg;
 
 	uint8_t m_view;
+	uint16_t m_surfaceWidth;
+	uint16_t m_surfaceHeight;
 	uint16_t m_viewWidth;
 	uint16_t m_viewHeight;
 
@@ -2539,11 +3199,13 @@ struct Imgui
 	Font m_fonts[IMGUI_CONFIG_MAX_FONTS];
 #endif // !USE_NANOVG_FONT
 
-	bgfx::UniformHandle u_imageLod;
+	bgfx::UniformHandle u_imageLodEnabled;
 	bgfx::UniformHandle u_imageSwizzle;
 	bgfx::UniformHandle s_texColor;
 	bgfx::ProgramHandle m_colorProgram;
 	bgfx::ProgramHandle m_textureProgram;
+	bgfx::ProgramHandle m_cubeMapProgram;
+	bgfx::ProgramHandle m_latlongProgram;
 	bgfx::ProgramHandle m_imageProgram;
 	bgfx::ProgramHandle m_imageSwizzProgram;
 	bgfx::TextureHandle m_missingTexture;
@@ -2551,19 +3213,19 @@ struct Imgui
 
 static Imgui s_imgui;
 
-ImguiFontHandle imguiCreate(const void* _data, float _fontSize)
+void* imguiMalloc(size_t _size, void*)
 {
-	return s_imgui.create(_data, _fontSize);
+	return BX_ALLOC(s_imgui.m_allocator, _size);
 }
 
-void imguiSetFont(ImguiFontHandle _handle)
+void imguiFree(void* _ptr, void*)
 {
-	s_imgui.setFont(_handle);
+	BX_FREE(s_imgui.m_allocator, _ptr);
 }
 
-ImguiFontHandle imguiCreateFont(const void* _data, float _fontSize)
+ImguiFontHandle imguiCreate(const void* _data, uint32_t _size, float _fontSize, bx::AllocatorI* _allocator)
 {
-	return s_imgui.createFont(_data, _fontSize);
+	return s_imgui.create(_data, _size, _fontSize, _allocator);
 }
 
 void imguiDestroy()
@@ -2571,9 +3233,30 @@ void imguiDestroy()
 	s_imgui.destroy();
 }
 
+ImguiFontHandle imguiCreateFont(const void* _data, float _fontSize)
+{
+	return s_imgui.createFont(_data, _fontSize);
+}
+
+void imguiSetFont(ImguiFontHandle _handle)
+{
+	s_imgui.setFont(_handle);
+}
+
+ImguiFontHandle imguiGetCurrentFont()
+{
+	const ImguiFontHandle handle = { s_imgui.m_currentFontIdx };
+	return handle;
+}
+
+void imguiBeginFrame(int32_t _mx, int32_t _my, uint8_t _button, int32_t _scroll, uint16_t _width, uint16_t _height, uint16_t _surfaceWidth, uint16_t _surfaceHeight, char _inputChar, uint8_t _view)
+{
+	s_imgui.beginFrame(_mx, _my, _button, _scroll, _width, _height, _surfaceWidth, _surfaceHeight, _inputChar, _view);
+}
+
 void imguiBeginFrame(int32_t _mx, int32_t _my, uint8_t _button, int32_t _scroll, uint16_t _width, uint16_t _height, char _inputChar, uint8_t _view)
 {
-	s_imgui.beginFrame(_mx, _my, _button, _scroll, _width, _height, _inputChar, _view);
+	s_imgui.beginFrame(_mx, _my, _button, _scroll, _width, _height, _width, _height, _inputChar, _view);
 }
 
 void imguiEndFrame()
@@ -2581,19 +3264,64 @@ void imguiEndFrame()
 	s_imgui.endFrame();
 }
 
+void imguiDrawText(int32_t _x, int32_t _y, ImguiTextAlign::Enum _align, const char* _text, uint32_t _argb)
+{
+	s_imgui.drawText(_x, _y, _align, _text, _argb);
+}
+
+void imguiDrawLine(float _x0, float _y0, float _x1, float _y1, float _r, uint32_t _argb)
+{
+	s_imgui.drawLine(_x0, _y0, _x1, _y1, _r, _argb);
+}
+
+void imguiDrawRoundedRect(float _x, float _y, float _width, float _height, float _r, uint32_t _argb)
+{
+	s_imgui.drawRoundedRect(_x, _y, _width, _height, _r, _argb);
+}
+
+void imguiDrawRect(float _x, float _y, float _width, float _height, uint32_t _argb)
+{
+	s_imgui.drawRect(_x, _y, _width, _height, _argb);
+}
+
 bool imguiBorderButton(ImguiBorder::Enum _border, bool _checked, bool _enabled)
 {
 	return s_imgui.borderButton(_border, _checked, _enabled);
 }
 
+bool imguiBeginArea(const char* _name, int _x, int _y, int _width, int _height, bool _enabled, int32_t _r)
+{
+	return s_imgui.beginArea(_name, _x, _y, _width, _height, _enabled, _r);
+}
+
+void imguiEndArea()
+{
+	return s_imgui.endArea();
+}
+
+bool imguiBeginScroll(int32_t _height, int32_t* _scroll, bool _enabled)
+{
+	return s_imgui.beginScroll(_height, _scroll, _enabled);
+}
+
+void imguiEndScroll(int32_t _r)
+{
+	s_imgui.endScroll(_r);
+}
+
 bool imguiBeginScrollArea(const char* _name, int32_t _x, int32_t _y, int32_t _width, int32_t _height, int32_t* _scroll, bool _enabled, int32_t _r)
 {
-	return s_imgui.beginScrollArea(_name, _x, _y, _width, _height, _scroll, _enabled, _r);
+	const bool result = s_imgui.beginArea(_name, _x, _y, _width, _height, _enabled, _r);
+	const bool hasTitle = (NULL != _name && '\0' != _name[0]);
+	const int32_t margins = int32_t(hasTitle)*(AREA_HEADER+2*SCROLL_AREA_PADDING-1);
+	s_imgui.beginScroll(_height - margins, _scroll, _enabled);
+	return result;
 }
 
 void imguiEndScrollArea(int32_t _r)
 {
-	s_imgui.endScrollArea(_r);
+	s_imgui.endScroll(_r);
+	s_imgui.endArea();
 }
 
 void imguiIndent(uint16_t _width)
@@ -2611,24 +3339,34 @@ void imguiSeparator(uint16_t _height)
 	s_imgui.separator(_height);
 }
 
-void imguiSeparatorLine(uint16_t _height)
+void imguiSeparatorLine(uint16_t _height, ImguiAlign::Enum _align)
 {
-	s_imgui.separatorLine(_height);
+	s_imgui.separatorLine(_height, _align);
 }
 
 int32_t imguiGetWidgetX()
 {
-	return s_imgui.m_widgetX;
+	return s_imgui.getCurrentArea().m_widgetX;
 }
 
 int32_t imguiGetWidgetY()
 {
-	return s_imgui.m_widgetY;
+	return s_imgui.getCurrentArea().m_widgetY;
 }
 
-bool imguiButton(const char* _text, bool _enabled, uint32_t _rgb0, int32_t _r)
+int32_t imguiGetWidgetW()
 {
-	return s_imgui.button(_text, _enabled, _rgb0, _r);
+	return s_imgui.getCurrentArea().m_widgetW;
+}
+
+void imguiSetCurrentScissor()
+{
+	return s_imgui.setCurrentScissor();
+}
+
+bool imguiButton(const char* _text, bool _enabled, ImguiAlign::Enum _align, uint32_t _rgb0, int32_t _r)
+{
+	return s_imgui.button(_text, _enabled, _align, _rgb0, _r);
 }
 
 bool imguiItem(const char* _text, bool _enabled)
@@ -2641,6 +3379,14 @@ bool imguiCheck(const char* _text, bool _checked, bool _enabled)
 	return s_imgui.check(_text, _checked, _enabled);
 }
 
+void imguiBool(const char* _text, bool& _flag, bool _enabled)
+{
+	if (imguiCheck(_text, _flag, _enabled) )
+	{
+		_flag = !_flag;
+	}
+}
+
 bool imguiCollapse(const char* _text, const char* _subtext, bool _checked, bool _enabled)
 {
 	return s_imgui.collapse(_text, _subtext, _checked, _enabled);
@@ -2650,15 +3396,15 @@ void imguiLabel(const char* _format, ...)
 {
 	va_list argList;
 	va_start(argList, _format);
-	s_imgui.labelVargs(_format, argList, true);
+	s_imgui.labelVargs(_format, argList, imguiRGBA(255, 255, 255, 255) );
 	va_end(argList);
 }
 
-void imguiLabel(bool _enabled, const char* _format, ...)
+void imguiLabel(uint32_t _rgba, const char* _format, ...)
 {
 	va_list argList;
 	va_start(argList, _format);
-	s_imgui.labelVargs(_format, argList, _enabled);
+	s_imgui.labelVargs(_format, argList, _rgba);
 	va_end(argList);
 }
 
@@ -2667,39 +3413,39 @@ void imguiValue(const char* _text)
 	s_imgui.value(_text);
 }
 
-bool imguiSlider(const char* _text, float& _val, float _vmin, float _vmax, float _vinc, bool _enabled)
+bool imguiSlider(const char* _text, float& _val, float _vmin, float _vmax, float _vinc, bool _enabled, ImguiAlign::Enum _align)
 {
-	return s_imgui.slider(_text, _val, _vmin, _vmax, _vinc, _enabled);
+	return s_imgui.slider(_text, _val, _vmin, _vmax, _vinc, _enabled, _align);
 }
 
-bool imguiSlider(const char* _text, int32_t& _val, int32_t _vmin, int32_t _vmax, bool _enabled)
+bool imguiSlider(const char* _text, int32_t& _val, int32_t _vmin, int32_t _vmax, bool _enabled, ImguiAlign::Enum _align)
 {
 	float val = (float)_val;
-	bool result = s_imgui.slider(_text, val, (float)_vmin, (float)_vmax, 1.0f, _enabled);
+	bool result = s_imgui.slider(_text, val, (float)_vmin, (float)_vmax, 1.0f, _enabled, _align);
 	_val = (int32_t)val;
 	return result;
 }
 
-void imguiInput(const char* _label, char* _str, uint32_t _len, bool _enabled, int32_t _r)
+void imguiInput(const char* _label, char* _str, uint32_t _len, bool _enabled, ImguiAlign::Enum _align, int32_t _r)
 {
-	s_imgui.input(_label, _str, _len, _enabled, _r);
+	s_imgui.input(_label, _str, _len, _enabled, _align, _r);
 }
 
-uint8_t imguiTabsUseMacroInstead(uint8_t _selected, bool _enabled, ...)
+uint8_t imguiTabs(uint8_t _selected, bool _enabled, ImguiAlign::Enum _align, int32_t _height, int32_t _r, uint8_t _nTabs, uint8_t _nEnabled, ...)
 {
 	va_list argList;
-	va_start(argList, _enabled);
-	const uint8_t result = s_imgui.tabs(_selected, _enabled, BUTTON_HEIGHT, BUTTON_HEIGHT/2 - 1, argList);
+	va_start(argList, _nEnabled);
+	const uint8_t result = s_imgui.tabs(_selected, _enabled, _align, _height, _r, _nTabs, _nEnabled, argList);
 	va_end(argList);
 
 	return result;
 }
 
-uint8_t imguiTabsUseMacroInstead(uint8_t _selected, bool _enabled, int32_t _height, int32_t _r, ...)
+uint8_t imguiTabs(uint8_t _selected, bool _enabled, ImguiAlign::Enum _align, int32_t _height, int32_t _r, uint8_t _nTabs, ...)
 {
 	va_list argList;
-	va_start(argList, _r);
-	const uint8_t result = s_imgui.tabs(_selected, _enabled, _height, _r, argList);
+	va_start(argList, _nTabs);
+	const uint8_t result = s_imgui.tabs(_selected, _enabled, _align, _height, _r, _nTabs, 0, argList);
 	va_end(argList);
 
 	return result;
@@ -2724,40 +3470,12 @@ uint32_t imguiChooseUseMacroInstead(uint32_t _selected, ...)
 	return _selected;
 }
 
-void imguiDrawText(int32_t _x, int32_t _y, ImguiTextAlign::Enum _align, const char* _text, uint32_t _argb)
+void imguiColorWheel(float _rgb[3], bool _respectIndentation, float _size, bool _enabled)
 {
-	s_imgui.drawText(_x, _y, _align, _text, _argb);
+	s_imgui.colorWheelWidget(_rgb, _respectIndentation, _size, _enabled);
 }
 
-void imguiDrawLine(float _x0, float _y0, float _x1, float _y1, float _r, uint32_t _argb)
-{
-	s_imgui.drawLine(_x0, _y0, _x1, _y1, _r, _argb);
-}
-
-void imguiDrawRoundedRect(float _x, float _y, float _width, float _height, float _r, uint32_t _argb)
-{
-	s_imgui.drawRoundedRect(_x, _y, _width, _height, _r, _argb);
-}
-
-void imguiDrawRect(float _x, float _y, float _width, float _height, uint32_t _argb)
-{
-	s_imgui.drawRect(_x, _y, _width, _height, _argb);
-}
-
-void imguiBool(const char* _text, bool& _flag, bool _enabled)
-{
-	if (imguiCheck(_text, _flag, _enabled) )
-	{
-		_flag = !_flag;
-	}
-}
-
-void imguiColorWheel(float _rgb[3], bool _respectIndentation, bool _enabled)
-{
-	s_imgui.colorWheelWidget(_rgb, _respectIndentation, _enabled);
-}
-
-void imguiColorWheel(const char* _text, float _rgb[3], bool& _activated, bool _enabled)
+void imguiColorWheel(const char* _text, float _rgb[3], bool& _activated, float _size, bool _enabled)
 {
 	char buf[128];
 	bx::snprintf(buf, sizeof(buf), "[RGB %-2.2f %-2.2f %-2.2f]"
@@ -2766,33 +3484,53 @@ void imguiColorWheel(const char* _text, float _rgb[3], bool& _activated, bool _e
 		, _rgb[2]
 		);
 
-	if (imguiCollapse(_text, buf, _activated, _enabled) )
+	if (imguiCollapse(_text, buf, _activated) )
 	{
 		_activated = !_activated;
 	}
 
 	if (_activated)
 	{
-		imguiColorWheel(_rgb, false, _enabled);
+		imguiColorWheel(_rgb, false, _size, _enabled);
 	}
 }
 
-void imguiImage(bgfx::TextureHandle _image, float _lod, int32_t _width, int32_t _height, ImguiImageAlign::Enum _align)
+bool imguiImage(bgfx::TextureHandle _image, float _lod, int32_t _width, int32_t _height, ImguiAlign::Enum _align, bool _enabled, bool _originBottomLeft)
 {
-	s_imgui.image(_image, _lod, _width, _height, _align);
+	return s_imgui.image(_image, _lod, _width, _height, _align, _enabled, _originBottomLeft);
 }
 
-void imguiImage(bgfx::TextureHandle _image, float _lod, float _width, float _aspect, ImguiImageAlign::Enum _align)
+bool imguiImage(bgfx::TextureHandle _image, float _lod, float _width, float _aspect, ImguiAlign::Enum _align, bool _enabled, bool _originBottomLeft)
 {
-	s_imgui.image(_image, _lod, _width, _aspect, _align);
+	return s_imgui.image(_image, _lod, _width, _aspect, _align, _enabled, _originBottomLeft);
 }
 
-void imguiImageChannel(bgfx::TextureHandle _image, uint8_t _channel, float _lod, int32_t _width, int32_t _height, ImguiImageAlign::Enum _align)
+bool imguiImageChannel(bgfx::TextureHandle _image, uint8_t _channel, float _lod, int32_t _width, int32_t _height, ImguiAlign::Enum _align, bool _enabled)
 {
-	s_imgui.imageChannel(_image, _channel, _lod, _width, _height, _align);
+	return s_imgui.imageChannel(_image, _channel, _lod, _width, _height, _align, _enabled);
 }
 
-void imguiImageChannel(bgfx::TextureHandle _image, uint8_t _channel, float _lod, float _width, float _aspect, ImguiImageAlign::Enum _align)
+bool imguiImageChannel(bgfx::TextureHandle _image, uint8_t _channel, float _lod, float _width, float _aspect, ImguiAlign::Enum _align, bool _enabled)
 {
-	s_imgui.imageChannel(_image, _channel, _lod, _width, _aspect, _align);
+	return s_imgui.imageChannel(_image, _channel, _lod, _width, _aspect, _align, _enabled);
+}
+
+bool imguiCube(bgfx::TextureHandle _cubemap, float _lod, ImguiCubemap::Enum _display, bool _sameHeight, ImguiAlign::Enum _align, bool _enabled)
+{
+	return s_imgui.cubeMap(_cubemap, _lod, _display, _sameHeight, _align, _enabled);
+}
+
+float imguiGetTextLength(const char* _text, ImguiFontHandle _handle)
+{
+#if !USE_NANOVG_FONT
+	uint32_t numVertices = 0; //unused
+	return getTextLength(s_imgui.m_fonts[_handle.idx].m_cdata, _text, numVertices);
+#else
+	return 0.0f;
+#endif
+}
+
+bool imguiMouseOverArea()
+{
+	return s_imgui.m_insideArea;
 }

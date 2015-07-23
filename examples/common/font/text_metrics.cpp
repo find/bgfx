@@ -158,13 +158,13 @@ void TextLineMetrics::getSubText(const char* _string, uint32_t _firstLine, uint3
 	uint32_t state = 0;
 	// y is bottom of a text line
 	uint32_t currentLine = 0;
-	while(*_string && (currentLine < _firstLine))
+	while(*_string && (currentLine < _firstLine) )
 	{
 		for (; *_string; ++_string)
 		{	
-			if(utf8_decode(&state, (uint32_t*)&codepoint, *_string) == UTF8_ACCEPT)
+			if (utf8_decode(&state, (uint32_t*)&codepoint, *_string) == UTF8_ACCEPT)
 			{
-				if(codepoint == L'\n')
+				if (codepoint == L'\n')
 				{
 					++currentLine;
 					++_string;
