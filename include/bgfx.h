@@ -6,6 +6,7 @@
 #ifndef BGFX_H_HEADER_GUARD
 #define BGFX_H_HEADER_GUARD
 
+#include <stdarg.h> // va_list
 #include <stdint.h> // uint32_t
 #include <stdlib.h> // size_t
 
@@ -275,14 +276,18 @@ namespace bgfx
 
 		/// Print debug message.
 		///
-		/// @param[in] _str Message.
+		/// @param[in] _filePath File path where debug message was generated.
+		/// @param[in] _line Line where debug message was generated.
+		/// @param[in] _format `printf` style format.
+		/// @param[in] _argList Variable arguments list initialized with
+		///   `va_start`.
 		///
 		/// @remarks
 		///   Not thread safe and it can be called from any thread.
 		///
-		/// @attention C99 equivalent is `bgfx_callback_vtbl.trace`.
+		/// @attention C99 equivalent is `bgfx_callback_vtbl.trace_vargs`.
 		///
-		virtual void trace(const char* _str) = 0;
+		virtual void traceVargs(const char* _filePath, uint16_t _line, const char* _format, va_list _argList) = 0;
 
 		/// Return size of for cached item. Return 0 if no cached item was
 		/// found.
@@ -687,7 +692,8 @@ namespace bgfx
 	///   default rendering backend will be selected.
 	///   See: `bgfx::RendererType`
 	///
-	/// @param[in] _vendorId Vendor PCI id. If set to BGFX_PCI_ID_NONE it will select the first device.
+	/// @param[in] _vendorId Vendor PCI id. If set to `BGFX_PCI_ID_NONE` it will select the first
+	///   device.
 	///   - `BGFX_PCI_ID_NONE` - autoselect.
 	///   - `BGFX_PCI_ID_AMD` - AMD.
 	///   - `BGFX_PCI_ID_INTEL` - Intel.
@@ -717,7 +723,7 @@ namespace bgfx
 	///
 	/// @param[in] _width Back-buffer width.
 	/// @param[in] _height Back-buffer height.
-	/// @param[in] _flags
+	/// @param[in] _flags See: `BGFX_RESET_*` for more info.
 	///   - `BGFX_RESET_NONE` - No reset flags.
 	///   - `BGFX_RESET_FULLSCREEN` - Not supported yet.
 	///   - `BGFX_RESET_MSAA_X[2/4/8/16]` - Enable 2, 4, 8 or 16 x MSAA.
@@ -727,9 +733,11 @@ namespace bgfx
 	///   - `BGFX_RESET_HMD` - HMD stereo rendering.
 	///   - `BGFX_RESET_HMD_DEBUG` - HMD stereo rendering debug mode.
 	///   - `BGFX_RESET_HMD_RECENTER` - HMD calibration.
+	///   - `BGFX_RESET_FLUSH_AFTER_RENDER` - Flush rendering after submitting to GPU.
 	///   - `BGFX_RESET_FLIP_AFTER_RENDER` - This flag  specifies where flip
 	///     occurs. Default behavior is that flip occurs before rendering new
 	///     frame. This flag only has effect when `BGFX_CONFIG_MULTITHREADED=0`.
+	///   - `BGFX_RESET_SRGB_BACKBUFFER` - Enable sRGB backbuffer.
 	///
 	/// @attention This call doesn't actually change window size, it just
 	///   resizes back-buffer. Windowing code has to change window size.
@@ -873,6 +881,18 @@ namespace bgfx
 	///
 	/// @param[in] _mem Vertex buffer data.
 	/// @param[in] _decl Vertex declaration.
+	/// @param[in] _flags Buffer creation flags.
+	///   - `BGFX_BUFFER_NONE` - No flags.
+	///   - `BGFX_BUFFER_COMPUTE_READ` - Buffer will be read from by compute shader.
+	///   - `BGFX_BUFFER_COMPUTE_WRITE` - Buffer will be written into by compute shader. When buffer
+	///       is created with `BGFX_BUFFER_COMPUTE_WRITE` flag it cannot be updated from CPU.
+	///   - `BGFX_BUFFER_COMPUTE_READ_WRITE` - Buffer will be used for read/write by compute shader.
+	///   - `BGFX_BUFFER_ALLOW_RESIZE` - Buffer will resize on buffer update if different amount of
+	///       data is passed. If this flag is not specified if more data is passed on update buffer
+	///       will be trimmed to fit existing buffer size. This flag has effect only on dynamic
+	///       buffers.
+	///   - `BGFX_BUFFER_INDEX32` - Buffer is using 32-bit indices. This flag has effect only on
+	///       index buffers.
 	/// @returns Static vertex buffer handle.
 	///
 	/// @attention C99 equivalent is `bgfx_create_vertex_buffer`.
@@ -1205,6 +1225,19 @@ namespace bgfx
 	///
 	TextureHandle createTexture2D(uint16_t _width, uint16_t _height, uint8_t _numMips, TextureFormat::Enum _format, uint32_t _flags = BGFX_TEXTURE_NONE, const Memory* _mem = NULL);
 
+	/// Create frame buffer with size based on backbuffer ratio. Frame buffer will maintain ratio
+	/// if back buffer resolution changes.
+	///
+	/// @param[in] _ratio Frame buffer size in respect to back-buffer size. See:
+	///   `BackbufferRatio::Enum`.
+	/// @param[in] _numMips Number of mip-maps.
+	/// @param[in] _format Texture format. See: `TextureFormat::Enum`.
+	/// @param[in] _flags Default texture sampling mode is linear, and wrap mode
+	///   is repeat.
+	///   - `BGFX_TEXTURE_[U/V/W]_[MIRROR/CLAMP]` - Mirror or clamp to edge wrap
+	///     mode.
+	///   - `BGFX_TEXTURE_[MIN/MAG/MIP]_[POINT/ANISOTROPIC]` - Point or anisotropic
+	///     sampling.
 	///
 	/// @attention C99 equivalent is `bgfx_create_texture_2d_scaled`.
 	///
@@ -1286,22 +1319,22 @@ namespace bgfx
 	/// @param[in] _side Cubemap side, where 0 is +X, 1 is -X, 2 is +Y, 3 is
 	///   -Y, 4 is +Z, and 5 is -Z.
 	///
-	///              +----------+
-	///              |-z       2|
-	///              | ^  +y    |
-	///              | |        |
-	///              | +---->+x |
-	///   +----------+----------+----------+----------+
-	///   |+y       1|+y       4|+y       0|+y       5|
-	///   | ^  -x    | ^  +z    | ^  +x    | ^  -z    |
-	///   | |        | |        | |        | |        |
-	///   | +---->+z | +---->+x | +---->-z | +---->-x |
-	///   +----------+----------+----------+----------+
-	///              |+z       3|
-	///              | ^  -y    |
-	///              | |        |
-	///              | +---->+x |
-	///              +----------+
+	///                  +----------+
+	///                  |-z       2|
+	///                  | ^  +y    |
+	///                  | |        |
+	///                  | +---->+x |
+	///       +----------+----------+----------+----------+
+	///       |+y       1|+y       4|+y       0|+y       5|
+	///       | ^  -x    | ^  +z    | ^  +x    | ^  -z    |
+	///       | |        | |        | |        | |        |
+	///       | +---->+z | +---->+x | +---->-z | +---->-x |
+	///       +----------+----------+----------+----------+
+	///                  |+z       3|
+	///                  | ^  -y    |
+	///                  | |        |
+	///                  | +---->+x |
+	///                  +----------+
 	///
 	/// @param[in] _mip Mip level.
 	/// @param[in] _x X offset in texture.
@@ -1327,7 +1360,7 @@ namespace bgfx
 	/// @param[in] _width Texture width.
 	/// @param[in] _height Texture height.
 	/// @param[in] _format Texture format. See: `TextureFormat::Enum`.
-	/// @param[in] _flags Default texture sampling mode is linear, and wrap mode
+	/// @param[in] _textureFlags Default texture sampling mode is linear, and wrap mode
 	///   is repeat.
 	///   - `BGFX_TEXTURE_[U/V/W]_[MIRROR/CLAMP]` - Mirror or clamp to edge wrap
 	///     mode.
@@ -1340,6 +1373,16 @@ namespace bgfx
 
 	/// Create frame buffer with size based on backbuffer ratio. Frame buffer will maintain ratio
 	/// if back buffer resolution changes.
+	///
+	/// @param[in] _ratio Frame buffer size in respect to back-buffer size. See:
+	///   `BackbufferRatio::Enum`.
+	/// @param[in] _format Texture format. See: `TextureFormat::Enum`.
+	/// @param[in] _textureFlags Default texture sampling mode is linear, and wrap mode
+	///   is repeat.
+	///   - `BGFX_TEXTURE_[U/V/W]_[MIRROR/CLAMP]` - Mirror or clamp to edge wrap
+	///     mode.
+	///   - `BGFX_TEXTURE_[MIN/MAG/MIP]_[POINT/ANISOTROPIC]` - Point or anisotropic
+	///     sampling.
 	///
 	/// @attention C99 equivalent is `bgfx_create_frame_buffer_scaled`.
 	///
@@ -1478,6 +1521,7 @@ namespace bgfx
 	/// Set view scissor. Draw primitive outside view will be clipped. When
 	/// _x, _y, _width and _height are set to 0, scissor will be disabled.
 	///
+	/// @param[in] _id View id.
 	/// @param[in] _x Position x from the left corner of the window.
 	/// @param[in] _y Position y from the top corner of the window.
 	/// @param[in] _width Width of scissor region.
@@ -1509,6 +1553,14 @@ namespace bgfx
 	///   operation. See: `BGFX_CLEAR_*`.
 	/// @param[in] _depth Depth clear value.
 	/// @param[in] _stencil Stencil clear value.
+	/// @param[in] _0 Palette index for frame buffer attachment 0.
+	/// @param[in] _1 Palette index for frame buffer attachment 1.
+	/// @param[in] _2 Palette index for frame buffer attachment 2.
+	/// @param[in] _3 Palette index for frame buffer attachment 3.
+	/// @param[in] _4 Palette index for frame buffer attachment 4.
+	/// @param[in] _5 Palette index for frame buffer attachment 5.
+	/// @param[in] _6 Palette index for frame buffer attachment 6.
+	/// @param[in] _7 Palette index for frame buffer attachment 7.
 	///
 	/// @attention C99 equivalent is `bgfx_set_view_clear_mrt`.
 	///
@@ -1607,7 +1659,7 @@ namespace bgfx
 	void setStencil(uint32_t _fstencil, uint32_t _bstencil = BGFX_STENCIL_NONE);
 
 	/// Set scissor for draw primitive. For scissor for all primitives in
-	/// view see setViewScissor.
+	/// view see `bgfx::setViewScissor`.
 	///
 	/// @param[in] _x Position x from the left corner of the window.
 	/// @param[in] _y Position y from the top corner of the window.
@@ -1904,7 +1956,6 @@ namespace bgfx
 	/// @param[in] _sampler Program sampler.
 	/// @param[in] _handle Frame buffer handle.
 	/// @param[in] _attachment Attachment index.
-	/// @param[in] _mip Mip level.
 	/// @param[in] _access Texture access. See `Access::Enum`.
 	/// @param[in] _format Texture format. See: `TextureFormat::Enum`.
 	///
