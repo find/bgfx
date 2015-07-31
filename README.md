@@ -11,6 +11,7 @@ Supported rendering backends:
 
  * Direct3D 9
  * Direct3D 11
+ * Direct3D 12 (WIP)
  * OpenGL 2.1
  * OpenGL 3.1+
  * OpenGL ES 2
@@ -46,6 +47,7 @@ Languages:
  * [C#/VB/F# language API bindings](https://github.com/MikePopoloski/SharpBgfx)
  * [D language API bindings](https://github.com/DerelictOrg/DerelictBgfx)
  * [Go language API bindings](https://github.com/james4k/go-bgfx)
+ * [Java language API bindings](https://github.com/enleeten/twilight-bgfx)
 
 Build status
 ------------
@@ -648,7 +650,6 @@ Todo
  - texturec tool with support for all supported texture formats.
  - Multiple vertex streams support.
  - Animated mesh example.
- - Direct3D 12 renderer backend.
  - Metal renderer backend (you can follow progress [here](https://github.com/attilaz/bgfx/tree/metal)).
  - Vulkan renderer backend.
 
@@ -807,7 +808,9 @@ Daniel Collin ([@emoon](https://github.com/emoon)) - Port of Ocornut's ImGui
   to bgfx.  
 Andre Weissflog ([@floooh](https://github.com/floooh)) - Alternative build
 system fips.  
-Andrew Johnson  ([@ajohnson23](https://github.com/ajohnson23)) - TeamCity build.
+Andrew Johnson  ([@ajohnson23](https://github.com/ajohnson23)) - TeamCity build.  
+Tony McCrary ([@enleeten](https://github.com/enleeten)] - Java language API
+bindings
 
 [License (BSD 2-clause)](https://github.com/bkaradzic/bgfx/blob/master/LICENSE)
 -------------------------------------------------------------------------------

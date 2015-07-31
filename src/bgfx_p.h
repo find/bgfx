@@ -140,11 +140,13 @@ namespace bgfx
 #	include <tinystl/string.h>
 #	include <tinystl/unordered_map.h>
 #	include <tinystl/unordered_set.h>
+#	include <tinystl/vector.h>
 namespace stl = tinystl;
 #else
 #	include <string>
 #	include <unordered_map>
 #	include <unordered_set>
+#	include <vector>
 namespace stl
 {
 	using namespace std;
@@ -1927,7 +1929,7 @@ namespace bgfx
 		}
 
 		// game thread
-		void init(RendererType::Enum _type);
+		bool init(RendererType::Enum _type);
 		void shutdown();
 
 		CommandBuffer& getCommandBuffer(CommandBuffer::Enum _cmd)
