@@ -28,6 +28,8 @@
 
 static bool is_loop_terminator(ir_if *ir);
 
+static bool used_outside_loops(exec_node *head, ir_variable *var, bool first_assignment);
+
 static bool all_expression_operands_are_loop_constant(ir_rvalue *,
 						      hash_table *);
 
@@ -121,11 +123,20 @@ loop_state::get_for_inductor(const ir_variable *ir)
 }
 
 void
-loop_state::insert_inductor(ir_variable* var, loop_variable_state* state, ir_loop* loop)
+loop_state::insert_non_inductor(ir_variable *var)
 {
+	// key doesn't matter, just needs to be non-NULL
+	hash_table_insert(this->ht_non_inductors, this, var);
+}
+
+bool
+loop_state::insert_inductor(loop_variable* loopvar, loop_variable_state* state, ir_loop* loop)
+{
+	ir_variable* var = loopvar->var;
+
 	// Check if this variable is already marked as "sure can't be a private inductor variable"
 	if (hash_table_find(this->ht_non_inductors, var))
-		return;
+		return false;
 
 	// Check if this variable is used after the loop anywhere. If it is, it can't be a
 	// variable that's private to the loop.
@@ -141,12 +152,36 @@ loop_state::insert_inductor(ir_variable* var, loop_variable_state* state, ir_loo
 			// add to list of "non inductors", so that next loop does not try
 			// to add it as inductor again
 			hash_table_insert(this->ht_non_inductors, state, var);
-			return;
+			return false;
+		}
+	}
+
+	// Check if this variable is used before the loop anywhere. If it is, it can't be a
+	// variable that's private to the loop.
+	// Skip over the IR that declared the variable or assigned the initial value though.
+	for (exec_node* node = loop->prev;
+		 !node->is_head_sentinel();
+		 node = node->prev)
+	{
+		ir_instruction *ir = (ir_instruction *) node;
+		if (ir == loopvar->initial_value_ir)
+			continue;
+		if (ir->ir_type == ir_type_variable)
+			continue;
+
+		ir->accept (&refs);
+		if (refs.find_variable_entry(var))
+		{
+			// add to list of "non inductors", so that next loop does not try
+			// to add it as inductor again
+			hash_table_insert(this->ht_non_inductors, state, var);
+			return false;
 		}
 	}
 	
 	state->private_induction_variable_count++;
 	hash_table_insert(this->ht_inductors, state, var);
+	return true;
 }
 
 
@@ -220,6 +255,8 @@ public:
    virtual ir_visitor_status visit(ir_loop_jump *);
    virtual ir_visitor_status visit(ir_dereference_variable *);
 
+   virtual ir_visitor_status visit(ir_variable *);
+
    virtual ir_visitor_status visit_enter(ir_call *);
 
    virtual ir_visitor_status visit_enter(ir_loop *);
@@ -264,13 +301,34 @@ loop_analysis::visit(ir_loop_jump *ir)
 
 
 ir_visitor_status
-loop_analysis::visit_enter(ir_call *ir)
+loop_analysis::visit(ir_variable *var)
+{
+	// if inside a loop, simply continue - we're only interested in variables declared
+	// entirely outside of any loops
+	if (!this->state.is_empty())
+		return visit_continue;
+
+	// Check if this variable is used outside a loop anywhere. If it is, it can't be a
+	// variable that's private to the loop, so can't be an inductor.
+	// This doesn't reject all possible non-inductors, notably anything declared in an
+	// outer loop that isn't an inductor in an inner loop, but it can eliminate some
+	// problem cases
+	if (used_outside_loops(var->next, var, false))
+	{
+		// add to list of "non inductors"
+		loops->insert_non_inductor(var);
+	}
+
+	return visit_continue;
+}
+
+ir_visitor_status
+loop_analysis::visit_enter(ir_call *)
 {
    /* Mark every loop that we're currently analyzing as containing an ir_call
     * (even those at outer nesting levels).
     */
-   foreach_list(node, &this->state) {
-      loop_variable_state *const ls = (loop_variable_state *) node;
+   foreach_in_list(loop_variable_state, ls, &this->state) {
       ls->contains_calls = true;
    }
 
@@ -288,9 +346,7 @@ loop_analysis::visit(ir_dereference_variable *ir)
 
    bool nested = false;
 
-   foreach_list(node, &this->state) {
-      loop_variable_state *const ls = (loop_variable_state *) node;
-
+   foreach_in_list(loop_variable_state, ls, &this->state) {
       ir_variable *var = ir->variable_referenced();
       loop_variable *lv = ls->get_or_insert(var, this->in_assignee);
 
@@ -330,10 +386,10 @@ loop_analysis::visit_leave(ir_loop *ir)
    if (ls->contains_calls)
       return visit_continue;
 
-   foreach_list(node, &ir->body_instructions) {
+   foreach_in_list(ir_instruction, node, &ir->body_instructions) {
       /* Skip over declarations at the start of a loop.
        */
-      if (((ir_instruction *) node)->as_variable())
+      if (node->as_variable())
 	 continue;
 
       ir_if *if_stmt = ((ir_instruction *) node)->as_if();
@@ -345,9 +401,11 @@ loop_analysis::visit_leave(ir_loop *ir)
    }
 
 
-   foreach_list_safe(node, &ls->variables) {
-      loop_variable *lv = (loop_variable *) node;
-
+   foreach_in_list_safe(loop_variable, lv, &ls->variables) {
+       ir_variable *var = lv->var;
+       if (var != NULL) {
+           lv->initial_value = find_initial_value(ir, var, &lv->initial_value_ir);
+       }
       /* Move variables that are already marked as being loop constant to
        * a separate list.  These trivially don't need to be tested.
        */
@@ -375,9 +433,7 @@ loop_analysis::visit_leave(ir_loop *ir)
    do {
       progress = false;
 
-      foreach_list_safe(node, &ls->variables) {
-	 loop_variable *lv = (loop_variable *) node;
-
+      foreach_in_list_safe(loop_variable, lv, &ls->variables) {
 	 if (lv->conditional_or_nested_assignment || (lv->num_assignments > 1))
 	    continue;
 
@@ -401,9 +457,7 @@ loop_analysis::visit_leave(ir_loop *ir)
    /* The remaining variables that are not loop invariant might be loop
     * induction variables.
     */
-   foreach_list_safe(node, &ls->variables) {
-      loop_variable *lv = (loop_variable *) node;
-
+   foreach_in_list_safe(loop_variable, lv, &ls->variables) {
       /* If there is more than one assignment to a variable, it cannot be a
        * loop induction variable.  This isn't strictly true, but this is a
        * very simple induction variable detector, and it can't handle more
@@ -431,11 +485,12 @@ loop_analysis::visit_leave(ir_loop *ir)
       ir_rvalue *const inc =
 	 get_basic_induction_increment(lv->first_assignment, ls->var_hash);
       if (inc != NULL) {
-	 lv->increment = inc;
+         lv->increment = inc;
 
-	 lv->remove();
-	 ls->induction_variables.push_tail(lv);
-	 loops->insert_inductor(lv->var, ls, ir);
+         if (loops->insert_inductor(lv, ls, ir)) {
+            lv->remove();
+            ls->induction_variables.push_tail(lv);
+         }
       }
    }
 
@@ -445,8 +500,7 @@ loop_analysis::visit_leave(ir_loop *ir)
     * Also figure out which terminator (if any) produces the smallest
     * iteration count--this is the limiting terminator.
     */
-   foreach_list(node, &ls->terminators) {
-      loop_terminator *t = (loop_terminator *) node;
+   foreach_in_list(loop_terminator, t, &ls->terminators) {
       ir_if *if_stmt = t->ir;
 
       /* If-statements can be either 'if (expr)' or 'if (deref)'.  We only care
@@ -487,12 +541,9 @@ loop_analysis::visit_leave(ir_loop *ir)
 
 	 ir_variable *var = counter->variable_referenced();
 
-	 ir_rvalue *init = find_initial_value(ir, var);
-
          loop_variable *lv = ls->get(var);
          if (lv != NULL && lv->is_induction_var()) {
-            lv->initial_value = init;
-            t->iterations = calculate_iterations(init, limit, lv->increment,
+            t->iterations = calculate_iterations(lv->initial_value, limit, lv->increment,
                                                  cmp);
 
             if (t->iterations >= 0 &&
@@ -633,8 +684,10 @@ get_basic_induction_increment(ir_assignment *ir, hash_table *var_hash)
 	 loop_variable *lv =
 	    (loop_variable *) hash_table_find(var_hash, inc_var);
 
-	 if (!lv->is_loop_constant())
-	    inc = NULL;
+         if (lv == NULL || !lv->is_loop_constant()) {
+            assert(lv != NULL);
+            inc = NULL;
+         }
       } else
 	 inc = NULL;
    }
@@ -678,6 +731,65 @@ is_loop_terminator(ir_if *ir)
       return false;
 
    return true;
+}
+
+
+bool
+used_outside_loops(exec_node *head, ir_variable *var, bool first_assignment)
+{
+	ir_variable_refcount_visitor refs;
+	for (exec_node* node = head;
+		 !node->is_tail_sentinel();
+		 node = node->next)
+	{
+		ir_instruction *ir = (ir_instruction *) node;
+		if (ir->ir_type == ir_type_variable)
+			continue;
+
+		// ignore the first assignment
+		if (!first_assignment && ir->ir_type == ir_type_assignment)
+		{
+			ir_assignment *assign = ir->as_assignment();
+			ir_variable *assignee = assign->lhs->whole_variable_referenced();
+
+			if(assignee == var)
+			{
+				first_assignment = true;
+				continue;
+			}
+		}
+
+		// we don't want to recurse into loops
+		if (ir->ir_type == ir_type_loop)
+			continue;
+
+		// recurse only for if statements, the other case we would need to recurse is
+		// loops, but we are looking for uses outside of loops.
+		if (ir->ir_type == ir_type_if)
+		{
+			ir_if *irif = ir->as_if();
+			if (used_outside_loops(irif->then_instructions.head, var, first_assignment))
+				return true;
+			if (used_outside_loops(irif->else_instructions.head, var, first_assignment))
+				return true;
+
+			// if we didn't find in each branch with our recursion, skip
+			// otherwise the accept (&refs) below will recurse into loops
+			// and may give a false positive.
+			continue;
+		}
+
+		// we know that we're not inside a loop as we haven't recursed inside,
+		// and we started outside of a loop, so any references to this variable
+		// mean it is used outside of any loops
+		ir->accept (&refs);
+		if (refs.find_variable_entry(var))
+		{
+			return true;
+		}
+	}
+
+	return false;
 }
 
 

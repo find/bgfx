@@ -35,7 +35,7 @@
  * the built-in varyings have pre-assigned locations. Also, the elimination
  * of unused gl_TexCoord elements requires its own lowering pass anyway.
  *
- * It's implemented by replacing all occurences of dead varyings with
+ * It's implemented by replacing all occurrences of dead varyings with
  * temporary variables, which creates dead code. It is recommended to run
  * a dead-code elimination pass after this.
  *
@@ -280,7 +280,7 @@ public:
        *
        * We're going to break down the gl_TexCoord array into separate
        * variables. First, add declarations of the new variables all
-       * occurences of gl_TexCoord will be replaced with.
+       * occurrences of gl_TexCoord will be replaced with.
        */
       if (info->lower_texcoord_array) {
          prepare_array(ir, this->new_texcoord, ARRAY_SIZE(this->new_texcoord),
@@ -334,7 +334,7 @@ public:
    }
 
    void prepare_array(exec_list *ir,
-                      class ir_variable **new_var,
+                      ir_variable **new_var,
                       int max_elements, unsigned start_location,
                       const char *var_name, const char *mode_str,
                       unsigned usage, unsigned external_usage)
@@ -411,7 +411,7 @@ public:
        * variable dereference representing gl_TexCoord[i].
        */
       if (this->info->lower_texcoord_array) {
-         /* gl_TexCoord[i] occurence */
+         /* gl_TexCoord[i] occurrence */
          ir_dereference_array *const da = (*rvalue)->as_dereference_array();
 
          if (da && da->variable_referenced() ==
@@ -425,7 +425,7 @@ public:
 
       /* Same for gl_FragData. */
       if (this->info->lower_fragdata_array) {
-         /* gl_FragData[i] occurence */
+         /* gl_FragData[i] occurrence */
          ir_dereference_array *const da = (*rvalue)->as_dereference_array();
 
          if (da && da->variable_referenced() == this->info->fragdata_array) {
@@ -518,14 +518,9 @@ do_dead_builtin_varyings(struct gl_context *ctx,
 
    /* Lowering of built-in varyings has no effect with the core context and
     * GLES2, because they are not available there.
-    *
-    * EXT_separate_shader_objects doesn't allow this optimization,
-    * because a program object can be bound partially (e.g. only one
-    * stage of a program object can be bound).
     */
    if (ctx->API == API_OPENGL_CORE ||
-       ctx->API == API_OPENGLES2 ||
-       ctx->Extensions.EXT_separate_shader_objects) {
+       ctx->API == API_OPENGLES2) {
       return;
    }
 

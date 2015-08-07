@@ -23,27 +23,20 @@ struct Uniforms
 		m_time = 0.0f;
 		bx::mtxIdentity(m_mtx);
 
-		u_time    = bgfx::createUniform("u_time",     bgfx::UniformType::Uniform1f);
-		u_mtx     = bgfx::createUniform("u_mtx",      bgfx::UniformType::Uniform4x4fv);
-		u_params  = bgfx::createUniform("u_params",   bgfx::UniformType::Uniform4fv);
-		u_flags   = bgfx::createUniform("u_flags",    bgfx::UniformType::Uniform4fv);
-		u_camPos  = bgfx::createUniform("u_camPos",   bgfx::UniformType::Uniform3fv);
-		u_rgbDiff = bgfx::createUniform("u_rgbDiff",  bgfx::UniformType::Uniform3fv);
-		u_rgbSpec = bgfx::createUniform("u_rgbSpec",  bgfx::UniformType::Uniform3fv);
-	}
-
-	// Call this once at initialization.
-	void submitConstUniforms()
-	{
+		u_mtx     = bgfx::createUniform("u_mtx",     bgfx::UniformType::Mat4);
+		u_params  = bgfx::createUniform("u_params",  bgfx::UniformType::Vec4);
+		u_flags   = bgfx::createUniform("u_flags",   bgfx::UniformType::Vec4);
+		u_camPos  = bgfx::createUniform("u_camPos",  bgfx::UniformType::Vec4);
+		u_rgbDiff = bgfx::createUniform("u_rgbDiff", bgfx::UniformType::Vec4);
+		u_rgbSpec = bgfx::createUniform("u_rgbSpec", bgfx::UniformType::Vec4);
 	}
 
 	// Call this once per frame.
 	void submitPerFrameUniforms()
 	{
-		bgfx::setUniform(u_time, &m_time);
-		bgfx::setUniform(u_mtx, m_mtx);
-		bgfx::setUniform(u_flags, m_flags);
-		bgfx::setUniform(u_camPos, m_camPos);
+		bgfx::setUniform(u_mtx,     m_mtx);
+		bgfx::setUniform(u_flags,   m_flags);
+		bgfx::setUniform(u_camPos,  m_camPosTime);
 		bgfx::setUniform(u_rgbDiff, m_rgbDiff);
 		bgfx::setUniform(u_rgbSpec, m_rgbSpec);
 	}
@@ -62,7 +55,6 @@ struct Uniforms
 		bgfx::destroyUniform(u_flags);
 		bgfx::destroyUniform(u_params);
 		bgfx::destroyUniform(u_mtx);
-		bgfx::destroyUniform(u_time);
 	}
 
 	union
@@ -72,7 +64,7 @@ struct Uniforms
 			float m_glossiness;
 			float m_exposure;
 			float m_diffspec;
-			float m_unused0;
+			float m_time;
 		};
 
 		float m_params[4];
@@ -91,13 +83,11 @@ struct Uniforms
 		float m_flags[4];
 	};
 
-	float m_time;
 	float m_mtx[16];
-	float m_camPos[3];
-	float m_rgbDiff[3];
-	float m_rgbSpec[3];
+	float m_camPosTime[4];
+	float m_rgbDiff[4];
+	float m_rgbSpec[4];
 
-	bgfx::UniformHandle u_time;
 	bgfx::UniformHandle u_mtx;
 	bgfx::UniformHandle u_params;
 	bgfx::UniformHandle u_flags;
@@ -105,207 +95,8 @@ struct Uniforms
 	bgfx::UniformHandle u_rgbDiff;
 	bgfx::UniformHandle u_rgbSpec;
 };
+
 static Uniforms s_uniforms;
-
-struct Aabb
-{
-	float m_min[3];
-	float m_max[3];
-};
-
-struct Obb
-{
-	float m_mtx[16];
-};
-
-struct Sphere
-{
-	float m_center[3];
-	float m_radius;
-};
-
-struct Primitive
-{
-	uint32_t m_startIndex;
-	uint32_t m_numIndices;
-	uint32_t m_startVertex;
-	uint32_t m_numVertices;
-
-	Sphere m_sphere;
-	Aabb m_aabb;
-	Obb m_obb;
-};
-
-typedef std::vector<Primitive> PrimitiveArray;
-
-struct Group
-{
-	Group()
-	{
-		reset();
-	}
-
-	void reset()
-	{
-		m_vbh.idx = bgfx::invalidHandle;
-		m_ibh.idx = bgfx::invalidHandle;
-		m_prims.clear();
-	}
-
-	bgfx::VertexBufferHandle m_vbh;
-	bgfx::IndexBufferHandle m_ibh;
-	Sphere m_sphere;
-	Aabb m_aabb;
-	Obb m_obb;
-	PrimitiveArray m_prims;
-};
-
-namespace bgfx
-{
-	int32_t read(bx::ReaderI* _reader, bgfx::VertexDecl& _decl);
-}
-
-struct Mesh
-{
-	void load(const char* _filePath)
-	{
-#define BGFX_CHUNK_MAGIC_VB  BX_MAKEFOURCC('V', 'B', ' ', 0x1)
-#define BGFX_CHUNK_MAGIC_IB  BX_MAKEFOURCC('I', 'B', ' ', 0x0)
-#define BGFX_CHUNK_MAGIC_PRI BX_MAKEFOURCC('P', 'R', 'I', 0x0)
-
-		bx::CrtFileReader reader;
-		reader.open(_filePath);
-
-		Group group;
-
-		uint32_t chunk;
-		while (4 == bx::read(&reader, chunk) )
-		{
-			switch (chunk)
-			{
-			case BGFX_CHUNK_MAGIC_VB:
-				{
-					bx::read(&reader, group.m_sphere);
-					bx::read(&reader, group.m_aabb);
-					bx::read(&reader, group.m_obb);
-
-					bgfx::read(&reader, m_decl);
-					uint16_t stride = m_decl.getStride();
-
-					uint16_t numVertices;
-					bx::read(&reader, numVertices);
-					const bgfx::Memory* mem = bgfx::alloc(numVertices*stride);
-					bx::read(&reader, mem->data, mem->size);
-
-					group.m_vbh = bgfx::createVertexBuffer(mem, m_decl);
-				}
-				break;
-
-			case BGFX_CHUNK_MAGIC_IB:
-				{
-					uint32_t numIndices;
-					bx::read(&reader, numIndices);
-					const bgfx::Memory* mem = bgfx::alloc(numIndices*2);
-					bx::read(&reader, mem->data, mem->size);
-					group.m_ibh = bgfx::createIndexBuffer(mem);
-				}
-				break;
-
-			case BGFX_CHUNK_MAGIC_PRI:
-				{
-					uint16_t len;
-					bx::read(&reader, len);
-
-					std::string material;
-					material.resize(len);
-					bx::read(&reader, const_cast<char*>(material.c_str() ), len);
-
-					uint16_t num;
-					bx::read(&reader, num);
-
-					for (uint32_t ii = 0; ii < num; ++ii)
-					{
-						bx::read(&reader, len);
-
-						std::string name;
-						name.resize(len);
-						bx::read(&reader, const_cast<char*>(name.c_str() ), len);
-
-						Primitive prim;
-						bx::read(&reader, prim.m_startIndex);
-						bx::read(&reader, prim.m_numIndices);
-						bx::read(&reader, prim.m_startVertex);
-						bx::read(&reader, prim.m_numVertices);
-						bx::read(&reader, prim.m_sphere);
-						bx::read(&reader, prim.m_aabb);
-						bx::read(&reader, prim.m_obb);
-
-						group.m_prims.push_back(prim);
-					}
-
-					m_groups.push_back(group);
-					group.reset();
-				}
-				break;
-
-			default:
-				DBG("%08x at %d", chunk, reader.seek() );
-				break;
-			}
-		}
-
-		reader.close();
-	}
-
-	void unload()
-	{
-		for (GroupArray::const_iterator it = m_groups.begin(), itEnd = m_groups.end(); it != itEnd; ++it)
-		{
-			const Group& group = *it;
-			bgfx::destroyVertexBuffer(group.m_vbh);
-
-			if (bgfx::isValid(group.m_ibh) )
-			{
-				bgfx::destroyIndexBuffer(group.m_ibh);
-			}
-		}
-		m_groups.clear();
-	}
-
-	void submit(uint8_t _view, bgfx::ProgramHandle _program, float* _mtx)
-	{
-		for (GroupArray::const_iterator it = m_groups.begin(), itEnd = m_groups.end(); it != itEnd; ++it)
-		{
-			const Group& group = *it;
-
-			// Set uniforms.
-			s_uniforms.submitPerDrawUniforms();
-
-			// Set model matrix for rendering.
-			bgfx::setTransform(_mtx);
-			bgfx::setProgram(_program);
-			bgfx::setIndexBuffer(group.m_ibh);
-			bgfx::setVertexBuffer(group.m_vbh);
-
-			// Set render states.
-			bgfx::setState(0
-				| BGFX_STATE_RGB_WRITE
-				| BGFX_STATE_ALPHA_WRITE
-				| BGFX_STATE_DEPTH_WRITE
-				| BGFX_STATE_DEPTH_TEST_LESS
-				| BGFX_STATE_CULL_CCW
-				| BGFX_STATE_MSAA
-				);
-
-			// Submit primitive for rendering to view 0.
-			bgfx::submit(_view);
-		}
-	}
-
-	bgfx::VertexDecl m_decl;
-	typedef std::vector<Group> GroupArray;
-	GroupArray m_groups;
-};
 
 struct PosColorTexCoord0Vertex
 {
@@ -437,16 +228,14 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 	// Set views  clear state.
 	bgfx::setViewClear(0
-		, BGFX_CLEAR_COLOR_BIT|BGFX_CLEAR_DEPTH_BIT
+		, BGFX_CLEAR_COLOR|BGFX_CLEAR_DEPTH
 		, 0x303030ff
 		, 1.0f
 		, 0
 		);
 
 	// Imgui.
-	void* data = load("font/droidsans.ttf");
-	imguiCreate(data);
-	free(data);
+	imguiCreate();
 
 	// Uniforms.
 	s_uniforms.init();
@@ -462,20 +251,18 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 	lightProbes[LightProbe::Grace ].load("grace");
 	LightProbe::Enum currentLightProbe = LightProbe::Wells;
 
-	bgfx::UniformHandle u_time   = bgfx::createUniform("u_time",   bgfx::UniformType::Uniform1f);
-	bgfx::UniformHandle u_mtx    = bgfx::createUniform("u_mtx",    bgfx::UniformType::Uniform4x4fv);
-	bgfx::UniformHandle u_params = bgfx::createUniform("u_params", bgfx::UniformType::Uniform4fv);
-	bgfx::UniformHandle u_flags  = bgfx::createUniform("u_flags",  bgfx::UniformType::Uniform4fv);
-	bgfx::UniformHandle u_camPos = bgfx::createUniform("u_camPos", bgfx::UniformType::Uniform3fv);
+	bgfx::UniformHandle u_mtx        = bgfx::createUniform("u_mtx",        bgfx::UniformType::Mat4);
+	bgfx::UniformHandle u_params     = bgfx::createUniform("u_params",     bgfx::UniformType::Vec4);
+	bgfx::UniformHandle u_flags      = bgfx::createUniform("u_flags",      bgfx::UniformType::Vec4);
+	bgfx::UniformHandle u_camPos     = bgfx::createUniform("u_camPos",     bgfx::UniformType::Vec4);
+	bgfx::UniformHandle s_texCube    = bgfx::createUniform("s_texCube",    bgfx::UniformType::Int1);
+	bgfx::UniformHandle s_texCubeIrr = bgfx::createUniform("s_texCubeIrr", bgfx::UniformType::Int1);
 
-	bgfx::UniformHandle u_texCube    = bgfx::createUniform("u_texCube",    bgfx::UniformType::Uniform1i);
-	bgfx::UniformHandle u_texCubeIrr = bgfx::createUniform("u_texCubeIrr", bgfx::UniformType::Uniform1i);
+	bgfx::ProgramHandle programMesh  = loadProgram("vs_ibl_mesh",   "fs_ibl_mesh");
+	bgfx::ProgramHandle programSky   = loadProgram("vs_ibl_skybox", "fs_ibl_skybox");
 
-	bgfx::ProgramHandle programMesh = loadProgram("vs_ibl_mesh",   "fs_ibl_mesh");
-	bgfx::ProgramHandle programSky  = loadProgram("vs_ibl_skybox", "fs_ibl_skybox");
-
-	Mesh meshBunny;
-	meshBunny.load("meshes/bunny.bin");
+	Mesh* meshBunny;
+	meshBunny = meshLoad("meshes/bunny.bin");
 
 	struct Settings
 	{
@@ -491,6 +278,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		bool m_specularIbl;
 		bool m_showDiffColorWheel;
 		bool m_showSpecColorWheel;
+		ImguiCubemap::Enum m_crossCubemapPreview;
 	};
 
 	Settings settings;
@@ -508,12 +296,11 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 	settings.m_specular = true;
 	settings.m_diffuseIbl = true;
 	settings.m_specularIbl = true;
-	settings.m_showDiffColorWheel = false;
+	settings.m_showDiffColorWheel = true;
 	settings.m_showSpecColorWheel = false;
+	settings.m_crossCubemapPreview = ImguiCubemap::Cross;
 
 	float time = 0.0f;
-
-	s_uniforms.submitConstUniforms();
 
 	int32_t leftScrollArea = 0;
 
@@ -524,13 +311,13 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 			, mouseState.m_my
 			, (mouseState.m_buttons[entry::MouseButton::Left  ] ? IMGUI_MBUT_LEFT  : 0)
 			| (mouseState.m_buttons[entry::MouseButton::Right ] ? IMGUI_MBUT_RIGHT : 0)
-			, 0
+			, mouseState.m_mz
 			, width
 			, height
 			);
 
 		static int32_t rightScrollArea = 0;
-		imguiBeginScrollArea("Settings", width - 256 - 10, 10, 256, 426, &rightScrollArea);
+		imguiBeginScrollArea("Settings", width - 256 - 10, 10, 256, 540, &rightScrollArea);
 
 		imguiLabel("Shade:");
 		imguiSeparator();
@@ -541,8 +328,12 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 		imguiSeparatorLine();
 		imguiSlider("Speed", settings.m_speed, 0.0f, 1.0f, 0.01f);
-
 		imguiSeparatorLine();
+
+		imguiSeparator();
+		imguiSlider("Exposure", settings.m_exposure, -8.0f, 8.0f, 0.01f);
+		imguiSeparator();
+
 		imguiLabel("Environment:");
 		currentLightProbe = LightProbe::Enum(imguiChoose(currentLightProbe
 													   , "Wells"
@@ -551,9 +342,13 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 													   , "Ennis"
 													   , "Grace"
 													   ) );
+		static float lod = 0.0f;
+		if (imguiCube(lightProbes[currentLightProbe].m_tex, lod, settings.m_crossCubemapPreview, true) )
+		{
+			settings.m_crossCubemapPreview = ImguiCubemap::Enum( (settings.m_crossCubemapPreview+1) % ImguiCubemap::Count);
+		}
+		imguiSlider("Texture LOD", lod, 0.0f, 10.1f, 0.1f);
 
-		imguiSeparator();
-		imguiSlider("Exposure", settings.m_exposure, -8.0f, 8.0f, 0.01f);
 		imguiEndScrollArea();
 
 		imguiBeginScrollArea("Settings", 10, 70, 256, 576, &leftScrollArea);
@@ -639,8 +434,8 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		s_uniforms.m_flags[1] = float(settings.m_specular);
 		s_uniforms.m_flags[2] = float(settings.m_diffuseIbl);
 		s_uniforms.m_flags[3] = float(settings.m_specularIbl);
-		memcpy(s_uniforms.m_rgbDiff, settings.m_rgbDiff, 3*sizeof(float));
-		memcpy(s_uniforms.m_rgbSpec, settings.m_rgbSpec, 3*sizeof(float));
+		memcpy(s_uniforms.m_rgbDiff, settings.m_rgbDiff, 3*sizeof(float) );
+		memcpy(s_uniforms.m_rgbSpec, settings.m_rgbSpec, 3*sizeof(float) );
 
 		s_uniforms.submitPerFrameUniforms();
 
@@ -652,7 +447,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		const double toMs = 1000.0/freq;
 
 		time += (float)(frameTime*settings.m_speed/freq);
-		s_uniforms.m_time = time;
+		s_uniforms.m_camPosTime[3] = time;
 
 		// Use debug font to print information about this example.
 		bgfx::dbgTextClear();
@@ -676,7 +471,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		bgfx::setViewTransform(0, view, proj);
 
 		bx::mtxLookAt(view, eye, at);
-		memcpy(s_uniforms.m_camPos, eye, 3*sizeof(float));
+		memcpy(s_uniforms.m_camPosTime, eye, 3*sizeof(float) );
 		bx::mtxProj(proj, 60.0f, float(width)/float(height), 0.1f, 100.0f);
 		bgfx::setViewTransform(1, view, proj);
 
@@ -684,12 +479,11 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		bgfx::setViewRect(1, 0, 0, width, height);
 
 		// View 0.
-		bgfx::setTexture(4, u_texCube, lightProbes[currentLightProbe].m_tex);
-		bgfx::setProgram(programSky);
+		bgfx::setTexture(0, s_texCube, lightProbes[currentLightProbe].m_tex);
 		bgfx::setState(BGFX_STATE_RGB_WRITE|BGFX_STATE_ALPHA_WRITE);
 		screenSpaceQuad( (float)width, (float)height, true);
 		s_uniforms.submitPerDrawUniforms();
-		bgfx::submit(0);
+		bgfx::submit(0, programSky);
 
 		// View 1.
 		float mtx[16];
@@ -698,23 +492,23 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 				, 1.0f
 				, 1.0f
 				, 0.0f
-				, (float(M_PI))+time
+				, bx::pi+time
 				, 0.0f
 				, 0.0f
 				, -1.0f
 				, 0.0f
 				);
 
-		bgfx::setTexture(4, u_texCube,    lightProbes[currentLightProbe].m_tex);
-		bgfx::setTexture(5, u_texCubeIrr, lightProbes[currentLightProbe].m_texIrr);
-		meshBunny.submit(1, programMesh, mtx);
+		bgfx::setTexture(0, s_texCube,    lightProbes[currentLightProbe].m_tex);
+		bgfx::setTexture(1, s_texCubeIrr, lightProbes[currentLightProbe].m_texIrr);
+		meshSubmit(meshBunny, 1, programMesh, mtx);
 
 		// Advance to next frame. Rendering thread will be kicked to
 		// process submitted rendering primitives.
 		bgfx::frame();
 	}
 
-	meshBunny.unload();
+	meshUnload(meshBunny);
 
 	// Cleanup.
 	bgfx::destroyProgram(programMesh);
@@ -724,10 +518,9 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 	bgfx::destroyUniform(u_flags);
 	bgfx::destroyUniform(u_params);
 	bgfx::destroyUniform(u_mtx);
-	bgfx::destroyUniform(u_time);
 
-	bgfx::destroyUniform(u_texCube);
-	bgfx::destroyUniform(u_texCubeIrr);
+	bgfx::destroyUniform(s_texCube);
+	bgfx::destroyUniform(s_texCubeIrr);
 
 	for (uint8_t ii = 0; ii < LightProbe::Count; ++ii)
 	{

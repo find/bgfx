@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2014 Branimir Karadzic. All rights reserved.
+ * Copyright 2011-2015 Branimir Karadzic. All rights reserved.
  * License: http://www.opensource.org/licenses/BSD-2-Clause
  */
 
@@ -7,6 +7,7 @@
 
 uniform vec4 u_offset[16];
 uniform vec4 u_tonemap;
+#define u_time u_tonemap.w
 
 float reinhard(float _x)
 {

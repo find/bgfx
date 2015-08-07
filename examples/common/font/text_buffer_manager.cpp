@@ -74,7 +74,7 @@ public:
 	/// Append a wide char unicode string to the buffer using current pen
 	/// position and color.
 	void appendText(FontHandle _fontHandle, const wchar_t* _string, const wchar_t* _end = NULL);
-	
+
 	/// Append a whole face of the atlas cube, mostly used for debugging
 	/// and visualizing atlas.
 	void appendAtlasFace(uint16_t _faceIndex);
@@ -236,7 +236,13 @@ void TextBuffer::appendText(FontHandle _fontHandle, const char* _string, const c
 	CodePoint codepoint = 0;
 	uint32_t state = 0;
 
-	for (; *_string && _string<_end ; ++_string)
+	if (_end == NULL)
+	{
+		_end = _string + strlen(_string);
+	}
+	BX_CHECK(_end >= _string);
+
+	for (; *_string && _string < _end ; ++_string)
 	{
 		if (utf8_decode(&state, (uint32_t*)&codepoint, *_string) == UTF8_ACCEPT )
 		{
@@ -244,7 +250,7 @@ void TextBuffer::appendText(FontHandle _fontHandle, const char* _string, const c
 		}
 	}
 
-	BX_CHECK(state == UTF8_ACCEPT, "The string is not well-formed");	
+	BX_CHECK(state == UTF8_ACCEPT, "The string is not well-formed");
 }
 
 void TextBuffer::appendText(FontHandle _fontHandle, const wchar_t* _string, const wchar_t* _end)
@@ -260,7 +266,7 @@ void TextBuffer::appendText(FontHandle _fontHandle, const wchar_t* _string, cons
 
 	if (_end == NULL)
 	{
-		_end = _string + (uint32_t) wcslen(_string);
+		_end = _string + wcslen(_string);
 	}
 	BX_CHECK(_end >= _string);
 
@@ -360,7 +366,7 @@ void TextBuffer::appendGlyph(FontHandle _handle, CodePoint _codePoint)
 
 		float txtDecals = (font.ascender - m_lineAscender);
 		m_lineAscender = font.ascender;
-		m_lineGap = font.lineGap;		
+		m_lineGap = font.lineGap;
 		verticalCenterLastLine( (txtDecals), (m_penY - m_lineAscender), (m_penY + m_lineAscender - m_lineDescender + m_lineGap) );
 	}
 
@@ -569,6 +575,7 @@ TextBufferManager::TextBufferManager(FontManager* _fontManager)
 		break;
 
 	case bgfx::RendererType::Direct3D11:
+	case bgfx::RendererType::Direct3D12:
 		vs_font_basic = bgfx::makeRef(vs_font_basic_dx11, sizeof(vs_font_basic_dx11) );
 		fs_font_basic = bgfx::makeRef(fs_font_basic_dx11, sizeof(fs_font_basic_dx11) );
 		vs_font_distance_field = bgfx::makeRef(vs_font_distance_field_dx11, sizeof(vs_font_distance_field_dx11) );
@@ -612,7 +619,7 @@ TextBufferManager::TextBufferManager(FontManager* _fontManager)
 		.add(bgfx::Attrib::Color0,    4, bgfx::AttribType::Uint8, true)
 		.end();
 
-	u_texColor = bgfx::createUniform("u_texColor", bgfx::UniformType::Uniform1iv);
+	s_texColor = bgfx::createUniform("s_texColor", bgfx::UniformType::Int1);
 }
 
 TextBufferManager::~TextBufferManager()
@@ -620,7 +627,7 @@ TextBufferManager::~TextBufferManager()
 	BX_CHECK(m_textBufferHandles.getNumHandles() == 0, "All the text buffers must be destroyed before destroying the manager");
 	delete [] m_textBuffers;
 
-	bgfx::destroyUniform(u_texColor);
+	bgfx::destroyUniform(s_texColor);
 
 	bgfx::destroyProgram(m_basicProgram);
 	bgfx::destroyProgram(m_distanceProgram);
@@ -699,12 +706,13 @@ void TextBufferManager::submitTextBuffer(TextBufferHandle _handle, uint8_t _id, 
 		return;
 	}
 
-	bgfx::setTexture(0, u_texColor, m_fontManager->getAtlas()->getTextureHandle() );
+	bgfx::setTexture(0, s_texColor, m_fontManager->getAtlas()->getTextureHandle() );
 
+	bgfx::ProgramHandle program = BGFX_INVALID_HANDLE;
 	switch (bc.fontType)
 	{
 	case FONT_TYPE_ALPHA:
-		bgfx::setProgram(m_basicProgram);
+		program = m_basicProgram;
 		bgfx::setState(0
 			| BGFX_STATE_RGB_WRITE
 			| BGFX_STATE_BLEND_FUNC(BGFX_STATE_BLEND_SRC_ALPHA, BGFX_STATE_BLEND_INV_SRC_ALPHA)
@@ -712,7 +720,7 @@ void TextBufferManager::submitTextBuffer(TextBufferHandle _handle, uint8_t _id, 
 		break;
 
 	case FONT_TYPE_DISTANCE:
-		bgfx::setProgram(m_distanceProgram);
+		program = m_distanceProgram;
 		bgfx::setState(0
 			| BGFX_STATE_RGB_WRITE
 			| BGFX_STATE_BLEND_FUNC(BGFX_STATE_BLEND_SRC_ALPHA, BGFX_STATE_BLEND_INV_SRC_ALPHA)
@@ -720,7 +728,7 @@ void TextBufferManager::submitTextBuffer(TextBufferHandle _handle, uint8_t _id, 
 		break;
 
 	case FONT_TYPE_DISTANCE_SUBPIXEL:
-		bgfx::setProgram(m_distanceSubpixelProgram);
+		program = m_distanceSubpixelProgram;
 		bgfx::setState(0
 			| BGFX_STATE_RGB_WRITE
 			| BGFX_STATE_BLEND_FUNC(BGFX_STATE_BLEND_FACTOR, BGFX_STATE_BLEND_INV_SRC_COLOR)
@@ -757,7 +765,7 @@ void TextBufferManager::submitTextBuffer(TextBufferHandle _handle, uint8_t _id, 
 			}
 
 			bgfx::setVertexBuffer(vbh, 0, bc.textBuffer->getVertexCount() );
-			bgfx::setIndexBuffer(ibh, bc.textBuffer->getIndexCount() );
+			bgfx::setIndexBuffer(ibh, 0, bc.textBuffer->getIndexCount() );
 		}
 		break;
 
@@ -786,10 +794,12 @@ void TextBufferManager::submitTextBuffer(TextBufferHandle _handle, uint8_t _id, 
 				vbh.idx = bc.vertexBufferHandleIdx;
 
 				bgfx::updateDynamicIndexBuffer(ibh
+						, 0
 						, bgfx::copy(bc.textBuffer->getIndexBuffer(), indexSize)
 						);
 
 				bgfx::updateDynamicVertexBuffer(vbh
+						, 0
 						, bgfx::copy(bc.textBuffer->getVertexBuffer(), vertexSize)
 						);
 			}
@@ -813,7 +823,7 @@ void TextBufferManager::submitTextBuffer(TextBufferHandle _handle, uint8_t _id, 
 		break;
 	}
 
-	bgfx::submit(_id, _depth);
+	bgfx::submit(_id, program, _depth);
 }
 
 void TextBufferManager::setStyle(TextBufferHandle _handle, uint32_t _flags)

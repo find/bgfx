@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2014 Branimir Karadzic. All rights reserved.
+ * Copyright 2011-2015 Branimir Karadzic. All rights reserved.
  * License: http://www.opensource.org/licenses/BSD-2-Clause
  */
 
@@ -475,7 +475,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 	// Set view 0 clear state.
 	bgfx::setViewClear(0
-		, BGFX_CLEAR_COLOR_BIT|BGFX_CLEAR_DEPTH_BIT
+		, BGFX_CLEAR_COLOR|BGFX_CLEAR_DEPTH
 		, 0x303030ff
 		, 1.0f
 		, 0
@@ -495,6 +495,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		break;
 
 	case bgfx::RendererType::Direct3D11:
+	case bgfx::RendererType::Direct3D12:
 		vs_metaballs = bgfx::makeRef(vs_metaballs_dx11, sizeof(vs_metaballs_dx11) );
 		fs_metaballs = bgfx::makeRef(fs_metaballs_dx11, sizeof(fs_metaballs_dx11) );
 		break;
@@ -527,7 +528,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 		// This dummy draw call is here to make sure that view 0 is cleared
 		// if no other draw calls are submitted to view 0.
-		bgfx::submit(0);
+		bgfx::touch(0);
 
 		int64_t now = bx::getHPCounter();
 		static int64_t last = now;
@@ -542,16 +543,39 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		bgfx::dbgTextPrintf(0, 1, 0x4f, "bgfx/examples/02-metaball");
 		bgfx::dbgTextPrintf(0, 2, 0x6f, "Description: Rendering with transient buffers and embedding shaders.");
 
-		float at[3] = { 0.0f, 0.0f, 0.0f };
+		float at[3]  = { 0.0f, 0.0f,   0.0f };
 		float eye[3] = { 0.0f, 0.0f, -50.0f };
-		
-		float view[16];
-		float proj[16];
-		bx::mtxLookAt(view, eye, at);
-		bx::mtxProj(proj, 60.0f, float(width)/float(height), 0.1f, 100.0f);
 
 		// Set view and projection matrix for view 0.
-		bgfx::setViewTransform(0, view, proj);
+		const bgfx::HMD* hmd = bgfx::getHMD();
+		if (NULL != hmd && 0 != (hmd->flags & BGFX_HMD_RENDERING) )
+		{
+			float view[16];
+			bx::mtxQuatTranslationHMD(view, hmd->eye[0].rotation, eye);
+
+			float proj[16];
+			bx::mtxProj(proj, hmd->eye[0].fov, 0.1f, 100.0f);
+
+			bgfx::setViewTransform(0, view, proj);
+
+			// Set view 0 default viewport.
+			//
+			// Use HMD's width/height since HMD's internal frame buffer size
+			// might be much larger than window size.
+			bgfx::setViewRect(0, 0, 0, hmd->width, hmd->height);
+		}
+		else
+		{
+			float view[16];
+			bx::mtxLookAt(view, eye, at);
+
+			float proj[16];
+			bx::mtxProj(proj, 60.0f, float(width)/float(height), 0.1f, 100.0f);
+			bgfx::setViewTransform(0, view, proj);
+
+			// Set view 0 default viewport.
+			bgfx::setViewRect(0, 0, 0, width, height);
+		}
 
 		// Stats.
 		uint32_t numVertices = 0;
@@ -568,14 +592,14 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		float sphere[numSpheres][4];
 		for (uint32_t ii = 0; ii < numSpheres; ++ii)
 		{
-			sphere[ii][0] = sin(time*(ii*0.21f)+ii*0.37f) * (DIMS * 0.5f - 8.0f);
-			sphere[ii][1] = sin(time*(ii*0.37f)+ii*0.67f) * (DIMS * 0.5f - 8.0f);
-			sphere[ii][2] = cos(time*(ii*0.11f)+ii*0.13f) * (DIMS * 0.5f - 8.0f);
-			sphere[ii][3] = 1.0f/(2.0f + (sin(time*(ii*0.13f) )*0.5f+0.5f)*2.0f);
+			sphere[ii][0] = sinf(time*(ii*0.21f)+ii*0.37f) * (DIMS * 0.5f - 8.0f);
+			sphere[ii][1] = sinf(time*(ii*0.37f)+ii*0.67f) * (DIMS * 0.5f - 8.0f);
+			sphere[ii][2] = cosf(time*(ii*0.11f)+ii*0.13f) * (DIMS * 0.5f - 8.0f);
+			sphere[ii][3] = 1.0f/(2.0f + (sinf(time*(ii*0.13f) )*0.5f+0.5f)*2.0f);
 		}
 
 		profUpdate = bx::getHPCounter();
-		
+
 		for (uint32_t zz = 0; zz < DIMS; ++zz)
 		{
 			for (uint32_t yy = 0; yy < DIMS; ++yy)
@@ -667,7 +691,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 						-DIMS*0.5f + float(zz)
 					};
 
-					const Grid* val[8] = { 
+					const Grid* val[8] = {
 						&grid[xoffset+zpitch+ypitch  ],
 						&grid[xoffset+zpitch+ypitch+1],
 						&grid[xoffset+ypitch+1       ],
@@ -693,14 +717,14 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		// Set model matrix for rendering.
 		bgfx::setTransform(mtx);
 
-		// Set vertex and fragment shaders.
-		bgfx::setProgram(program);
-
 		// Set vertex and index buffer.
 		bgfx::setVertexBuffer(&tvb, 0, numVertices);
 
+		// Set render states.
+		bgfx::setState(BGFX_STATE_DEFAULT);
+
 		// Submit primitive for rendering to view 0.
-		bgfx::submit(0);
+		bgfx::submit(0, program);
 
 		// Display stats.
 		bgfx::dbgTextPrintf(1, 4, 0x0f, "Num vertices: %5d (%6.4f%%)", numVertices, float(numVertices)/maxVertices * 100);
@@ -709,7 +733,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 		bgfx::dbgTextPrintf(1, 7, 0x0f, " Triangulate: % 7.3f[ms]", double(profTriangulate)*toMs);
 		bgfx::dbgTextPrintf(1, 8, 0x0f, "       Frame: % 7.3f[ms]", double(frameTime)*toMs);
 
-		// Advance to next frame. Rendering thread will be kicked to 
+		// Advance to next frame. Rendering thread will be kicked to
 		// process submitted rendering primitives.
 		bgfx::frame();
 	}

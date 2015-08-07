@@ -1,5 +1,5 @@
 #
-# Copyright 2011-2014 Branimir Karadzic. All rights reserved.
+# Copyright 2011-2015 Branimir Karadzic. All rights reserved.
 # License: http://www.opensource.org/licenses/BSD-2-Clause
 #
 
@@ -10,11 +10,12 @@ ifndef TARGET
 .PHONY: all
 all:
 	@echo Usage: make TARGET=# [clean, all, rebuild]
-	@echo "  TARGET=0 (hlsl - dx9)"
-	@echo "  TARGET=1 (hlsl - dx11)"
-	@echo "  TARGET=2 (glsl - nacl)"
-	@echo "  TARGET=3 (glsl - android)"
-	@echo "  TARGET=4 (glsl - linux)"
+	@echo "  TARGET=0 (hlsl  - dx9)"
+	@echo "  TARGET=1 (hlsl  - dx11)"
+	@echo "  TARGET=2 (glsl  - nacl)"
+	@echo "  TARGET=3 (glsl  - android)"
+	@echo "  TARGET=4 (glsl  - linux)"
+	@echo "  TARGET=5 (metal - OSX/iOS)"
 	@echo "  VERBOSE=1 show build commands."
 else
 
@@ -26,7 +27,7 @@ else
 ifeq ($(TARGET), 1)
 VS_FLAGS=--platform windows -p vs_4_0 -O 3
 FS_FLAGS=--platform windows -p ps_4_0 -O 3
-CS_FLAGS=--platform windows -p cs_5_0 -O 3
+CS_FLAGS=--platform windows -p cs_5_0 -O 1
 SHADER_PATH=shaders/dx11
 else
 ifeq ($(TARGET), 2)
@@ -45,6 +46,13 @@ VS_FLAGS=--platform linux -p 120
 FS_FLAGS=--platform linux -p 120
 CS_FLAGS=--platform linux -p 430
 SHADER_PATH=shaders/glsl
+else
+ifeq ($(TARGET), 5)
+VS_FLAGS=--platform osx -p metal
+FS_FLAGS=--platform osx -p metal
+CS_FLAGS=--platform osx -p metal
+SHADER_PATH=shaders/metal
+endif
 endif
 endif
 endif

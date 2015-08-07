@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2014 Branimir Karadzic. All rights reserved.
+ * Copyright 2011-2015 Branimir Karadzic. All rights reserved.
  * License: http://www.opensource.org/licenses/BSD-2-Clause
  */
 
@@ -64,7 +64,7 @@ static const uint16_t s_cubeIndices[36] =
 void saveTga(const char* _filePath, uint32_t _width, uint32_t _height, uint32_t _srcPitch, const void* _src, bool _grayscale, bool _yflip)
 {
 	FILE* file = fopen(_filePath, "wb");
-	if ( NULL != file )
+	if (NULL != file)
 	{
 		uint8_t type = _grayscale ? 3 : 2;
 		uint8_t bpp = _grayscale ? 8 : 32;
@@ -72,14 +72,14 @@ void saveTga(const char* _filePath, uint32_t _width, uint32_t _height, uint32_t 
 		putc(0, file);
 		putc(0, file);
 		putc(type, file);
-		putc(0, file); 
-		putc(0, file);
-		putc(0, file); 
 		putc(0, file);
 		putc(0, file);
-		putc(0, file); 
 		putc(0, file);
-		putc(0, file); 
+		putc(0, file);
+		putc(0, file);
+		putc(0, file);
+		putc(0, file);
+		putc(0, file);
 		putc(0, file);
 		putc(_width&0xff, file);
 		putc( (_width>>8)&0xff, file);
@@ -136,10 +136,16 @@ struct BgfxCallback : public bgfx::CallbackI
 		abort();
 	}
 
+	virtual void traceVargs(const char* _filePath, uint16_t _line, const char* _format, va_list _argList) BX_OVERRIDE
+	{
+		dbgPrintf("%s (%d): ", _filePath, _line);
+		dbgPrintfVargs(_format, _argList);
+	}
+
 	virtual uint32_t cacheReadSize(uint64_t _id) BX_OVERRIDE
 	{
 		char filePath[256];
-		bx::snprintf(filePath, sizeof(filePath), "%016" PRIx64, _id);
+		bx::snprintf(filePath, sizeof(filePath), "temp/%016" PRIx64, _id);
 
 		// Use cache id as filename.
 		FILE* file = fopen(filePath, "rb");
@@ -372,6 +378,8 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 	bgfx::init(
 		  renderers[bx::getHPCounter() % numRenderers] /* randomize renderer */
+		, BGFX_PCI_ID_NONE
+		, 0
 		, &callback  // custom callback handler
 		, &allocator // custom allocator
 		);
@@ -385,7 +393,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 	// Set view 0 clear state.
 	bgfx::setViewClear(0
-		, BGFX_CLEAR_COLOR_BIT|BGFX_CLEAR_DEPTH_BIT
+		, BGFX_CLEAR_COLOR|BGFX_CLEAR_DEPTH
 		, 0x303030ff
 		, 1.0f
 		, 0
@@ -415,7 +423,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 	{
 		// This dummy draw call is here to make sure that view 0 is cleared
 		// if no other draw calls are submitted to view 0.
-		bgfx::submit(0);
+		bgfx::touch(0);
 
 		int64_t now = bx::getHPCounter();
 		static int64_t last = now;
@@ -442,7 +450,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 
 		float at[3] = { 0.0f, 0.0f, 0.0f };
 		float eye[3] = { 0.0f, 0.0f, -35.0f };
-		
+
 		float view[16];
 		float proj[16];
 		bx::mtxLookAt(view, eye, at);
@@ -467,9 +475,6 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 				// Set model matrix for rendering.
 				bgfx::setTransform(mtx);
 
-				// Set vertex and fragment shaders.
-				bgfx::setProgram(program);
-
 				// Set vertex and index buffer.
 				bgfx::setVertexBuffer(vbh);
 				bgfx::setIndexBuffer(ibh);
@@ -478,7 +483,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 				bgfx::setState(BGFX_STATE_DEFAULT);
 
 				// Submit primitive for rendering to view 0.
-				bgfx::submit(0);
+				bgfx::submit(0, program);
 			}
 		}
 
@@ -488,7 +493,7 @@ int _main_(int /*_argc*/, char** /*_argv*/)
 			bgfx::saveScreenShot("temp/frame150");
 		}
 
-		// Advance to next frame. Rendering thread will be kicked to 
+		// Advance to next frame. Rendering thread will be kicked to
 		// process submitted rendering primitives.
 		bgfx::frame();
 	}

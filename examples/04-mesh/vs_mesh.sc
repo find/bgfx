@@ -2,20 +2,20 @@ $input a_position, a_normal
 $output v_pos, v_view, v_normal, v_color0
 
 /*
- * Copyright 2011-2014 Branimir Karadzic. All rights reserved.
+ * Copyright 2011-2015 Branimir Karadzic. All rights reserved.
  * License: http://www.opensource.org/licenses/BSD-2-Clause
  */
 
 #include "../common/common.sh"
 
-uniform float u_time;
+uniform vec4 u_time;
 
 void main()
 {
 	vec3 pos = a_position;
 
-	float sx = sin(pos.x*32.0+u_time*4.0)*0.5+0.5;
-	float cy = cos(pos.y*32.0+u_time*4.0)*0.5+0.5;
+	float sx = sin(pos.x*32.0+u_time.x*4.0)*0.5+0.5;
+	float cy = cos(pos.y*32.0+u_time.x*4.0)*0.5+0.5;
 	vec3 displacement = vec3(sx, cy, sx*cy);
 	vec3 normal = a_normal.xyz*2.0 - 1.0;
 
