@@ -5,22 +5,6 @@
 #include <stdio.h>
 #include <assert.h>
 
-void* loadfile(char const* filename)
-{
-    FILE* _file = fopen(filename, "rb");
-    assert(_file);
-    long int pos = ftell(_file);
-    fseek(_file, 0L, SEEK_END);
-    long int size = ftell(_file);
-    fseek(_file, pos, SEEK_SET);
-
-    void* data = malloc(size);
-    assert(fread(data, 1, size, _file) == size);
-    fclose(_file);
-
-    return data;
-}
-
 int _main_(int, char**)
 {
     uint32_t width = 800, height = 600;
@@ -32,9 +16,7 @@ int _main_(int, char**)
 
     bgfx::setDebug(debug);
 
-    void* fontdata = loadfile("assets/font/visitor1.ttf");
-    imguiCreate(fontdata);
-    free(fontdata);
+    imguiCreate();
 
     entry::MouseState mouseState;
     float rgb[3] = {0.3f, 0.3f, 0.3f};
@@ -45,12 +27,12 @@ int _main_(int, char**)
             return uint32_t(rgb[0]*255)<<24|uint32_t(rgb[1]*255)<<16|uint32_t(rgb[2]*255)<<8|0xff;
         };
         bgfx::setViewClear(0,
-                BGFX_CLEAR_COLOR_BIT | BGFX_CLEAR_DEPTH_BIT,
+                BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH,
                 encodeColor(), 1.0f, 0);
 
         bgfx::setViewRect(0, 0, 0, width, height);
         
-        bgfx::submit(0);
+        bgfx::submit(0, BGFX_INVALID_HANDLE);
         bgfx::dbgTextPrintf(0, 1, 0x4f, "hello world");
         bgfx::dbgTextPrintf(0, 2, 0x5f, "simple bgfx program");
 
