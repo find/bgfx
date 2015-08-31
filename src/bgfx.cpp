@@ -40,9 +40,10 @@ namespace bgfx
 		{
 		}
 
-		virtual void trace(const char* _str) BX_OVERRIDE
+		virtual void traceVargs(const char* _filePath, uint16_t _line, const char* _format, va_list _argList) BX_OVERRIDE
 		{
-			bx::debugOutput(_str);
+			dbgPrintf("%s (%d): ", _filePath, _line);
+			dbgPrintfVargs(_format, _argList);
 		}
 
 		virtual void fatal(Fatal::Enum _code, const char* _str) BX_OVERRIDE
@@ -180,12 +181,7 @@ namespace bgfx
 			return bx::alignedRealloc(this, _ptr, _size, _align, _file, _line);
 		}
 
-		void checkLeaks()
-		{
-#if BGFX_CONFIG_MEMORY_TRACKING
-			BX_WARN(0 == m_numBlocks, "MEMORY LEAK: %d (max: %d)", m_numBlocks, m_maxBlocks);
-#endif // BGFX_CONFIG_MEMORY_TRACKING
-		}
+		void checkLeaks();
 
 	protected:
 #if BGFX_CONFIG_MEMORY_TRACKING
@@ -195,7 +191,7 @@ namespace bgfx
 #endif // BGFX_CONFIG_MEMORY_TRACKING
 	};
 
-	static CallbackStub* s_callbackStub = NULL;
+	static CallbackStub*  s_callbackStub  = NULL;
 	static AllocatorStub* s_allocatorStub = NULL;
 	static bool s_graphicsDebuggerPresent = false;
 
@@ -208,6 +204,19 @@ namespace bgfx
 	static Context* s_ctx = NULL;
 	static bool s_renderFrameCalled = false;
 	PlatformData g_platformData;
+
+	void AllocatorStub::checkLeaks()
+	{
+#if BGFX_CONFIG_MEMORY_TRACKING
+		// BK - CallbackStub will be deleted after printing this info, so there is always one
+		// leak if CallbackStub is used.
+		BX_WARN(uint32_t(NULL != s_callbackStub ? 1 : 0) == m_numBlocks
+			, "MEMORY LEAK: %d (max: %d)"
+			, m_numBlocks
+			, m_maxBlocks
+			);
+#endif // BGFX_CONFIG_MEMORY_TRACKING
+	}
 
 	void setPlatformData(const PlatformData& _pd)
 	{
@@ -254,23 +263,13 @@ namespace bgfx
 		g_callback->fatal(_code, out);
 	}
 
-	void trace(const char* _format, ...)
+	void trace(const char* _filePath, uint16_t _line, const char* _format, ...)
 	{
-		char temp[8192];
-
 		va_list argList;
 		va_start(argList, _format);
-		char* out = temp;
-		int32_t len = bx::vsnprintf(out, sizeof(temp), _format, argList);
-		if ( (int32_t)sizeof(temp) < len)
-		{
-			out = (char*)alloca(len+1);
-			len = bx::vsnprintf(out, len, _format, argList);
-		}
-		out[len] = '\0';
+		g_callback->traceVargs(_filePath, _line, _format, argList);
 		va_end(argList);
 
-		g_callback->trace(out);
 	}
 
 #include "charset.h"
@@ -339,6 +338,10 @@ namespace bgfx
 			mem = makeRef(vs_debugfont_dx11, sizeof(vs_debugfont_dx11) );
 			break;
 
+		case RendererType::Metal:
+			mem = makeRef(vs_debugfont_mtl, sizeof(vs_debugfont_mtl) );
+			break;
+
 		default:
 			mem = makeRef(vs_debugfont_glsl, sizeof(vs_debugfont_glsl) );
 			break;
@@ -355,6 +358,10 @@ namespace bgfx
 		case RendererType::Direct3D11:
 		case RendererType::Direct3D12:
 			mem = makeRef(fs_debugfont_dx11, sizeof(fs_debugfont_dx11) );
+			break;
+
+		case RendererType::Metal:
+			mem = makeRef(fs_debugfont_mtl, sizeof(fs_debugfont_mtl) );
 			break;
 
 		default:
@@ -577,6 +584,27 @@ namespace bgfx
 					fragMem[ii] = makeRef(mem[ii].data, uint32_t(mem[ii].size) );
 				}
 			}
+			else if (RendererType::Metal == g_caps.rendererType)
+			{
+				vsh = createShader(makeRef(vs_clear_mtl, sizeof(vs_clear_mtl) ) );
+
+				const Mem mem[] =
+				{
+					Mem(fs_clear0_mtl, sizeof(fs_clear0_mtl) ),
+					Mem(fs_clear1_mtl, sizeof(fs_clear1_mtl) ),
+					Mem(fs_clear2_mtl, sizeof(fs_clear2_mtl) ),
+					Mem(fs_clear3_mtl, sizeof(fs_clear3_mtl) ),
+					Mem(fs_clear4_mtl, sizeof(fs_clear4_mtl) ),
+					Mem(fs_clear5_mtl, sizeof(fs_clear5_mtl) ),
+					Mem(fs_clear6_mtl, sizeof(fs_clear6_mtl) ),
+					Mem(fs_clear7_mtl, sizeof(fs_clear7_mtl) ),
+				};
+
+				for (uint32_t ii = 0, num = g_caps.maxFBAttachments; ii < num; ++ii)
+				{
+					fragMem[ii] = makeRef(mem[ii].data, uint32_t(mem[ii].size) );
+				}
+			}
 			else
 			{
 				BGFX_FATAL(false, Fatal::UnableToInitialize, "Unknown renderer type %d", g_caps.rendererType);
@@ -658,7 +686,7 @@ namespace bgfx
 		"u_model",
 		"u_modelView",
 		"u_modelViewProj",
-		"u_alphaRef",
+		"u_alphaRef4",
 	};
 
 	const char* getPredefinedUniformName(PredefinedUniform::Enum _enum)
@@ -851,6 +879,7 @@ namespace bgfx
 		CAPS_FLAGS(BGFX_CAPS_TEXTURE_COMPARE_ALL),
 		CAPS_FLAGS(BGFX_CAPS_TEXTURE_3D),
 		CAPS_FLAGS(BGFX_CAPS_VERTEX_ATTRIB_HALF),
+		CAPS_FLAGS(BGFX_CAPS_VERTEX_ATTRIB_UINT10),
 		CAPS_FLAGS(BGFX_CAPS_INSTANCING),
 		CAPS_FLAGS(BGFX_CAPS_RENDERER_MULTITHREADED),
 		CAPS_FLAGS(BGFX_CAPS_FRAGMENT_DEPTH),
@@ -861,6 +890,7 @@ namespace bgfx
 		CAPS_FLAGS(BGFX_CAPS_HMD),
 		CAPS_FLAGS(BGFX_CAPS_INDEX32),
 		CAPS_FLAGS(BGFX_CAPS_DRAW_INDIRECT),
+		CAPS_FLAGS(BGFX_CAPS_HIDPI),
 #undef CAPS_FLAGS
 	};
 
@@ -924,7 +954,7 @@ namespace bgfx
 		TextureFormat::RGBA8, // D3D9 doesn't support RGBA8
 	};
 
-	void Context::init(RendererType::Enum _type)
+	bool Context::init(RendererType::Enum _type)
 	{
 		BX_CHECK(!m_rendererInitialized, "Already initialized?");
 
@@ -999,6 +1029,19 @@ namespace bgfx
 		// g_caps is initialized and available after this point.
 		frame();
 
+		if (!m_rendererInitialized)
+		{
+			getCommandBuffer(CommandBuffer::RendererShutdownEnd);
+			frame();
+			frame();
+			m_declRef.shutdown(m_vertexDeclHandle);
+			m_submit->destroy();
+#if BGFX_CONFIG_MULTITHREADED
+			m_render->destroy();
+#endif // BGFX_CONFIG_MULTITHREADED
+			return false;
+		}
+
 		for (uint32_t ii = 0; ii < BX_COUNTOF(s_emulatedFormats); ++ii)
 		{
 			if (0 == (g_caps.formats[s_emulatedFormats[ii] ] & BGFX_CAPS_FORMAT_TEXTURE_COLOR) )
@@ -1029,6 +1072,8 @@ namespace bgfx
 			m_submit->m_transientIb = createTransientIndexBuffer(BGFX_CONFIG_TRANSIENT_INDEX_BUFFER_SIZE);
 			frame();
 		}
+
+		return true;
 	}
 
 	void Context::shutdown()
@@ -1379,7 +1424,7 @@ namespace bgfx
 		bool supported;
 	};
 
-	static const RendererCreator s_rendererCreator[] =
+	static RendererCreator s_rendererCreator[] =
 	{
 		{ noop::rendererCreate,  noop::rendererDestroy,  BGFX_RENDERER_NULL_NAME,       !!BGFX_CONFIG_RENDERER_NULL       }, // Noop
 		{ d3d9::rendererCreate,  d3d9::rendererDestroy,  BGFX_RENDERER_DIRECT3D9_NAME,  !!BGFX_CONFIG_RENDERER_DIRECT3D9  }, // Direct3D9
@@ -1476,15 +1521,33 @@ again:
 				{
 					_type = RendererType::OpenGLES;
 				}
+				else if (s_rendererCreator[RendererType::Direct3D12].supported)
+				{
+					_type = RendererType::Direct3D12;
+				}
 				else if (s_rendererCreator[RendererType::Vulkan].supported)
 				{
 					_type = RendererType::Vulkan;
+				}
+				else
+				{
+					_type = RendererType::Null;
+				}
+			}
+			else if (BX_ENABLED(BX_PLATFORM_IOS) )
+			{
+				if (s_rendererCreator[RendererType::Metal].supported)
+				{
+					_type = RendererType::Metal;
+				}
+				else if (s_rendererCreator[RendererType::OpenGLES].supported)
+				{
+					_type = RendererType::OpenGLES;
 				}
 			}
 			else if (BX_ENABLED(0
 				 ||  BX_PLATFORM_ANDROID
 				 ||  BX_PLATFORM_EMSCRIPTEN
-				 ||  BX_PLATFORM_IOS
 				 ||  BX_PLATFORM_NACL
 				 ||  BX_PLATFORM_RPI
 				 ) )
@@ -1517,6 +1580,7 @@ again:
 
 		if (NULL == renderCtx)
 		{
+			s_rendererCreator[_type].supported = false;
 			goto again;
 		}
 
@@ -1541,19 +1605,41 @@ again:
 			uint8_t command;
 			_cmdbuf.read(command);
 
-			BX_CHECK(CommandBuffer::RendererInit == command
-				, "RendererInit must be the first command in command buffer before initialization."
-				);
-			BX_CHECK(!m_rendererInitialized, "This shouldn't happen! Bad synchronization?");
+			switch (command)
+			{
+			case CommandBuffer::RendererShutdownEnd:
+				m_exit = true;
+				return;
 
-			RendererType::Enum type;
-			_cmdbuf.read(type);
+			case CommandBuffer::End:
+				return;
 
-			m_renderCtx = rendererCreate(type);
-			m_rendererInitialized = true;
+			default:
+				{
+					BX_CHECK(CommandBuffer::RendererInit == command
+						, "RendererInit must be the first command in command buffer before initialization. Unexpected command %d?"
+						, command
+						);
+					BX_CHECK(!m_rendererInitialized, "This shouldn't happen! Bad synchronization?");
+
+					RendererType::Enum type;
+					_cmdbuf.read(type);
+
+					m_renderCtx = rendererCreate(type);
+					m_rendererInitialized = NULL != m_renderCtx;
+
+					if (!m_rendererInitialized)
+					{
+						_cmdbuf.read(command);
+						BX_CHECK(CommandBuffer::End == command, "Unexpected command %d?"
+							, command
+							);
+						return;
+					}
+				}
+				break;
+			}
 		}
-
-		BX_CHECK(NULL != m_renderCtx, "Should not be NULL at this point.");
 
 		do
 		{
@@ -2024,7 +2110,7 @@ again:
 		return s_rendererCreator[_type].name;
 	}
 
-	void init(RendererType::Enum _type, uint16_t _vendorId, uint16_t _deviceId, CallbackI* _callback, bx::ReallocatorI* _allocator)
+	bool init(RendererType::Enum _type, uint16_t _vendorId, uint16_t _deviceId, CallbackI* _callback, bx::ReallocatorI* _allocator)
 	{
 		BX_CHECK(NULL == s_ctx, "bgfx is already initialized.");
 
@@ -2059,9 +2145,34 @@ again:
 		BX_TRACE("Init...");
 
 		s_ctx = BX_ALIGNED_NEW(g_allocator, Context, 16);
-		s_ctx->init(_type);
+		if (!s_ctx->init(_type) )
+		{
+			BX_TRACE("Init failed.");
+
+			BX_ALIGNED_DELETE(g_allocator, s_ctx, 16);
+			s_ctx = NULL;
+
+			if (NULL != s_callbackStub)
+			{
+				BX_DELETE(g_allocator, s_callbackStub);
+				s_callbackStub = NULL;
+			}
+
+			if (NULL != s_allocatorStub)
+			{
+				bx::CrtAllocator allocator;
+				BX_DELETE(&allocator, s_allocatorStub);
+				s_allocatorStub = NULL;
+			}
+
+			s_threadIndex = 0;
+			g_callback    = NULL;
+			g_allocator   = NULL;
+			return false;
+		}
 
 		BX_TRACE("Init complete.");
+		return true;
 	}
 
 	void shutdown()
@@ -2077,6 +2188,11 @@ again:
 
 		BX_TRACE("Shutdown complete.");
 
+		if (NULL != s_allocatorStub)
+		{
+			s_allocatorStub->checkLeaks();
+		}
+
 		if (NULL != s_callbackStub)
 		{
 			BX_DELETE(g_allocator, s_callbackStub);
@@ -2085,8 +2201,6 @@ again:
 
 		if (NULL != s_allocatorStub)
 		{
-			s_allocatorStub->checkLeaks();
-
 			bx::CrtAllocator allocator;
 			BX_DELETE(&allocator, s_allocatorStub);
 			s_allocatorStub = NULL;
@@ -2131,6 +2245,7 @@ again:
 
 	const Memory* alloc(uint32_t _size)
 	{
+		BX_CHECK(0 < _size, "Invalid memory operation. _size is 0.");
 		Memory* mem = (Memory*)BX_ALLOC(g_allocator, sizeof(Memory) + _size);
 		mem->size = _size;
 		mem->data = (uint8_t*)mem + sizeof(Memory);
@@ -2139,6 +2254,7 @@ again:
 
 	const Memory* copy(const void* _data, uint32_t _size)
 	{
+		BX_CHECK(0 < _size, "Invalid memory operation. _size is 0.");
 		const Memory* mem = alloc(_size);
 		memcpy(mem->data, _data, _size);
 		return mem;
@@ -2396,28 +2512,18 @@ again:
 	ProgramHandle createProgram(ShaderHandle _vsh, ShaderHandle _fsh, bool _destroyShaders)
 	{
 		BGFX_CHECK_MAIN_THREAD();
-		ProgramHandle handle = s_ctx->createProgram(_vsh, _fsh);
-
-		if (_destroyShaders)
+		if (!isValid(_fsh) )
 		{
-			destroyShader(_vsh);
-			destroyShader(_fsh);
+			return createProgram(_vsh, _destroyShaders);
 		}
 
-		return handle;
+		return s_ctx->createProgram(_vsh, _fsh, _destroyShaders);
 	}
 
 	ProgramHandle createProgram(ShaderHandle _csh, bool _destroyShader)
 	{
 		BGFX_CHECK_MAIN_THREAD();
-		ProgramHandle handle = s_ctx->createProgram(_csh);
-
-		if (_destroyShader)
-		{
-			destroyShader(_csh);
-		}
-
-		return handle;
+		return s_ctx->createProgram(_csh, _destroyShader);
 	}
 
 	void destroyProgram(ProgramHandle _handle)
@@ -2711,16 +2817,7 @@ again:
 			, BGFX_CONFIG_MAX_FRAME_BUFFER_ATTACHMENTS
 			);
 		BX_CHECK(NULL != _handles, "_handles can't be NULL");
-		FrameBufferHandle handle = s_ctx->createFrameBuffer(_num, _handles);
-		if (_destroyTextures)
-		{
-			for (uint32_t ii = 0; ii < _num; ++ii)
-			{
-				destroyTexture(_handles[ii]);
-			}
-		}
-
-		return handle;
+		return s_ctx->createFrameBuffer(_num, _handles, _destroyTextures);
 	}
 
 	FrameBufferHandle createFrameBuffer(void* _nwh, uint16_t _width, uint16_t _height, TextureFormat::Enum _depthFormat)
@@ -3106,9 +3203,9 @@ namespace bgfx
 			m_interface->vtbl->fatal(m_interface, (bgfx_fatal_t)_code, _str);
 		}
 
-		virtual void trace(const char* _str) BX_OVERRIDE
+		virtual void traceVargs(const char* _filePath, uint16_t _line, const char* _format, va_list _argList) BX_OVERRIDE
 		{
-			m_interface->vtbl->trace(m_interface, _str);
+			m_interface->vtbl->trace_vargs(m_interface, _filePath, _line, _format, _argList);
 		}
 
 		virtual uint32_t cacheReadSize(uint64_t _id) BX_OVERRIDE
@@ -3250,7 +3347,7 @@ BGFX_C_API const char* bgfx_get_renderer_name(bgfx_renderer_type_t _type)
 	return bgfx::getRendererName(bgfx::RendererType::Enum(_type) );
 }
 
-BGFX_C_API void bgfx_init(bgfx_renderer_type_t _type, uint16_t _vendorId, uint16_t _deviceId, bgfx_callback_interface_t* _callback, bgfx_reallocator_interface_t* _allocator)
+BGFX_C_API bool bgfx_init(bgfx_renderer_type_t _type, uint16_t _vendorId, uint16_t _deviceId, bgfx_callback_interface_t* _callback, bgfx_reallocator_interface_t* _allocator)
 {
 	static bgfx::CallbackC99 s_callback;
 	s_callback.m_interface = _callback;
