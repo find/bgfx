@@ -195,6 +195,7 @@ namespace bgfx { namespace d3d12
 		{ DXGI_FORMAT_UNKNOWN,            DXGI_FORMAT_UNKNOWN,               DXGI_FORMAT_UNKNOWN,           DXGI_FORMAT_UNKNOWN             }, // PTC24
 		{ DXGI_FORMAT_UNKNOWN,            DXGI_FORMAT_UNKNOWN,               DXGI_FORMAT_UNKNOWN,           DXGI_FORMAT_UNKNOWN             }, // Unknown
 		{ DXGI_FORMAT_R1_UNORM,           DXGI_FORMAT_R1_UNORM,              DXGI_FORMAT_UNKNOWN,           DXGI_FORMAT_UNKNOWN             }, // R1
+		{ DXGI_FORMAT_A8_UNORM,           DXGI_FORMAT_A8_UNORM,              DXGI_FORMAT_UNKNOWN,           DXGI_FORMAT_UNKNOWN             }, // A8
 		{ DXGI_FORMAT_R8_UNORM,           DXGI_FORMAT_R8_UNORM,              DXGI_FORMAT_UNKNOWN,           DXGI_FORMAT_UNKNOWN             }, // R8
 		{ DXGI_FORMAT_R8_SINT,            DXGI_FORMAT_R8_SINT,               DXGI_FORMAT_UNKNOWN,           DXGI_FORMAT_UNKNOWN             }, // R8I
 		{ DXGI_FORMAT_R8_UINT,            DXGI_FORMAT_R8_UINT,               DXGI_FORMAT_UNKNOWN,           DXGI_FORMAT_UNKNOWN             }, // R8U
@@ -204,6 +205,7 @@ namespace bgfx { namespace d3d12
 		{ DXGI_FORMAT_R16_UNORM,          DXGI_FORMAT_R16_UNORM,             DXGI_FORMAT_UNKNOWN,           DXGI_FORMAT_UNKNOWN             }, // R16U
 		{ DXGI_FORMAT_R16_FLOAT,          DXGI_FORMAT_R16_FLOAT,             DXGI_FORMAT_UNKNOWN,           DXGI_FORMAT_UNKNOWN             }, // R16F
 		{ DXGI_FORMAT_R16_SNORM,          DXGI_FORMAT_R16_SNORM,             DXGI_FORMAT_UNKNOWN,           DXGI_FORMAT_UNKNOWN             }, // R16S
+		{ DXGI_FORMAT_R32_SINT,           DXGI_FORMAT_R32_SINT,              DXGI_FORMAT_UNKNOWN,           DXGI_FORMAT_UNKNOWN             }, // R32I
 		{ DXGI_FORMAT_R32_UINT,           DXGI_FORMAT_R32_UINT,              DXGI_FORMAT_UNKNOWN,           DXGI_FORMAT_UNKNOWN             }, // R32U
 		{ DXGI_FORMAT_R32_FLOAT,          DXGI_FORMAT_R32_FLOAT,             DXGI_FORMAT_UNKNOWN,           DXGI_FORMAT_UNKNOWN             }, // R32F
 		{ DXGI_FORMAT_R8G8_UNORM,         DXGI_FORMAT_R8G8_UNORM,            DXGI_FORMAT_UNKNOWN,           DXGI_FORMAT_UNKNOWN             }, // RG8
@@ -215,6 +217,7 @@ namespace bgfx { namespace d3d12
 		{ DXGI_FORMAT_R16G16_UINT,        DXGI_FORMAT_R16G16_UINT,           DXGI_FORMAT_UNKNOWN,           DXGI_FORMAT_UNKNOWN             }, // RG16U
 		{ DXGI_FORMAT_R16G16_FLOAT,       DXGI_FORMAT_R16G16_FLOAT,          DXGI_FORMAT_UNKNOWN,           DXGI_FORMAT_UNKNOWN             }, // RG16F
 		{ DXGI_FORMAT_R16G16_SNORM,       DXGI_FORMAT_R16G16_SNORM,          DXGI_FORMAT_UNKNOWN,           DXGI_FORMAT_UNKNOWN             }, // RG16S
+		{ DXGI_FORMAT_R32G32_SINT,        DXGI_FORMAT_R32G32_SINT,           DXGI_FORMAT_UNKNOWN,           DXGI_FORMAT_UNKNOWN             }, // RG32I
 		{ DXGI_FORMAT_R32G32_UINT,        DXGI_FORMAT_R32G32_UINT,           DXGI_FORMAT_UNKNOWN,           DXGI_FORMAT_UNKNOWN             }, // RG32U
 		{ DXGI_FORMAT_R32G32_FLOAT,       DXGI_FORMAT_R32G32_FLOAT,          DXGI_FORMAT_UNKNOWN,           DXGI_FORMAT_UNKNOWN             }, // RG32F
 		{ DXGI_FORMAT_B8G8R8A8_UNORM,     DXGI_FORMAT_B8G8R8A8_UNORM,        DXGI_FORMAT_UNKNOWN,           DXGI_FORMAT_B8G8R8A8_UNORM_SRGB }, // BGRA8
@@ -227,6 +230,7 @@ namespace bgfx { namespace d3d12
 		{ DXGI_FORMAT_R16G16B16A16_UINT,  DXGI_FORMAT_R16G16B16A16_UINT,     DXGI_FORMAT_UNKNOWN,           DXGI_FORMAT_UNKNOWN             }, // RGBA16U
 		{ DXGI_FORMAT_R16G16B16A16_FLOAT, DXGI_FORMAT_R16G16B16A16_FLOAT,    DXGI_FORMAT_UNKNOWN,           DXGI_FORMAT_UNKNOWN             }, // RGBA16F
 		{ DXGI_FORMAT_R16G16B16A16_SNORM, DXGI_FORMAT_R16G16B16A16_SNORM,    DXGI_FORMAT_UNKNOWN,           DXGI_FORMAT_UNKNOWN             }, // RGBA16S
+		{ DXGI_FORMAT_R32G32B32A32_SINT,  DXGI_FORMAT_R32G32B32A32_SINT,     DXGI_FORMAT_UNKNOWN,           DXGI_FORMAT_UNKNOWN             }, // RGBA32I
 		{ DXGI_FORMAT_R32G32B32A32_UINT,  DXGI_FORMAT_R32G32B32A32_UINT,     DXGI_FORMAT_UNKNOWN,           DXGI_FORMAT_UNKNOWN             }, // RGBA32U
 		{ DXGI_FORMAT_R32G32B32A32_FLOAT, DXGI_FORMAT_R32G32B32A32_FLOAT,    DXGI_FORMAT_UNKNOWN,           DXGI_FORMAT_UNKNOWN             }, // RGBA32F
 		{ DXGI_FORMAT_B5G6R5_UNORM,       DXGI_FORMAT_B5G6R5_UNORM,          DXGI_FORMAT_UNKNOWN,           DXGI_FORMAT_UNKNOWN             }, // R5G6B5
@@ -334,12 +338,12 @@ namespace bgfx { namespace d3d12
 		return elem;
 	}
 
-	void setResourceBarrier(ID3D12GraphicsCommandList* _commandList, ID3D12Resource* _resource, D3D12_RESOURCE_STATES _stateBefore, D3D12_RESOURCE_STATES _stateAfter)
+	void setResourceBarrier(ID3D12GraphicsCommandList* _commandList, const ID3D12Resource* _resource, D3D12_RESOURCE_STATES _stateBefore, D3D12_RESOURCE_STATES _stateAfter)
 	{
 		D3D12_RESOURCE_BARRIER barrier;
 		barrier.Type  = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
 		barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-		barrier.Transition.pResource   = _resource;
+		barrier.Transition.pResource   = const_cast<ID3D12Resource*>(_resource);
 		barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
 		barrier.Transition.StateBefore = _stateBefore;
 		barrier.Transition.StateAfter  = _stateAfter;
@@ -930,6 +934,20 @@ namespace bgfx { namespace d3d12
 									? BGFX_CAPS_FORMAT_TEXTURE_FRAMEBUFFER
 									: BGFX_CAPS_FORMAT_TEXTURE_NONE
 									;
+
+							support |= 0 != (data.Support1 & (0
+									| D3D12_FORMAT_SUPPORT1_MULTISAMPLE_RENDERTARGET
+									) )
+									? BGFX_CAPS_FORMAT_TEXTURE_FRAMEBUFFER_MSAA
+									: BGFX_CAPS_FORMAT_TEXTURE_NONE
+									;
+
+							support |= 0 != (data.Support1 & (0
+									| D3D12_FORMAT_SUPPORT1_MULTISAMPLE_LOAD
+									) )
+									? BGFX_CAPS_FORMAT_TEXTURE_MSAA
+									: BGFX_CAPS_FORMAT_TEXTURE_NONE
+									;
 						}
 						else
 						{
@@ -1100,15 +1118,16 @@ namespace bgfx { namespace d3d12
 
 				HRESULT hr = 0;
 				uint32_t syncInterval = !!(m_flags & BGFX_RESET_VSYNC);
+				uint32_t flags = 0 == syncInterval ? DXGI_PRESENT_RESTART : 0;
 				for (uint32_t ii = 1, num = m_numWindows; ii < num && SUCCEEDED(hr); ++ii)
 				{
-					hr = m_frameBuffers[m_windows[ii].idx].m_swapChain->Present(syncInterval, 0);
+					hr = m_frameBuffers[m_windows[ii].idx].m_swapChain->Present(syncInterval, flags);
 				}
 
 				if (SUCCEEDED(hr) )
 				{
 					m_cmd.finish(m_backBufferColorFence[(m_backBufferColorIdx-1) % m_scd.BufferCount]);
-					hr = m_swapChain->Present(syncInterval, 0);
+					hr = m_swapChain->Present(syncInterval, flags);
 				}
 
 				int64_t now = bx::getHPCounter();
@@ -3070,7 +3089,8 @@ data.NumQualityLevels = 0;
 			cmd.vbv[0].SizeInBytes    = vb.m_size;
 			if (isValid(_draw.m_instanceDataBuffer) )
 			{
-				const VertexBufferD3D12& inst = s_renderD3D12->m_vertexBuffers[_draw.m_instanceDataBuffer.idx];
+				VertexBufferD3D12& inst = s_renderD3D12->m_vertexBuffers[_draw.m_instanceDataBuffer.idx];
+				inst.setState(_commandList, D3D12_RESOURCE_STATE_GENERIC_READ);
 				cmd.vbv[1].BufferLocation = inst.m_gpuVA + _draw.m_instanceDataOffset;
 				cmd.vbv[1].StrideInBytes  = _draw.m_instanceDataStride;
 				cmd.vbv[1].SizeInBytes    = _draw.m_numInstances * _draw.m_instanceDataStride;
@@ -3110,7 +3130,8 @@ data.NumQualityLevels = 0;
 			cmd.vbv[0].SizeInBytes    = vb.m_size;
 			if (isValid(_draw.m_instanceDataBuffer) )
 			{
-				const VertexBufferD3D12& inst = s_renderD3D12->m_vertexBuffers[_draw.m_instanceDataBuffer.idx];
+				VertexBufferD3D12& inst = s_renderD3D12->m_vertexBuffers[_draw.m_instanceDataBuffer.idx];
+				inst.setState(_commandList, D3D12_RESOURCE_STATE_GENERIC_READ);
 				cmd.vbv[1].BufferLocation = inst.m_gpuVA + _draw.m_instanceDataOffset;
 				cmd.vbv[1].StrideInBytes  = _draw.m_instanceDataStride;
 				cmd.vbv[1].SizeInBytes    = _draw.m_numInstances * _draw.m_instanceDataStride;
@@ -3487,7 +3508,7 @@ data.NumQualityLevels = 0;
 					m_predefined[m_numPredefined].m_type  = uint8_t(predefined|fragmentBit);
 					m_numPredefined++;
 				}
-				else
+				else if (0 == (BGFX_UNIFORM_SAMPLERBIT & type) )
 				{
 					const UniformInfo* info = s_renderD3D12->m_uniformReg.find(name);
 
@@ -3506,7 +3527,7 @@ data.NumQualityLevels = 0;
 				BX_TRACE("\t%s: %s (%s), num %2d, r.index %3d, r.count %2d"
 					, kind
 					, name
-					, getUniformTypeName(UniformType::Enum(type&~BGFX_UNIFORM_FRAGMENTBIT) )
+					, getUniformTypeName(UniformType::Enum(type&~BGFX_UNIFORM_MASK) )
 					, num
 					, regIndex
 					, regCount
@@ -4186,6 +4207,7 @@ data.NumQualityLevels = 0;
 
 		uint16_t currentSamplerStateIdx = invalidHandle;
 		uint16_t currentProgramIdx      = invalidHandle;
+		bool     hasPredefined          = false;
 		uint32_t currentBindHash = 0;
 		ID3D12PipelineState* currentPso = NULL;
 		SortKey key;
@@ -4258,6 +4280,7 @@ data.NumQualityLevels = 0;
 					currentPso = NULL;
 					currentSamplerStateIdx = invalidHandle;
 					currentProgramIdx      = invalidHandle;
+					hasPredefined          = false;
 
 					fbh = _render->m_fb[view];
 					setFrameBuffer(fbh);
@@ -4389,6 +4412,8 @@ data.NumQualityLevels = 0;
 
 							m_commandList->SetComputeRootDescriptorTable(Rdt::SRV, srvHandle[0]);
 							m_commandList->SetComputeRootDescriptorTable(Rdt::UAV, srvHandle[0]);
+
+							bindLru.add(bindHash, srvHandle[0], 0);
 						}
 						else
 						{
@@ -4397,13 +4422,14 @@ data.NumQualityLevels = 0;
 						}
 					}
 
+					bool constantsChanged = false;
 					if (compute.m_constBegin < compute.m_constEnd
 					||  currentProgramIdx != key.m_program)
 					{
 						rendererUpdateUniforms(this, _render->m_constantBuffer, compute.m_constBegin, compute.m_constEnd);
 
 						currentProgramIdx = key.m_program;
-						ProgramD3D12& program = m_program[key.m_program];
+						ProgramD3D12& program = m_program[currentProgramIdx];
 
 						ConstantBuffer* vcb = program.m_vsh->m_constantBuffer;
 						if (NULL != vcb)
@@ -4411,6 +4437,14 @@ data.NumQualityLevels = 0;
 							commit(*vcb);
 						}
 
+						hasPredefined = 0 < program.m_numPredefined;
+						constantsChanged = true;
+					}
+
+					if (constantsChanged
+					||  hasPredefined)
+					{
+						ProgramD3D12& program = m_program[currentProgramIdx];
 						viewState.setPredefined<4>(this, view, 0, program, _render, compute);
 						commitShaderConstants(key.m_program, gpuAddress);
 						m_commandList->SetComputeRootConstantBufferView(Rdt::CBV, gpuAddress);
@@ -4456,7 +4490,6 @@ data.NumQualityLevels = 0;
 					if (wasCompute)
 					{
 						wasCompute = false;
-						kick();
 					}
 
 					if (BX_ENABLED(BGFX_CONFIG_DEBUG_PIX) )
@@ -4488,6 +4521,8 @@ data.NumQualityLevels = 0;
 					const uint64_t pt = newFlags&BGFX_STATE_PT_MASK;
 					primIndex = uint8_t(pt>>BGFX_STATE_PT_SHIFT);
 				}
+
+				rendererUpdateUniforms(this, _render->m_constantBuffer, draw.m_constBegin, draw.m_constEnd);
 
 				if (isValid(draw.m_vertexBuffer) )
 				{
@@ -4641,14 +4676,13 @@ data.NumQualityLevels = 0;
 						m_commandList->SetPipelineState(pso);
 					}
 
+					bool constantsChanged = false;
 					if (draw.m_constBegin < draw.m_constEnd
 					||  currentProgramIdx != key.m_program
 					||  BGFX_STATE_ALPHA_REF_MASK & changedFlags)
 					{
-						rendererUpdateUniforms(this, _render->m_constantBuffer, draw.m_constBegin, draw.m_constEnd);
-
 						currentProgramIdx = key.m_program;
-						ProgramD3D12& program = m_program[key.m_program];
+						ProgramD3D12& program = m_program[currentProgramIdx];
 
 						ConstantBuffer* vcb = program.m_vsh->m_constantBuffer;
 						if (NULL != vcb)
@@ -4662,6 +4696,14 @@ data.NumQualityLevels = 0;
 							commit(*fcb);
 						}
 
+						hasPredefined = 0 < program.m_numPredefined;
+						constantsChanged = true;
+					}
+
+					if (constantsChanged
+					||  hasPredefined)
+					{
+						ProgramD3D12& program = m_program[currentProgramIdx];
 						uint32_t ref = (newFlags&BGFX_STATE_ALPHA_REF_MASK)>>BGFX_STATE_ALPHA_REF_SHIFT;
 						viewState.m_alphaRef = ref/255.0f;
 						viewState.setPredefined<4>(this, view, 0, program, _render, draw);
