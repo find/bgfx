@@ -5,6 +5,31 @@
 #include <stdio.h>
 #include <assert.h>
 
+#include "math3d.h"
+
+#pragma pack(1)
+
+struct VertexXYZNUV
+{
+    vec3 pos;
+    vec3 normal;
+    vec2 uv;
+
+    static void init()
+    {
+        decl.begin()
+            .add(bgfx::Attrib::Position, 3, bgfx::AttribType::Float)
+            .add(bgfx::Attrib::Normal, 3, bgfx::AttribType::Float)
+            .add(bgfx::Attrib::TexCoord0, 2, bgfx::AttribType::Float)
+            .end();
+    }
+    static bgfx::VertexDecl decl;
+};
+
+bgfx::VertexDecl VertexXYZNUV::decl;
+
+#pragma pack()
+
 void* loadfile(char const* filename, size_t &fsize)
 {
     FILE* _file = fopen(filename, "rb");
