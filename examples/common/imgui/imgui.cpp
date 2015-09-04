@@ -532,6 +532,20 @@ struct Imgui
 			fs_imgui_image       = bgfx::makeRef(fs_imgui_image_dx11, sizeof(fs_imgui_image_dx11) );
 			fs_imgui_image_swizz = bgfx::makeRef(fs_imgui_image_swizz_dx11, sizeof(fs_imgui_image_swizz_dx11) );
 			break;
+				
+		case bgfx::RendererType::Metal:
+			vs_imgui_color       = bgfx::makeRef(vs_imgui_color_mtl, sizeof(vs_imgui_color_mtl) );
+			fs_imgui_color       = bgfx::makeRef(fs_imgui_color_mtl, sizeof(fs_imgui_color_mtl) );
+			vs_imgui_texture     = bgfx::makeRef(vs_imgui_texture_mtl, sizeof(vs_imgui_texture_mtl) );
+			fs_imgui_texture     = bgfx::makeRef(fs_imgui_texture_mtl, sizeof(fs_imgui_texture_mtl) );
+			vs_imgui_cubemap     = bgfx::makeRef(vs_imgui_cubemap_mtl, sizeof(vs_imgui_cubemap_mtl) );
+			fs_imgui_cubemap     = bgfx::makeRef(fs_imgui_cubemap_mtl, sizeof(fs_imgui_cubemap_mtl) );
+			vs_imgui_latlong     = bgfx::makeRef(vs_imgui_latlong_mtl, sizeof(vs_imgui_latlong_mtl) );
+			fs_imgui_latlong     = bgfx::makeRef(fs_imgui_latlong_mtl, sizeof(fs_imgui_latlong_mtl) );
+			vs_imgui_image       = bgfx::makeRef(vs_imgui_image_mtl, sizeof(vs_imgui_image_mtl) );
+			fs_imgui_image       = bgfx::makeRef(fs_imgui_image_mtl, sizeof(fs_imgui_image_mtl) );
+			fs_imgui_image_swizz = bgfx::makeRef(fs_imgui_image_swizz_mtl, sizeof(fs_imgui_image_swizz_mtl) );
+			break;
 
 		default:
 			vs_imgui_color       = bgfx::makeRef(vs_imgui_color_glsl, sizeof(vs_imgui_color_glsl) );
@@ -1207,6 +1221,11 @@ struct Imgui
 
 		const uint32_t rgb0 = _rgb0&0x00ffffff;
 
+		if (!visible(yy, height, area.m_scissorY, area.m_scissorHeight))
+		{
+			return false;
+		}
+
 		drawRoundedRect( (float)xx
 					   , (float)yy
 					   , (float)width
@@ -1251,6 +1270,11 @@ struct Imgui
 		const bool enabled = _enabled && isEnabled(m_areaId);
 		const bool over = enabled && inRect(xx, yy, width, height);
 		const bool res = buttonLogic(id, over);
+
+		if (!visible(yy, height, area.m_scissorY, area.m_scissorHeight))
+		{
+			return false;
+		}
 
 		if (isHot(id) )
 		{
@@ -1302,6 +1326,12 @@ struct Imgui
 
 		const int32_t cx = xx + BUTTON_HEIGHT / 2 - CHECK_SIZE / 2;
 		const int32_t cy = yy + BUTTON_HEIGHT / 2 - CHECK_SIZE / 2;
+
+		if (!visible(cy, CHECK_SIZE+6, area.m_scissorY, area.m_scissorHeight))
+		{
+			return false;
+		}
+
 		drawRoundedRect( (float)cx - 3
 			, (float)cy - 3
 			, (float)CHECK_SIZE + 6
@@ -3047,6 +3077,12 @@ struct Imgui
 		bool m_didScroll;
 		bool m_scissorEnabled;
 	};
+
+	bool visible(int32_t _elemY, int32_t _elemHeight, int32_t _scissorY, int32_t _scissorHeight)
+	{
+		return _elemY > _scissorY
+		   && (_elemY+_elemHeight) < (_scissorY+_scissorHeight);
+	}
 
 	inline Area& getCurrentArea()
 	{

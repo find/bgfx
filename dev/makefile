@@ -11,7 +11,7 @@ $(EXE):$(objs)
 	link -debug $(objs) lib/bgfx.lib lib/example-common.lib kernel32.lib user32.lib gdi32.lib psapi.lib -out:$@
 
 %.obj: %.cpp
-	cl -c $< -I. -Iinc -Ihelpers -I../3rdparty -I../../bx/include -MTd -Zi
+	cl -c $< -I. -Iinc -Ihelpers -I../3rdparty -I../../bx/include -MTd -Zi -D_ITERATOR_DEBUG_LEVEL=0
 
 clean:
 	rm *.obj

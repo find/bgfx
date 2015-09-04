@@ -5,22 +5,78 @@
 #include <stdio.h>
 #include <assert.h>
 
+#include "math3d.h"
+
+#pragma pack(1)
+
+struct VertexXYZNUV
+{
+    vec3 pos;
+    vec3 normal;
+    vec2 uv;
+    uint8_t indices[4];
+    uint8_t weights[4];
+    vec3 tangent;
+    vec3 binormal;
+    vec4 vcolor;
+
+    static void init()
+    {
+        decl.begin()
+            .add(bgfx::Attrib::Position, 3, bgfx::AttribType::Float)
+            .add(bgfx::Attrib::Normal, 3, bgfx::AttribType::Float)
+            .add(bgfx::Attrib::TexCoord0, 2, bgfx::AttribType::Float)
+            .add(bgfx::Attrib::Indices, 4, bgfx::AttribType::Uint8)
+            .add(bgfx::Attrib::Weight, 4, bgfx::AttribType::Uint8)
+            .add(bgfx::Attrib::Tangent, 3, bgfx::AttribType::Float)
+            .add(bgfx::Attrib::Bitangent, 3, bgfx::AttribType::Float)
+            .add(bgfx::Attrib::Color0, 4, bgfx::AttribType::Float)
+            .end();
+    }
+    static bgfx::VertexDecl decl;
+};
+
+bgfx::VertexDecl VertexXYZNUV::decl;
+
+#pragma pack()
+
+void* loadfile(char const* filename, size_t &fsize)
+{
+    FILE* _file = fopen(filename, "rb");
+    assert(_file);
+    long int pos = ftell(_file);
+    fseek(_file, 0L, SEEK_END);
+    long int size = ftell(_file);
+    fseek(_file, pos, SEEK_SET);
+
+    void* data = malloc(size);
+    assert(fread(data, 1, size, _file) == size);
+    fclose(_file);
+
+    fsize = size;
+    return data;
+}
+
 int _main_(int, char**)
 {
     uint32_t width = 800, height = 600;
     uint32_t debug = BGFX_DEBUG_TEXT | BGFX_DEBUG_STATS;
     uint32_t reset = BGFX_RESET_VSYNC | BGFX_RESET_MSAA_X8;
+    bool showStats = true;
 
     bgfx::init();
     bgfx::reset(width, height, reset);
 
     bgfx::setDebug(debug);
 
-    imguiCreate();
+    size_t sz = 0;
+    void* fontdata = loadfile("assets/font/droidsans.ttf", sz);
+    imguiCreate(fontdata, sz);
+    free(fontdata);
 
     entry::MouseState mouseState;
     float rgb[3] = {0.3f, 0.3f, 0.3f};
-    bool colorwheelActivated = true;
+    bool colorwheelActivated = false;
     int32_t scrollArea = 0;
     while(!entry::processEvents(width, height, debug, reset, &mouseState)) {
         auto encodeColor = [&rgb]()->uint32_t{
@@ -42,12 +98,19 @@ int _main_(int, char**)
             , 0
             , width
             , height);
-        imguiBeginScrollArea("Test", width-350, 50, 330, 400, &scrollArea);
+        imguiBeginScrollArea("Test", width-350, 50, 330, 500, &scrollArea);
         imguiSeparatorLine();
         imguiLabel("foobar");
         if(imguiButton("say hi"))
             fprintf(stdout, "hi there\n");
+        imguiBool("show stats", showStats);
+        uint32_t newDebug = BGFX_DEBUG_TEXT | (showStats ? BGFX_DEBUG_STATS : 0);
+        if(newDebug != debug) {
+            debug = newDebug;
+            bgfx::setDebug(debug);
+        }
         imguiColorWheel("bg color", rgb, colorwheelActivated);
+        ImGui::ColorEdit3("bg color", rgb);
         imguiSeparatorLine();
         if(imguiButton("quit"))
             break;
