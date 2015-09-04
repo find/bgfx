@@ -40,21 +40,25 @@ bgfx::VertexDecl VertexXYZNUV::decl;
 
 #pragma pack()
 
-void* loadfile(char const* filename, size_t &fsize)
+bool loadfile(char const* filename, void* &data, size_t &fsize)
 {
-    FILE* _file = fopen(filename, "rb");
-    assert(_file);
-    long int pos = ftell(_file);
-    fseek(_file, 0L, SEEK_END);
-    long int size = ftell(_file);
-    fseek(_file, pos, SEEK_SET);
+    FILE* file = fopen(filename, "rb");
+    if(file) {
+        long int pos = ftell(file);
+        fseek(file, 0L, SEEK_END);
+        long int size = ftell(file);
+        fseek(file, pos, SEEK_SET);
 
-    void* data = malloc(size);
-    assert(fread(data, 1, size, _file) == size);
-    fclose(_file);
+        data = malloc(size);
+        if(data) {
+            fsize = fread(data, 1, size, file);
+            fclose(file);
+        }
 
-    fsize = size;
-    return data;
+        return data && size == fsize;
+    } else {
+        return false;
+    }
 }
 
 int _main_(int, char**)
@@ -70,8 +74,11 @@ int _main_(int, char**)
     bgfx::setDebug(debug);
 
     size_t sz = 0;
-    void* fontdata = loadfile("assets/font/droidsans.ttf", sz);
-    imguiCreate(fontdata, sz);
+    void* fontdata = nullptr;
+    if(loadfile("assets/font/droidsans.ttf", fontdata, sz))
+        imguiCreate(fontdata, sz);
+    else
+        imguiCreate();
     free(fontdata);
 
     entry::MouseState mouseState;
